@@ -36,6 +36,13 @@ contextBridge.exposeInMainWorld('api', {
     selectLocalImage: (id, type) => ipcRenderer.invoke('select-local-image', id, type),
     readFileBase64:   (p)        => ipcRenderer.invoke('read-file-base64', p),
 
+    // Screenscraper
+    scrapeGame:         (id)     => ipcRenderer.invoke('scrape-game', id),
+    scrapeBatch:        (ids)    => ipcRenderer.invoke('scrape-batch', ids),
+    cancelScrape:       ()       => ipcRenderer.invoke('cancel-scrape'),
+    computeCrc32:       (p)      => ipcRenderer.invoke('compute-crc32', p),
+    onScrapeProgress:   (cb)     => ipcRenderer.on('scrape-progress', (_, d) => cb(d)),
+
     // Misc
     getBaseDir:   () => ipcRenderer.invoke('get-basedir'),
     getConfigDir: () => ipcRenderer.invoke('get-config-dir'),

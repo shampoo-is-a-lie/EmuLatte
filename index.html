@@ -226,6 +226,7 @@
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.56"/></svg>
             </button>
             <button id="btn-hero-add-rom" class="btn-hero">+ ADD ROM</button>
+            <button id="btn-hero-scrape-all" class="btn-hero" title="Scrape all ROMs in this system from ScreenScraper.fr">SCRAPE ALL</button>
           </div>
         </div>
         <div id="gallery-grid"></div>
@@ -247,6 +248,7 @@
             <div style="display:flex; gap:15px; align-items:center; flex-shrink:0;">
               <button id="btn-gamepage-fav"  class="btn-hero">+ FAV</button>
               <button id="btn-gamepage-want" class="btn-hero">WANT TO PLAY</button>
+              <button id="btn-gamepage-scrape" class="btn-hero" title="Scrape metadata &amp; artwork from ScreenScraper.fr">SCRAPE</button>
               <button id="btn-gamepage-edit" class="btn-hero">EDIT</button>
               <button id="btn-gamepage-launch" class="primary" style="font-size:14px; padding:14px 28px; border-radius:8px; font-weight:900; letter-spacing:2px;">▶ PLAY</button>
             </div>
@@ -470,10 +472,11 @@
         </div>
       </div>
       <div class="tool-card">
-        <div class="tool-card-title">ScreenScraper.fr (Phase 2)</div>
+        <div class="tool-card-title">ScreenScraper.fr</div>
         <div class="form-row"><label>Username</label><input type="text" id="settings-ss-user" placeholder="Your ScreenScraper username"></div>
         <div class="form-row"><label>Password</label><input type="password" id="settings-ss-pass" placeholder="Your ScreenScraper password"></div>
-        <div class="hint">Used for artwork scraping. Register free at screenscraper.fr</div>
+        <div class="hint">Register free at screenscraper.fr — used for metadata &amp; artwork scraping.</div>
+        <div id="settings-ss-status" style="font-size:11px; color:var(--text_dim); margin-top:4px;"></div>
       </div>
       <div class="tool-card">
         <div class="tool-card-title">Data</div>
@@ -491,6 +494,22 @@
     <button class="slide-nav slide-prev" id="slide-prev">&#8249;</button>
     <img class="slideshow-img" id="slideshow-img" src="" alt="">
     <button class="slide-nav slide-next" id="slide-next">&#8250;</button>
+  </div>
+
+  <!-- Scrape progress panel -->
+  <div id="scrape-panel" style="display:none; position:fixed; bottom:24px; right:24px; background:var(--bg_menu); border:1px solid var(--border_solid); border-radius:10px; padding:16px 20px; z-index:9991; width:340px; box-shadow:0 10px 30px rgba(0,0,0,0.8);">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <div style="font-size:11px; font-weight:900; color:var(--accent); letter-spacing:1px; text-transform:uppercase;">ScreenScraper</div>
+      <div id="scrape-rate-info" style="font-size:10px; color:var(--text_dim);"></div>
+    </div>
+    <div id="scrape-panel-title" style="font-size:13px; color:var(--text_main); font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:8px;"></div>
+    <div style="width:100%; height:4px; background:rgba(0,0,0,0.4); border-radius:2px; overflow:hidden; margin-bottom:10px;">
+      <div id="scrape-progress-bar" style="height:100%; width:0%; background:var(--accent); border-radius:2px; transition:width 0.3s;"></div>
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div id="scrape-panel-count" style="font-size:11px; color:var(--text_dim);"></div>
+      <button id="btn-scrape-cancel" style="font-size:10px; padding:4px 12px; background:transparent; border:1px solid var(--border_solid); color:var(--text_dim); border-radius:4px; cursor:pointer; letter-spacing:1px;">CANCEL</button>
+    </div>
   </div>
 
   <!-- Launch error toast -->

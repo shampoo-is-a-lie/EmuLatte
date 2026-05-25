@@ -2,6 +2,8 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 app.setName('emulatte');
 const path = require('path');
 const fs = require('fs');
+const https = require('https');
+const zlib = require('zlib');
 const Database = require('better-sqlite3');
 const { spawn } = require('child_process');
 
@@ -261,6 +263,198 @@ ipcMain.handle('launch-game', (_, gameId) => {
     db.prepare('UPDATE games SET last_played=? WHERE id=?').run(Date.now(), gameId);
     spawn('bash', ['-c', cmd], { detached: true, stdio: 'ignore' }).unref();
     return { ok: true };
+});
+
+// ── SCREENSCRAPER HELPERS ─────────────────────────────────────────────────────
+
+function computeFileCrc32(filePath) {
+    return new Promise((resolve, reject) => {
+        const stream = fs.createReadStream(filePath, { highWaterMark: 65536 });
+        let crc = 0;
+        stream.on('data', chunk => { crc = zlib.crc32(chunk, crc); });
+        stream.on('end',  () => resolve(crc.toString(16).toUpperCase().padStart(8, '0')));
+        stream.on('error', reject);
+    });
+}
+
+function httpsGet(url) {
+    return new Promise((resolve, reject) => {
+        const req = https.get(url, { headers: { 'User-Agent': 'EmuLatte/1.0' } }, res => {
+            const chunks = [];
+            res.on('data', c => chunks.push(c));
+            res.on('end',  () => resolve({ status: res.statusCode, body: Buffer.concat(chunks) }));
+        });
+        req.on('error', reject);
+        req.setTimeout(20000, () => { req.destroy(); reject(new Error('timeout')); });
+    });
+}
+
+async function downloadFile(url, destPath) {
+    const { status, body } = await httpsGet(url);
+    if (status !== 200) throw new Error(`HTTP ${status}`);
+    fs.writeFileSync(destPath, body);
+}
+
+function ssApiUrl(endpoint, params) {
+    return `https://www.screenscraper.fr/api2/${endpoint}?${new URLSearchParams(params).toString()}`;
+}
+
+async function ssApiCall(endpoint, params) {
+    const { status, body } = await httpsGet(ssApiUrl(endpoint, params));
+    if (status !== 200) throw new Error(`HTTP ${status}`);
+    try { return JSON.parse(body.toString('utf8')); }
+    catch { throw new Error('Invalid JSON from ScreenScraper'); }
+}
+
+const REGION_PREF = ['wor', 'us', 'eu', 'fr', 'jp', 'ss'];
+const LANG_PREF   = ['en', 'fr', 'es', 'de', 'pt'];
+
+function ssPickRegion(arr) {
+    if (!arr?.length) return '';
+    for (const r of REGION_PREF) { const f = arr.find(n => n.region === r); if (f?.text) return f.text; }
+    return arr[0]?.text || '';
+}
+function ssPickLang(arr) {
+    if (!arr?.length) return '';
+    for (const l of LANG_PREF) { const f = arr.find(n => n.langue === l); if (f?.text) return f.text; }
+    return arr[0]?.text || '';
+}
+function ssPickYear(arr) {
+    const t = ssPickRegion(arr);
+    return t ? t.slice(0, 4) : '';
+}
+function ssPickMedia(medias, type) {
+    const candidates = medias.filter(m => m.type === type);
+    if (!candidates.length) return null;
+    for (const r of REGION_PREF) { const f = candidates.find(m => m.region === r); if (f) return f; }
+    return candidates[0];
+}
+
+async function scrapeGameById(gameId, ssUser, ssPass, win) {
+    const game = db.prepare(`
+        SELECT g.*, s.screenscraper_id AS system_ss_id
+        FROM games g LEFT JOIN systems s ON g.system_id = s.id WHERE g.id=?
+    `).get(gameId);
+    if (!game) return { ok: false, error: 'Game not found' };
+
+    let crc = '', romSize = 0;
+    const romFileName = game.rom_path ? path.basename(game.rom_path) : '';
+
+    if (game.rom_path && fs.existsSync(game.rom_path)) {
+        try {
+            crc     = await computeFileCrc32(game.rom_path);
+            romSize = fs.statSync(game.rom_path).size;
+        } catch {}
+    }
+
+    const params = {
+        devid: '', devpassword: '',
+        softname: 'emulatte', output: 'json',
+        ssid: ssUser, sspassword: ssPass,
+        romtype: 'rom', romnom: romFileName,
+    };
+    if (crc)                params.crc        = crc;
+    if (romSize)            params.romtaille  = romSize;
+    if (game.system_ss_id)  params.systemeid  = game.system_ss_id;
+
+    let apiResult;
+    try { apiResult = await ssApiCall('jeuInfos.php', params); }
+    catch(e) { return { ok: false, error: `API error: ${e.message}` }; }
+
+    const jeu = apiResult.response?.jeu;
+    if (!jeu) {
+        const msg = apiResult.response?.msg || 'Game not found on ScreenScraper';
+        return { ok: false, error: msg };
+    }
+
+    // Session info (rate limits)
+    const session = {
+        requestsToday: apiResult.response?.requeststoday,
+        requestsLimit: apiResult.response?.requestslimit,
+    };
+
+    // Extract metadata
+    const updates = {
+        screenscraper_id: jeu.id     || null,
+        title:            ssPickRegion(jeu.noms)     || game.title,
+        description:      ssPickLang(jeu.synopsis)   || '',
+        year:             ssPickYear(jeu.dates)       || '',
+        developer:        jeu.developpeur?.text       || '',
+        publisher:        jeu.editeur?.text           || '',
+        genre:            jeu.genres?.[0]?.noms?.find(n => n.langue === 'en')?.text || '',
+        players:          jeu.joueurs?.text           || '',
+        rating:           jeu.note?.text              || '',
+    };
+
+    // Download media
+    const medias = jeu.medias || [];
+    const mediaMap = { 'box-2D': 'cover', fanart: 'hero', wheel: 'logo', ss: 'screenshot' };
+    const subdirMap = { cover: 'covers', hero: 'heroes', logo: 'logos', screenshot: 'screenshots' };
+
+    for (const [ssType, field] of Object.entries(mediaMap)) {
+        const media = ssPickMedia(medias, ssType);
+        if (!media?.url) continue;
+        const ext     = media.format ? `.${media.format}` : '.jpg';
+        const subdir  = subdirMap[field];
+        const dest    = path.join(imagesDir, subdir, `${gameId}_${field}${ext}`);
+        const dlUrl   = media.url.includes('ssid=')
+            ? media.url
+            : `${media.url}&ssid=${encodeURIComponent(ssUser)}&sspassword=${encodeURIComponent(ssPass)}&softname=emulatte&output=image`;
+        try { await downloadFile(dlUrl, dest); updates[field] = dest; } catch {}
+    }
+
+    // Persist
+    const allowed = ['title','description','year','developer','publisher','genre','players',
+                     'rating','screenscraper_id','cover','hero','logo','screenshot'];
+    const keys   = Object.keys(updates).filter(k => allowed.includes(k));
+    const fields = keys.map(k => `${k}=@${k}`).join(', ');
+    db.prepare(`UPDATE games SET ${fields} WHERE id=${gameId}`).run(updates);
+
+    return { ok: true, updates, session };
+}
+
+let batchScrapeCancel = false;
+
+ipcMain.handle('scrape-game', async (event, gameId) => {
+    if (!db) return { ok: false, error: 'DB not ready' };
+    const ssUser = db.prepare('SELECT value FROM settings WHERE key=?').get('ss_user')?.value;
+    const ssPass = db.prepare('SELECT value FROM settings WHERE key=?').get('ss_pass')?.value;
+    if (!ssUser || !ssPass) return { ok: false, error: 'ScreenScraper credentials not set. Go to Settings.' };
+    return scrapeGameById(gameId, ssUser, ssPass, BrowserWindow.fromWebContents(event.sender));
+});
+
+ipcMain.handle('scrape-batch', async (event, gameIds) => {
+    if (!db) return { ok: false, error: 'DB not ready' };
+    const ssUser = db.prepare('SELECT value FROM settings WHERE key=?').get('ss_user')?.value;
+    const ssPass = db.prepare('SELECT value FROM settings WHERE key=?').get('ss_pass')?.value;
+    if (!ssUser || !ssPass) return { ok: false, error: 'ScreenScraper credentials not set. Go to Settings.' };
+
+    batchScrapeCancel = false;
+    const win   = BrowserWindow.fromWebContents(event.sender);
+    const total = gameIds.length;
+    let done = 0, failed = 0;
+    let lastSession = null;
+
+    for (const id of gameIds) {
+        if (batchScrapeCancel) break;
+        const game = db.prepare('SELECT title FROM games WHERE id=?').get(id);
+        win?.webContents.send('scrape-progress', { current: done + 1, total, title: game?.title || '', status: 'scraping', session: lastSession });
+
+        const result = await scrapeGameById(id, ssUser, ssPass, win);
+        if (result.ok) { if (result.session) lastSession = result.session; }
+        else { failed++; }
+        done++;
+
+        if (!batchScrapeCancel && done < total) await new Promise(r => setTimeout(r, 1500));
+    }
+
+    win?.webContents.send('scrape-progress', { current: done, total, status: 'done', failed, session: lastSession });
+    return { ok: true, done, failed };
+});
+
+ipcMain.handle('cancel-scrape',   () => { batchScrapeCancel = true; });
+ipcMain.handle('compute-crc32', async (_, filePath) => {
+    try { return await computeFileCrc32(filePath); } catch { return null; }
 });
 
 // ── FILE / FOLDER PICKERS ─────────────────────────────────────────────────────

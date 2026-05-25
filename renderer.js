@@ -10,6 +10,7 @@ let slideshowUrls  = [];
 let slideshowIndex = 0;
 let heroCycleTimer = null;
 let heroQueue      = [];
+let scrapeActive   = false;
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {
@@ -17,6 +18,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     await loadSystems();
     await loadGames();
     wireUI();
+    wireScrapeProgress();
     window.api.signalReady();
 });
 
@@ -322,8 +324,12 @@ async function launchGame(id) {
 
 let toastTimer = null;
 function showLaunchToast(msg, cmd) {
-    const toast = document.getElementById('launch-toast');
-    const msgEl = document.getElementById('launch-toast-msg');
+    const toast  = document.getElementById('launch-toast');
+    const msgEl  = document.getElementById('launch-toast-msg');
+    const isInfo = !cmd && (msg.startsWith('Done') || msg.startsWith('Scraped'));
+    toast.style.borderColor = isInfo ? 'var(--border_solid)' : '#c62828';
+    toast.querySelector('div').style.color = isInfo ? 'var(--accent)' : '#ef5350';
+    toast.querySelector('div').textContent = isInfo ? 'SCRAPE' : 'LAUNCH FAILED';
     msgEl.textContent = cmd ? `${msg}\n\nCommand: ${cmd}` : msg;
     toast.style.display = 'block';
     clearTimeout(toastTimer);
@@ -532,6 +538,14 @@ function wireUI() {
         }
     });
 
+    // Hero scrape all (system-scoped)
+    document.getElementById('btn-hero-scrape-all').addEventListener('click', () => {
+        if (scrapeActive) return;
+        const systemId = (currentFilter !== 'all' && currentFilter !== 'favs' && currentFilter !== 'want' && currentFilter !== 'recent')
+            ? currentFilter : null;
+        scrapeAll(systemId);
+    });
+
     // Hero add ROM button (system-scoped)
     document.getElementById('btn-hero-add-rom').addEventListener('click', () => {
         const presetId = (currentFilter !== 'all' && currentFilter !== 'favs' && currentFilter !== 'want' && currentFilter !== 'recent')
@@ -577,6 +591,11 @@ function wireUI() {
         await window.api.setGameFlag(currentGame.id, 'want', currentGame.want);
         document.getElementById('btn-gamepage-want').textContent = currentGame.want ? '♥ WANT TO PLAY' : 'WANT TO PLAY';
         document.getElementById('btn-gamepage-want').classList.toggle('active', !!currentGame.want);
+    });
+
+    // Gamepage scrape
+    document.getElementById('btn-gamepage-scrape').addEventListener('click', () => {
+        if (currentGame) scrapeGame(currentGame.id);
     });
 
     // Gamepage edit
@@ -840,6 +859,84 @@ async function browseArt(type) {
     await window.api.updateGame(id, { [type]: dest });
     const g = allGames.find(g => g.id === id);
     if (g) g[type] = dest;
+}
+
+// ── SCREENSCRAPER ─────────────────────────────────────────────────────────────
+
+async function scrapeGame(gameId) {
+    const btn = document.getElementById('btn-gamepage-scrape');
+    if (btn) btn.textContent = 'SCRAPING…';
+    const result = await window.api.scrapeGame(gameId);
+    if (btn) btn.textContent = 'SCRAPE';
+    if (!result.ok) {
+        showLaunchToast(result.error || 'Scrape failed', null);
+        return;
+    }
+    await loadGames();
+    const updated = allGames.find(g => g.id === gameId);
+    if (updated && currentGame?.id === gameId) openGamePage(updated);
+    if (result.session) updateRateInfo(result.session);
+}
+
+async function scrapeAll(systemId) {
+    const games = systemId
+        ? allGames.filter(g => g.system_id === Number(systemId))
+        : allGames;
+    if (!games.length) { showLaunchToast('No ROMs to scrape in this system.', null); return; }
+
+    scrapeActive = true;
+    showScrapePanel(true);
+    const result = await window.api.scrapeBatch(games.map(g => g.id));
+    scrapeActive = false;
+
+    if (!result.ok) { showLaunchToast(result.error, null); showScrapePanel(false); return; }
+
+    await loadGames();
+    if (currentGame) {
+        const updated = allGames.find(g => g.id === currentGame.id);
+        if (updated) openGamePage(updated);
+    }
+}
+
+function wireScrapeProgress() {
+    window.api.onScrapeProgress(data => {
+        if (data.status === 'done') {
+            showScrapePanel(false);
+            scrapeActive = false;
+            const msg = data.failed
+                ? `Done. ${data.done - data.failed} scraped, ${data.failed} failed.`
+                : `Done. ${data.done} ROM${data.done !== 1 ? 's' : ''} scraped.`;
+            showLaunchToast(msg, null);
+            if (data.session) updateRateInfo(data.session);
+            return;
+        }
+        const pct = data.total ? Math.round((data.current / data.total) * 100) : 0;
+        document.getElementById('scrape-progress-bar').style.width = `${pct}%`;
+        document.getElementById('scrape-panel-title').textContent   = data.title || '';
+        document.getElementById('scrape-panel-count').textContent   = `${data.current} / ${data.total}`;
+        if (data.session) updateRateInfo(data.session);
+    });
+
+    document.getElementById('btn-scrape-cancel').addEventListener('click', async () => {
+        await window.api.cancelScrape();
+        showScrapePanel(false);
+        scrapeActive = false;
+    });
+}
+
+function showScrapePanel(visible) {
+    document.getElementById('scrape-panel').style.display = visible ? 'block' : 'none';
+    if (!visible) {
+        document.getElementById('scrape-progress-bar').style.width = '0%';
+        document.getElementById('scrape-panel-title').textContent  = '';
+        document.getElementById('scrape-panel-count').textContent  = '';
+    }
+}
+
+function updateRateInfo(session) {
+    if (!session?.requestsToday || !session?.requestsLimit) return;
+    const el = document.getElementById('scrape-rate-info');
+    if (el) el.textContent = `${session.requestsToday} / ${session.requestsLimit} today`;
 }
 
 // ── UTILITIES ─────────────────────────────────────────────────────────────────
