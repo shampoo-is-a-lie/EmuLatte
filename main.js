@@ -6,7 +6,7 @@ const os = require('os');
 const https = require('https');
 const zlib = require('zlib');
 const Database = require('better-sqlite3');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 
 let baseDir;
 if (process.env.APPIMAGE) {
@@ -123,6 +123,9 @@ app.whenReady().then(() => {
         )`).run();
 
         try { db.prepare(`ALTER TABLE games ADD COLUMN core_override TEXT`).run(); } catch {}
+
+        const raVariant = detectRetroArch();
+        db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run('retroarch_variant', raVariant);
     } catch (err) {
         console.error('DB error:', err);
     }
@@ -497,6 +500,32 @@ ipcMain.handle('fetch-ss-systems', async () => {
     } catch(e) {
         return { ok: false, error: e.message };
     }
+});
+
+// ── RETROARCH DETECTION ───────────────────────────────────────────────────────
+function detectRetroArch() {
+    const which = spawnSync('which', ['retroarch'], { encoding: 'utf8' });
+    if (which.status === 0 && which.stdout.trim()) return 'native';
+
+    const flatpakPaths = [
+        '/var/lib/flatpak/app/org.libretro.RetroArch',
+        path.join(os.homedir(), '.local', 'share', 'flatpak', 'app', 'org.libretro.RetroArch'),
+    ];
+    if (flatpakPaths.some(p => fs.existsSync(p))) return 'flatpak';
+
+    try {
+        const list = spawnSync('flatpak', ['list', '--app', '--columns=application'], { encoding: 'utf8' });
+        if (list.stdout?.includes('org.libretro.RetroArch')) return 'flatpak';
+    } catch {}
+
+    return 'none';
+}
+
+ipcMain.handle('detect-retroarch', () => {
+    if (!db) return 'none';
+    const variant = detectRetroArch();
+    db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run('retroarch_variant', variant);
+    return variant;
 });
 
 // ── SYSTEM PRESETS ────────────────────────────────────────────────────────────

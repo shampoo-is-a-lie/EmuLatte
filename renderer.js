@@ -16,6 +16,7 @@ let allPlaylists         = [];
 let allCores             = [];
 let allSystemPresets     = [];
 let currentPlaylistGames = [];
+let retroarchVariant     = 'none';
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {
@@ -25,7 +26,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     await loadPlaylists();
     await loadCores();
     await loadSystemPresets();
+    retroarchVariant = await window.api.getSetting('retroarch_variant') || 'none';
     wireUI();
+    updateTemplateButtonLabels();
     wireScrapeProgress();
     window.api.signalReady();
 });
@@ -522,6 +525,29 @@ function renderSystemsList() {
     });
 }
 
+function retroarchStatusLabel(variant) {
+    return { native: '✓ Native RetroArch detected', flatpak: '✓ RetroArch Flatpak detected', none: '✗ RetroArch not found' }[variant] || 'Unknown';
+}
+
+function retroarchStatusColor(variant) {
+    return variant === 'none' ? '#ef5350' : 'var(--accent)';
+}
+
+function applyRetroArchTemplate(template) {
+    if (!template || retroarchVariant !== 'flatpak') return template;
+    return template.replace(/^retroarch\b/, 'flatpak run org.libretro.RetroArch');
+}
+
+function updateTemplateButtonLabels() {
+    const detectedTpl = retroarchVariant === 'native'  ? 'retroarch -L {core} {rom}' :
+                        retroarchVariant === 'flatpak' ? 'flatpak run org.libretro.RetroArch -L {core} {rom}' : null;
+    document.querySelectorAll('.preset-template-btn').forEach(btn => {
+        const isDetected = detectedTpl && btn.dataset.tpl === detectedTpl;
+        btn.style.color       = isDetected ? 'var(--accent)' : '';
+        btn.style.borderColor = isDetected ? 'var(--accent)' : '';
+    });
+}
+
 function resolveCorePath(coreFilename) {
     if (!coreFilename) return '';
     const match = allCores.find(c => c.path.split('/').pop() === coreFilename);
@@ -534,7 +560,7 @@ function applySystemPreset(preset) {
     document.getElementById('edit-system-name').value           = preset.name;
     document.getElementById('edit-system-short').value          = preset.short_name || '';
     document.getElementById('edit-system-extensions').value     = preset.extensions || '';
-    document.getElementById('edit-system-template').value       = preset.launch_template || '';
+    document.getElementById('edit-system-template').value       = applyRetroArchTemplate(preset.launch_template || '');
     document.getElementById('edit-system-core').value           = resolveCorePath(preset.default_core);
     document.getElementById('edit-system-emulator').value       = '';
     document.getElementById('edit-system-ssid').value           = preset.screenscraper_id ?? '';
@@ -708,6 +734,11 @@ function wireUI() {
         document.getElementById('settings-ss-pass').value = await window.api.getSetting('ss_pass') || '';
         const z = await window.api.getSetting('zoom') || '1.0';
         document.getElementById('settings-zoom').value = z;
+        const raStatusEl = document.getElementById('settings-retroarch-status');
+        raStatusEl.textContent = retroarchStatusLabel(retroarchVariant);
+        raStatusEl.style.color = retroarchStatusColor(retroarchVariant);
+        const coresEl = document.getElementById('settings-cores-status');
+        coresEl.textContent = allCores.length ? `${allCores.length} core${allCores.length !== 1 ? 's' : ''} scanned.` : '';
         openModal('modal-settings');
     });
 
@@ -1033,6 +1064,20 @@ function wireUI() {
         closeModal('modal-edit-playlist');
         if (currentFilter === `playlist:${id}`) setFilter('all');
         await loadPlaylists();
+    });
+
+    // ── SETTINGS: RE-DETECT RETROARCH ────────────────────────────────────────
+    document.getElementById('btn-detect-retroarch').addEventListener('click', async () => {
+        const btn = document.getElementById('btn-detect-retroarch');
+        btn.textContent = 'Detecting…';
+        btn.disabled = true;
+        retroarchVariant = await window.api.detectRetroArch();
+        btn.textContent = 'Re-detect';
+        btn.disabled = false;
+        const raStatusEl = document.getElementById('settings-retroarch-status');
+        raStatusEl.textContent = retroarchStatusLabel(retroarchVariant);
+        raStatusEl.style.color = retroarchStatusColor(retroarchVariant);
+        updateTemplateButtonLabels();
     });
 
     // ── SETTINGS: SCAN CORES ──────────────────────────────────────────────────

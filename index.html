@@ -504,9 +504,13 @@
         <div id="settings-ss-status" style="font-size:11px; color:var(--text_dim); margin-top:4px;"></div>
       </div>
       <div class="tool-card">
-        <div class="tool-card-title">RetroArch Cores</div>
-        <div id="settings-cores-status" style="font-size:11px; color:var(--text_dim); margin-bottom:8px;"></div>
-        <button id="btn-scan-cores" style="width:100%;">Scan RetroArch Cores</button>
+        <div class="tool-card-title">RetroArch</div>
+        <div id="settings-retroarch-status" style="font-size:11px; color:var(--text_dim); margin-bottom:10px;"></div>
+        <div class="row" style="margin-bottom:8px;">
+          <button id="btn-detect-retroarch" style="flex:1;">Re-detect</button>
+          <button id="btn-scan-cores" style="flex:1;">Scan Cores</button>
+        </div>
+        <div id="settings-cores-status" style="font-size:11px; color:var(--text_dim);"></div>
         <div class="hint">Scans ~/.config/retroarch/cores and the Flatpak location for installed cores.</div>
       </div>
       <div class="tool-card">

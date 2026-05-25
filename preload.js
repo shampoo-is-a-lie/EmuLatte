@@ -44,6 +44,9 @@ contextBridge.exposeInMainWorld('api', {
     onScrapeProgress:   (cb)     => ipcRenderer.on('scrape-progress', (_, d) => cb(d)),
     fetchSsSystems:     ()       => ipcRenderer.invoke('fetch-ss-systems'),
 
+    // RetroArch detection
+    detectRetroArch: () => ipcRenderer.invoke('detect-retroarch'),
+
     // System presets
     getSystemPresets: () => ipcRenderer.invoke('get-system-presets'),
 
