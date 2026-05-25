@@ -12,7 +12,7 @@
   },
   "keywords": ["emulation", "retro", "game", "manager", "linux"],
   "author": "Shampoo is a Lie",
-  "license": "ISC",
+  "license": "GPL-3.0",
   "dependencies": {
     "better-sqlite3": "^12.9.0"
   },

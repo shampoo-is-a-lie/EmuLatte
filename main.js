@@ -310,7 +310,18 @@ function httpsGet(url) {
         const req = https.get(url, { headers: { 'User-Agent': 'EmuLatte/1.0' } }, res => {
             const chunks = [];
             res.on('data', c => chunks.push(c));
-            res.on('end',  () => resolve({ status: res.statusCode, body: Buffer.concat(chunks) }));
+            res.on('end', () => {
+                const raw = Buffer.concat(chunks);
+                const enc = res.headers['content-encoding'];
+                if (enc === 'gzip' || enc === 'deflate' || enc === 'br') {
+                    zlib.unzip(raw, (err, buf) => {
+                        if (err) reject(err);
+                        else resolve({ status: res.statusCode, body: buf, headers: res.headers });
+                    });
+                } else {
+                    resolve({ status: res.statusCode, body: raw, headers: res.headers });
+                }
+            });
         });
         req.on('error', reject);
         req.setTimeout(20000, () => { req.destroy(); reject(new Error('timeout')); });
@@ -330,8 +341,9 @@ function ssApiUrl(endpoint, params) {
 async function ssApiCall(endpoint, params) {
     const { status, body } = await httpsGet(ssApiUrl(endpoint, params));
     if (status !== 200) throw new Error(`HTTP ${status}`);
-    try { return JSON.parse(body.toString('utf8')); }
-    catch { throw new Error('Invalid JSON from ScreenScraper'); }
+    const text = body.toString('utf8');
+    try { return JSON.parse(text); }
+    catch { throw new Error(text.slice(0, 120) || 'Invalid JSON from ScreenScraper'); }
 }
 
 const REGION_PREF = ['wor', 'us', 'eu', 'fr', 'jp', 'ss'];
@@ -376,7 +388,7 @@ async function scrapeGameById(gameId, ssUser, ssPass, win) {
     }
 
     const params = {
-        devid: '', devpassword: '',
+        devid: ssUser, devpassword: ssPass,
         softname: 'emulatte', output: 'json',
         ssid: ssUser, sspassword: ssPass,
         romtype: 'rom', romnom: romFileName,
@@ -489,7 +501,7 @@ ipcMain.handle('test-ss-credentials', async (_, ssUser, ssPass) => {
     if (!ssUser || !ssPass) return { ok: false, error: 'Enter username and password first.' };
     try {
         const result = await ssApiCall('systemesListe.php', {
-            devid: '', devpassword: '', softname: 'emulatte', output: 'json',
+            devid: ssUser, devpassword: ssPass, softname: 'emulatte', output: 'json',
             ssid: ssUser, sspassword: ssPass,
         });
         const systems = result.response?.systemes;
@@ -509,7 +521,7 @@ ipcMain.handle('fetch-ss-systems', async () => {
     if (!ssUser || !ssPass) return { ok: false, error: 'ScreenScraper credentials not set in Settings.' };
     try {
         const result = await ssApiCall('systemesListe.php', {
-            devid: '', devpassword: '', softname: 'emulatte', output: 'json',
+            devid: ssUser, devpassword: ssPass, softname: 'emulatte', output: 'json',
             ssid: ssUser, sspassword: ssPass,
         });
         const systems = result.response?.systemes || [];
