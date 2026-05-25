@@ -369,6 +369,10 @@
         <input type="text" id="edit-launch-override" placeholder="e.g. retroarch -L /path/to/core.so {rom}">
         <div class="hint">Variables: {rom} {core} {emulator}</div>
       </div>
+      <div id="edit-cmd-preview-wrap" style="background:rgba(0,0,0,0.4); border:1px solid var(--border_solid); border-radius:6px; padding:10px 12px; display:none;">
+        <div style="font-size:10px; font-weight:900; color:var(--text_dim); letter-spacing:1px; text-transform:uppercase; margin-bottom:5px;">Resolved Command</div>
+        <div id="edit-cmd-preview" style="font-size:12px; color:var(--accent); word-break:break-all; font-family:monospace;"></div>
+      </div>
       <fieldset>
         <legend>Artwork</legend>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
@@ -426,11 +430,17 @@
       </div>
       <div class="form-row">
         <label>Launch Template</label>
+        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px;">
+          <button class="preset-template-btn" data-tpl="retroarch -L {core} {rom}" style="font-size:10px; padding:4px 10px; background:rgba(0,0,0,0.3); border:1px solid var(--border_solid); color:var(--text_dim); border-radius:4px; cursor:pointer; text-transform:none; letter-spacing:0; white-space:nowrap;">RetroArch</button>
+          <button class="preset-template-btn" data-tpl="flatpak run org.libretro.RetroArch -L {core} {rom}" style="font-size:10px; padding:4px 10px; background:rgba(0,0,0,0.3); border:1px solid var(--border_solid); color:var(--text_dim); border-radius:4px; cursor:pointer; text-transform:none; letter-spacing:0; white-space:nowrap;">RetroArch (Flatpak)</button>
+          <button class="preset-template-btn" data-tpl="{emulator} {rom}" style="font-size:10px; padding:4px 10px; background:rgba(0,0,0,0.3); border:1px solid var(--border_solid); color:var(--text_dim); border-radius:4px; cursor:pointer; text-transform:none; letter-spacing:0; white-space:nowrap;">Standalone</button>
+          <button class="preset-template-btn" data-tpl="flatpak run {emulator} {rom}" style="font-size:10px; padding:4px 10px; background:rgba(0,0,0,0.3); border:1px solid var(--border_solid); color:var(--text_dim); border-radius:4px; cursor:pointer; text-transform:none; letter-spacing:0; white-space:nowrap;">Standalone (Flatpak)</button>
+        </div>
         <input type="text" id="edit-system-template" placeholder="e.g. retroarch -L {core} {rom}">
-        <div class="hint">Variables: {rom} {core} {emulator}</div>
+        <div class="hint">Variables: {rom} {core} {emulator} — click a preset above to fill</div>
       </div>
       <div class="form-row"><label>Default Core Path</label><input type="text" id="edit-system-core" placeholder="/path/to/core.so"></div>
-      <div class="form-row"><label>Default Emulator Path</label><input type="text" id="edit-system-emulator" placeholder="/path/to/emulator or flatpak run ..."></div>
+      <div class="form-row"><label>Default Emulator Path</label><input type="text" id="edit-system-emulator" placeholder="/path/to/emulator or flatpak app ID (e.g. org.ppsspp.PPSSPP)"></div>
       <div class="form-row"><label>ScreenScraper System ID (optional)</label><input type="number" id="edit-system-ssid" placeholder="e.g. 3"></div>
       <div class="row" style="justify-content:space-between; margin-top:5px;">
         <button id="btn-edit-system-delete" class="danger" style="display:none;">Delete</button>
@@ -481,6 +491,12 @@
     <button class="slide-nav slide-prev" id="slide-prev">&#8249;</button>
     <img class="slideshow-img" id="slideshow-img" src="" alt="">
     <button class="slide-nav slide-next" id="slide-next">&#8250;</button>
+  </div>
+
+  <!-- Launch error toast -->
+  <div id="launch-toast" style="display:none; position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#1a0a00; border:1px solid #c62828; border-radius:8px; padding:14px 20px; z-index:9990; max-width:600px; width:90%; box-shadow:0 10px 30px rgba(0,0,0,0.8);">
+    <div style="font-size:11px; font-weight:900; color:#ef5350; letter-spacing:1px; margin-bottom:6px;">LAUNCH FAILED</div>
+    <div id="launch-toast-msg" style="font-size:12px; color:var(--text_sec); word-break:break-all; font-family:monospace;"></div>
   </div>
 
   <script src="renderer.js"></script>

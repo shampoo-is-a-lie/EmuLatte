@@ -256,7 +256,7 @@ ipcMain.handle('launch-game', (_, gameId) => {
             .replace('{core}',     game.default_core     ? `"${game.default_core}"`     : '')
             .replace('{emulator}', game.default_emulator ? `"${game.default_emulator}"` : '');
     }
-    if (!cmd || !cmd.trim()) return { ok: false, error: 'No launch command configured' };
+    if (!cmd || !cmd.trim()) return { ok: false, error: 'No launch command configured — set a Launch Template in System Manager or a Launch Override on this ROM.' };
 
     db.prepare('UPDATE games SET last_played=? WHERE id=?').run(Date.now(), gameId);
     spawn('bash', ['-c', cmd], { detached: true, stdio: 'ignore' }).unref();

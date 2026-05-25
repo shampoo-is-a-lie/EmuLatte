@@ -317,9 +317,18 @@ function switchView(viewId) {
 // ── LAUNCH ────────────────────────────────────────────────────────────────────
 async function launchGame(id) {
     const result = await window.api.launchGame(id);
-    if (!result.ok) {
-        alert(`Could not launch: ${result.error || 'Unknown error'}`);
-    }
+    if (!result.ok) showLaunchToast(result.error || 'No launch command configured', result.cmd);
+}
+
+let toastTimer = null;
+function showLaunchToast(msg, cmd) {
+    const toast = document.getElementById('launch-toast');
+    const msgEl = document.getElementById('launch-toast-msg');
+    msgEl.textContent = cmd ? `${msg}\n\nCommand: ${cmd}` : msg;
+    toast.style.display = 'block';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toast.style.display = 'none'; }, 7000);
+    toast.onclick = () => { toast.style.display = 'none'; clearTimeout(toastTimer); };
 }
 
 // ── SLIDESHOW ─────────────────────────────────────────────────────────────────
@@ -378,6 +387,26 @@ function openEditGameModal(game) {
     setPreview('edit-screenshot-preview', game.screenshot);
 
     openModal('modal-edit-game');
+    setTimeout(() => {
+        const updateCmdPreview = () => {
+            const override = document.getElementById('edit-launch-override').value.trim();
+            const romPath  = document.getElementById('edit-rom-path').value.trim();
+            const sysId    = document.getElementById('edit-system').value;
+            const sys      = allSystems.find(s => s.id === Number(sysId));
+            let cmd = override;
+            if (!cmd && sys?.launch_template && romPath) {
+                cmd = sys.launch_template
+                    .replace('{rom}',      romPath ? `"${romPath}"` : '')
+                    .replace('{core}',     sys.default_core     ? `"${sys.default_core}"`     : '')
+                    .replace('{emulator}', sys.default_emulator ? `"${sys.default_emulator}"` : '');
+            }
+            const wrap    = document.getElementById('edit-cmd-preview-wrap');
+            const preview = document.getElementById('edit-cmd-preview');
+            if (cmd) { preview.textContent = cmd; wrap.style.display = 'block'; }
+            else      { wrap.style.display = 'none'; }
+        };
+        updateCmdPreview();
+    }, 50);
 }
 
 function openSystemsModal() {
@@ -632,9 +661,32 @@ function wireUI() {
     });
 
     // ── MODAL: EDIT GAME ─────────────────────────────────────────────────────
+    const updateCmdPreview = () => {
+        const id       = Number(document.getElementById('edit-game-id').value);
+        const override = document.getElementById('edit-launch-override').value.trim();
+        const romPath  = document.getElementById('edit-rom-path').value.trim();
+        const sysId    = document.getElementById('edit-system').value;
+        const sys      = allSystems.find(s => s.id === Number(sysId));
+        let cmd = override;
+        if (!cmd && sys?.launch_template && romPath) {
+            cmd = sys.launch_template
+                .replace('{rom}',      romPath ? `"${romPath}"` : '')
+                .replace('{core}',     sys.default_core     ? `"${sys.default_core}"`     : '')
+                .replace('{emulator}', sys.default_emulator ? `"${sys.default_emulator}"` : '');
+        }
+        const wrap = document.getElementById('edit-cmd-preview-wrap');
+        const preview = document.getElementById('edit-cmd-preview');
+        if (cmd) { preview.textContent = cmd; wrap.style.display = 'block'; }
+        else      { wrap.style.display = 'none'; }
+    };
+    ['edit-launch-override', 'edit-rom-path', 'edit-system'].forEach(id => {
+        document.getElementById(id)?.addEventListener('input',  updateCmdPreview);
+        document.getElementById(id)?.addEventListener('change', updateCmdPreview);
+    });
+
     document.getElementById('btn-edit-browse-rom').addEventListener('click', async () => {
         const p = await window.api.selectFile();
-        if (p) document.getElementById('edit-rom-path').value = p;
+        if (p) { document.getElementById('edit-rom-path').value = p; updateCmdPreview(); }
     });
     document.getElementById('btn-edit-cover').addEventListener('click',      () => browseArt('cover'));
     document.getElementById('btn-edit-hero').addEventListener('click',       () => browseArt('hero'));
@@ -676,6 +728,13 @@ function wireUI() {
     document.getElementById('btn-add-system').addEventListener('click', () => {
         closeModal('modal-systems');
         openEditSystemModal(null);
+    });
+
+    // Preset template buttons in edit-system modal
+    document.querySelectorAll('.preset-template-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.getElementById('edit-system-template').value = btn.dataset.tpl;
+        });
     });
 
     // ── MODAL: EDIT SYSTEM ───────────────────────────────────────────────────
