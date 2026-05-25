@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 app.setName('emulatte');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const https = require('https');
 const zlib = require('zlib');
 const Database = require('better-sqlite3');
@@ -99,6 +100,29 @@ app.whenReady().then(() => {
         )`).run();
 
         db.prepare(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)`).run();
+
+        db.prepare(`CREATE TABLE IF NOT EXISTS cores (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            path         TEXT NOT NULL UNIQUE,
+            name         TEXT,
+            system_names TEXT
+        )`).run();
+
+        db.prepare(`CREATE TABLE IF NOT EXISTS playlists (
+            id   INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL
+        )`).run();
+
+        db.prepare(`CREATE TABLE IF NOT EXISTS playlist_games (
+            playlist_id INTEGER NOT NULL,
+            game_id     INTEGER NOT NULL,
+            sort_order  INTEGER DEFAULT 0,
+            PRIMARY KEY (playlist_id, game_id),
+            FOREIGN KEY (playlist_id) REFERENCES playlists(id) ON DELETE CASCADE,
+            FOREIGN KEY (game_id)     REFERENCES games(id)     ON DELETE CASCADE
+        )`).run();
+
+        try { db.prepare(`ALTER TABLE games ADD COLUMN core_override TEXT`).run(); } catch {}
     } catch (err) {
         console.error('DB error:', err);
     }
@@ -204,7 +228,7 @@ ipcMain.handle('update-game', (_, id, data) => {
     if (!db) return false;
     const allowed = ['system_id','title','rom_path','description','year','developer','publisher',
                      'genre','players','rating','cover','hero','logo','screenshot',
-                     'fav','want','launch_override','screenscraper_id'];
+                     'fav','want','launch_override','core_override','screenscraper_id'];
     const keys = Object.keys(data).filter(k => allowed.includes(k));
     if (!keys.length) return false;
     const fields = keys.map(k => `${k}=@${k}`).join(', ');
@@ -253,9 +277,10 @@ ipcMain.handle('launch-game', (_, gameId) => {
 
     let cmd = game.launch_override;
     if (!cmd && game.launch_template && game.rom_path) {
+        const core = game.core_override || game.default_core || '';
         cmd = game.launch_template
             .replace('{rom}',      `"${game.rom_path}"`)
-            .replace('{core}',     game.default_core     ? `"${game.default_core}"`     : '')
+            .replace('{core}',     core                  ? `"${core}"`                  : '')
             .replace('{emulator}', game.default_emulator ? `"${game.default_emulator}"` : '');
     }
     if (!cmd || !cmd.trim()) return { ok: false, error: 'No launch command configured — set a Launch Template in System Manager or a Launch Override on this ROM.' };
@@ -455,6 +480,119 @@ ipcMain.handle('scrape-batch', async (event, gameIds) => {
 ipcMain.handle('cancel-scrape',   () => { batchScrapeCancel = true; });
 ipcMain.handle('compute-crc32', async (_, filePath) => {
     try { return await computeFileCrc32(filePath); } catch { return null; }
+});
+
+ipcMain.handle('fetch-ss-systems', async () => {
+    if (!db) return { ok: false, error: 'DB not ready' };
+    const ssUser = db.prepare('SELECT value FROM settings WHERE key=?').get('ss_user')?.value;
+    const ssPass = db.prepare('SELECT value FROM settings WHERE key=?').get('ss_pass')?.value;
+    if (!ssUser || !ssPass) return { ok: false, error: 'ScreenScraper credentials not set in Settings.' };
+    try {
+        const result = await ssApiCall('systemesListe.php', {
+            devid: '', devpassword: '', softname: 'emulatte', output: 'json',
+            ssid: ssUser, sspassword: ssPass,
+        });
+        const systems = result.response?.systemes || [];
+        return { ok: true, systems: systems.map(s => ({ id: s.id, name: s.noms?.nom_eu || s.noms?.nom_us || s.noms?.nom_jp || String(s.id) })).sort((a,b) => a.name.localeCompare(b.name)) };
+    } catch(e) {
+        return { ok: false, error: e.message };
+    }
+});
+
+// ── CORES ─────────────────────────────────────────────────────────────────────
+ipcMain.handle('scan-cores', () => {
+    if (!db) return { ok: false, error: 'DB not ready' };
+    const coreDirs = [
+        path.join(os.homedir(), '.config', 'retroarch', 'cores'),
+        path.join(os.homedir(), '.var', 'app', 'org.libretro.RetroArch', 'config', 'retroarch', 'cores'),
+    ];
+    const insert = db.prepare('INSERT OR REPLACE INTO cores (path, name, system_names) VALUES (?, ?, ?)');
+    const insertAll = db.transaction(items => { for (const c of items) insert.run(c.path, c.name, c.systemNames); });
+    const found = [];
+    for (const dir of coreDirs) {
+        if (!fs.existsSync(dir)) continue;
+        let files;
+        try { files = fs.readdirSync(dir); } catch { continue; }
+        for (const file of files.filter(f => f.endsWith('_libretro.so'))) {
+            const corePath = path.join(dir, file);
+            const infoPath = corePath.replace('.so', '.info');
+            let name = file.replace('_libretro.so', '').replace(/_/g, ' ');
+            let systemNames = '';
+            if (fs.existsSync(infoPath)) {
+                const txt = fs.readFileSync(infoPath, 'utf8');
+                const nm  = txt.match(/^corename\s*=\s*"?(.+?)"?\s*$/m);
+                const sm  = txt.match(/^systemname\s*=\s*"?(.+?)"?\s*$/m);
+                if (nm) name = nm[1].trim();
+                if (sm) systemNames = sm[1].trim();
+            }
+            found.push({ path: corePath, name, systemNames });
+        }
+    }
+    insertAll(found);
+    return { ok: true, count: found.length };
+});
+
+ipcMain.handle('get-cores', () => {
+    if (!db) return [];
+    return db.prepare('SELECT * FROM cores ORDER BY name').all();
+});
+
+// ── PLAYLISTS ─────────────────────────────────────────────────────────────────
+ipcMain.handle('get-playlists', () => {
+    if (!db) return [];
+    return db.prepare('SELECT * FROM playlists ORDER BY name').all();
+});
+
+ipcMain.handle('add-playlist', (_, name) => {
+    if (!db) return null;
+    return db.prepare('INSERT INTO playlists (name) VALUES (?)').run(name.trim()).lastInsertRowid;
+});
+
+ipcMain.handle('update-playlist', (_, id, name) => {
+    if (!db) return false;
+    db.prepare('UPDATE playlists SET name=? WHERE id=?').run(name.trim(), id);
+    return true;
+});
+
+ipcMain.handle('delete-playlist', (_, id) => {
+    if (!db) return false;
+    db.prepare('DELETE FROM playlist_games WHERE playlist_id=?').run(id);
+    db.prepare('DELETE FROM playlists WHERE id=?').run(id);
+    return true;
+});
+
+ipcMain.handle('get-playlist-games', (_, playlistId) => {
+    if (!db) return [];
+    return db.prepare(`
+        SELECT g.*, s.name AS system_name, s.short_name AS system_short,
+               s.launch_template, s.default_core, s.default_emulator, pg.sort_order
+        FROM playlist_games pg
+        JOIN games g ON g.id = pg.game_id
+        LEFT JOIN systems s ON s.id = g.system_id
+        WHERE pg.playlist_id = ?
+        ORDER BY pg.sort_order, g.title
+    `).all(playlistId);
+});
+
+ipcMain.handle('add-game-to-playlist', (_, playlistId, gameId) => {
+    if (!db) return { ok: false };
+    const max = db.prepare('SELECT MAX(sort_order) AS m FROM playlist_games WHERE playlist_id=?').get(playlistId);
+    const order = (max?.m ?? -1) + 1;
+    try {
+        db.prepare('INSERT INTO playlist_games (playlist_id, game_id, sort_order) VALUES (?, ?, ?)').run(playlistId, gameId, order);
+        return { ok: true };
+    } catch { return { ok: false, error: 'Already in playlist' }; }
+});
+
+ipcMain.handle('remove-game-from-playlist', (_, playlistId, gameId) => {
+    if (!db) return false;
+    db.prepare('DELETE FROM playlist_games WHERE playlist_id=? AND game_id=?').run(playlistId, gameId);
+    return true;
+});
+
+ipcMain.handle('get-game-playlists', (_, gameId) => {
+    if (!db) return [];
+    return db.prepare('SELECT playlist_id FROM playlist_games WHERE game_id=?').all(gameId).map(r => r.playlist_id);
 });
 
 // ── FILE / FOLDER PICKERS ─────────────────────────────────────────────────────

@@ -44,6 +44,20 @@ contextBridge.exposeInMainWorld('api', {
     onScrapeProgress:   (cb)     => ipcRenderer.on('scrape-progress', (_, d) => cb(d)),
     fetchSsSystems:     ()       => ipcRenderer.invoke('fetch-ss-systems'),
 
+    // Cores
+    scanCores: ()         => ipcRenderer.invoke('scan-cores'),
+    getCores:  ()         => ipcRenderer.invoke('get-cores'),
+
+    // Playlists
+    getPlaylists:           ()           => ipcRenderer.invoke('get-playlists'),
+    addPlaylist:            (name)       => ipcRenderer.invoke('add-playlist', name),
+    updatePlaylist:         (id, name)   => ipcRenderer.invoke('update-playlist', id, name),
+    deletePlaylist:         (id)         => ipcRenderer.invoke('delete-playlist', id),
+    getPlaylistGames:       (plId)       => ipcRenderer.invoke('get-playlist-games', plId),
+    addGameToPlaylist:      (plId, gId)  => ipcRenderer.invoke('add-game-to-playlist', plId, gId),
+    removeGameFromPlaylist: (plId, gId)  => ipcRenderer.invoke('remove-game-from-playlist', plId, gId),
+    getGamePlaylists:       (gId)        => ipcRenderer.invoke('get-game-playlists', gId),
+
     // Misc
     getBaseDir:   () => ipcRenderer.invoke('get-basedir'),
     getConfigDir: () => ipcRenderer.invoke('get-config-dir'),

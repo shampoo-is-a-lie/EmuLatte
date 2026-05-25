@@ -10,14 +10,19 @@ let slideshowUrls  = [];
 let slideshowIndex = 0;
 let heroCycleTimer = null;
 let heroQueue      = [];
-let scrapeActive   = false;
-let ssSystems      = [];
+let scrapeActive        = false;
+let ssSystems           = [];
+let allPlaylists        = [];
+let allCores            = [];
+let currentPlaylistGames = [];
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {
     applyZoom();
     await loadSystems();
     await loadGames();
+    await loadPlaylists();
+    await loadCores();
     wireUI();
     wireScrapeProgress();
     window.api.signalReady();
@@ -41,9 +46,27 @@ async function loadGames() {
     startHeroCycle();
 }
 
+async function loadPlaylists() {
+    allPlaylists = await window.api.getPlaylists();
+    renderPlaylistFilters();
+}
+
+async function loadCores() {
+    allCores = await window.api.getCores();
+}
+
 // ── RENDERING ─────────────────────────────────────────────────────────────────
 function getFilteredGames() {
-    let games = allGames;
+    let games;
+    if (typeof currentFilter === 'string' && currentFilter.startsWith('playlist:')) {
+        games = currentPlaylistGames;
+    } else {
+        games = allGames;
+        if      (currentFilter === 'favs')   games = games.filter(g => g.fav);
+        else if (currentFilter === 'want')   games = games.filter(g => g.want);
+        else if (currentFilter === 'recent') games = [...games].sort((a,b) => (b.last_played||0)-(a.last_played||0)).slice(0,50);
+        else if (currentFilter !== 'all')    games = games.filter(g => g.system_id === Number(currentFilter));
+    }
     const q = document.getElementById('search-bar')?.value.trim().toLowerCase();
     if (q) {
         games = games.filter(g =>
@@ -54,11 +77,7 @@ function getFilteredGames() {
             (g.year        || '').includes(q)
         );
     }
-    if (currentFilter === 'all')    return games;
-    if (currentFilter === 'favs')   return games.filter(g => g.fav);
-    if (currentFilter === 'want')   return games.filter(g => g.want);
-    if (currentFilter === 'recent') return [...games].sort((a,b) => (b.last_played||0)-(a.last_played||0)).slice(0,50);
-    return games.filter(g => g.system_id === Number(currentFilter));
+    return games;
 }
 
 function renderCurrentView() {
@@ -70,10 +89,15 @@ function renderCurrentView() {
 
 function updateCategoryHeader(games) {
     let label = 'ALL GAMES';
-    if (currentFilter === 'favs')   label = 'FAVOURITES';
+    const isPlaylist = typeof currentFilter === 'string' && currentFilter.startsWith('playlist:');
+    if (currentFilter === 'favs')        label = 'FAVOURITES';
     else if (currentFilter === 'want')   label = 'WANT TO PLAY';
     else if (currentFilter === 'recent') label = 'RECENTLY PLAYED';
-    else if (currentFilter !== 'all') {
+    else if (isPlaylist) {
+        const plId = Number(currentFilter.split(':')[1]);
+        const pl = allPlaylists.find(p => p.id === plId);
+        if (pl) label = pl.name.toUpperCase();
+    } else if (currentFilter !== 'all') {
         const sys = allSystems.find(s => s.id === Number(currentFilter));
         if (sys) label = sys.name.toUpperCase();
     }
@@ -84,9 +108,9 @@ function updateCategoryHeader(games) {
     document.getElementById('gallery-category-count').textContent =
         `${games.length} ${games.length === 1 ? 'GAME' : 'GAMES'}`;
 
-    const systemBtns = document.getElementById('system-hero-btns');
-    const isSystem = currentFilter !== 'all' && currentFilter !== 'favs' && currentFilter !== 'want' && currentFilter !== 'recent';
-    systemBtns.style.display = isSystem ? 'flex' : 'none';
+    const isSystem = currentFilter !== 'all' && currentFilter !== 'favs' &&
+                     currentFilter !== 'want' && currentFilter !== 'recent' && !isPlaylist;
+    document.getElementById('system-hero-btns').style.display = isSystem ? 'flex' : 'none';
 }
 
 function renderGallery(games) {
@@ -241,6 +265,45 @@ function populateSystemSelects() {
     });
 }
 
+function renderPlaylistFilters() {
+    const container = document.getElementById('playlist-filters');
+    if (!allPlaylists.length) { container.innerHTML = ''; return; }
+    container.innerHTML = allPlaylists.map(p =>
+        `<div style="display:flex; align-items:center; gap:6px;">
+            <button class="filter-btn-playlist" data-filter="playlist:${p.id}"
+                style="flex:1; text-align:left; font-size:11px; padding:8px 10px; background:var(--bg_menu); border:1px solid var(--border); color:var(--text_sec); border-radius:6px; cursor:pointer; font-family:inherit; font-weight:900; transition:background 0.15s;">
+                ${escHtml(p.name)}
+            </button>
+            <button class="btn-playlist-edit" data-playlist-id="${p.id}" title="Rename / Delete"
+                style="width:26px; height:26px; padding:0; background:transparent; border:1px solid var(--border); color:var(--text_dim); border-radius:4px; font-size:15px; flex-shrink:0; cursor:pointer; display:flex; align-items:center; justify-content:center; font-family:inherit;">⋯</button>
+        </div>`
+    ).join('');
+
+    container.querySelectorAll('.filter-btn-playlist').forEach(btn => {
+        if (currentFilter === btn.dataset.filter) {
+            btn.style.background  = 'var(--text_main)';
+            btn.style.color       = 'var(--bg)';
+            btn.style.borderColor = 'var(--text_main)';
+            btn.style.boxShadow   = '0 0 10px var(--text_main)';
+        }
+        btn.addEventListener('click', () => setFilter(btn.dataset.filter));
+    });
+
+    container.querySelectorAll('.btn-playlist-edit').forEach(btn => {
+        btn.addEventListener('click', e => {
+            e.stopPropagation();
+            const pl = allPlaylists.find(p => p.id === Number(btn.dataset.playlistId));
+            if (pl) openPlaylistEditModal(pl);
+        });
+    });
+}
+
+function openPlaylistEditModal(pl) {
+    document.getElementById('edit-playlist-id').value   = pl.id;
+    document.getElementById('edit-playlist-name').value = pl.name;
+    openModal('modal-edit-playlist');
+}
+
 // ── GAMEPAGE ──────────────────────────────────────────────────────────────────
 function openGamePage(game) {
     currentGame = game;
@@ -369,6 +432,13 @@ function openAddRomModal(presetSystemId = null) {
     openModal('modal-add-rom');
 }
 
+function populateCoreOverrideSelect(game) {
+    const sel = document.getElementById('edit-core-override');
+    sel.innerHTML = `<option value="">— Use system default —</option>` +
+        allCores.map(c => `<option value="${escHtml(c.path)}">${escHtml(c.name)}</option>`).join('');
+    sel.value = game.core_override || '';
+}
+
 function openEditGameModal(game) {
     document.getElementById('edit-game-id').value        = game.id;
     document.getElementById('edit-title').value          = game.title || '';
@@ -393,6 +463,7 @@ function openEditGameModal(game) {
     setPreview('edit-logo-preview',       game.logo);
     setPreview('edit-screenshot-preview', game.screenshot);
 
+    populateCoreOverrideSelect(game);
     openModal('modal-edit-game');
     setTimeout(() => {
         const updateCmdPreview = () => {
@@ -461,28 +532,35 @@ function openEditSystemModal(sys = null) {
 }
 
 // ── FILTER / SORT ─────────────────────────────────────────────────────────────
-function setFilter(filter) {
+async function setFilter(filter) {
     currentFilter = filter;
 
-    document.querySelectorAll('.filter-grid button, .filter-btn-system').forEach(btn => {
+    document.querySelectorAll('.filter-grid button, .filter-btn-system, .filter-btn-playlist').forEach(btn => {
         btn.classList.remove('active');
-        btn.style.background = '';
-        btn.style.color = '';
+        btn.style.background  = '';
+        btn.style.color       = '';
         btn.style.borderColor = '';
-        btn.style.boxShadow = '';
+        btn.style.boxShadow   = '';
     });
 
     const active = document.querySelector(
-        `.filter-grid button[data-filter="${filter}"], .filter-btn-system[data-filter="${filter}"]`
+        `.filter-grid button[data-filter="${CSS.escape(filter)}"], ` +
+        `.filter-btn-system[data-filter="${CSS.escape(filter)}"], ` +
+        `.filter-btn-playlist[data-filter="${CSS.escape(filter)}"]`
     );
     if (active) {
         active.classList.add('active');
-        if (active.classList.contains('filter-btn-system')) {
-            active.style.background    = 'var(--text_main)';
-            active.style.color         = 'var(--bg)';
-            active.style.borderColor   = 'var(--text_main)';
-            active.style.boxShadow     = '0 0 10px var(--text_main)';
+        if (active.classList.contains('filter-btn-system') || active.classList.contains('filter-btn-playlist')) {
+            active.style.background  = 'var(--text_main)';
+            active.style.color       = 'var(--bg)';
+            active.style.borderColor = 'var(--text_main)';
+            active.style.boxShadow   = '0 0 10px var(--text_main)';
         }
+    }
+
+    if (typeof filter === 'string' && filter.startsWith('playlist:')) {
+        const plId = Number(filter.split(':')[1]);
+        currentPlaylistGames = await window.api.getPlaylistGames(plId);
     }
 
     if (currentView !== 'view-gamepage') renderCurrentView();
@@ -727,6 +805,7 @@ function wireUI() {
             rating:          document.getElementById('edit-rating').value.trim(),
             description:     document.getElementById('edit-description').value.trim(),
             launch_override: document.getElementById('edit-launch-override').value.trim(),
+            core_override:   document.getElementById('edit-core-override').value || null,
         };
         if (!data.title) { alert('Title is required.'); return; }
         await window.api.updateGame(id, data);
@@ -792,6 +871,109 @@ function wireUI() {
         await loadGames();
         if (currentFilter === String(id)) setFilter('all');
         openSystemsModal();
+    });
+
+    // ── EDIT SYSTEM: BROWSE CORE ─────────────────────────────────────────────
+    document.getElementById('btn-edit-system-core-browse').addEventListener('click', async () => {
+        const p = await window.api.selectFile([
+            { name: 'RetroArch Cores', extensions: ['so'] },
+            { name: 'All Files', extensions: ['*'] },
+        ]);
+        if (p) document.getElementById('edit-system-core').value = p;
+    });
+
+    // ── GAMEPAGE: + PLAYLIST ─────────────────────────────────────────────────
+    document.getElementById('btn-gamepage-playlist').addEventListener('click', async () => {
+        if (!currentGame) return;
+        const gamePlaylistIds = await window.api.getGamePlaylists(currentGame.id);
+        const list = document.getElementById('playlist-picker-list');
+        if (!allPlaylists.length) {
+            list.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text_dim);">No playlists yet — create one from the sidebar.</div>`;
+        } else {
+            list.innerHTML = allPlaylists.map(p => {
+                const inList = gamePlaylistIds.includes(p.id);
+                return `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; border-radius:6px; background:rgba(0,0,0,0.2); border:1px solid var(--border);">
+                    <span style="color:var(--text_sec); font-size:13px;">${escHtml(p.name)}</span>
+                    <button class="btn-pl-toggle" data-playlist-id="${p.id}" data-in="${inList ? '1':'0'}"
+                        style="font-size:11px; padding:4px 14px; ${inList ? 'background:var(--accent); border-color:var(--accent); color:var(--bg);' : ''}">${inList ? '✓ Added' : '+ Add'}</button>
+                </div>`;
+            }).join('');
+            list.querySelectorAll('.btn-pl-toggle').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const plId   = Number(btn.dataset.playlistId);
+                    const inList = btn.dataset.in === '1';
+                    if (inList) {
+                        await window.api.removeGameFromPlaylist(plId, currentGame.id);
+                        btn.dataset.in = '0';
+                        btn.textContent = '+ Add';
+                        btn.style.cssText = 'font-size:11px; padding:4px 14px;';
+                    } else {
+                        await window.api.addGameToPlaylist(plId, currentGame.id);
+                        btn.dataset.in = '1';
+                        btn.textContent = '✓ Added';
+                        btn.style.cssText = 'font-size:11px; padding:4px 14px; background:var(--accent); border-color:var(--accent); color:var(--bg);';
+                    }
+                    if (typeof currentFilter === 'string' && currentFilter.startsWith('playlist:')) {
+                        currentPlaylistGames = await window.api.getPlaylistGames(Number(currentFilter.split(':')[1]));
+                    }
+                });
+            });
+        }
+        openModal('modal-add-to-playlist');
+    });
+    document.getElementById('btn-playlist-picker-close').addEventListener('click', () => closeModal('modal-add-to-playlist'));
+
+    // ── MODAL: CREATE PLAYLIST ────────────────────────────────────────────────
+    document.getElementById('btn-add-playlist').addEventListener('click', () => {
+        document.getElementById('new-playlist-name').value = '';
+        openModal('modal-create-playlist');
+    });
+    document.getElementById('btn-create-playlist-cancel').addEventListener('click', () => closeModal('modal-create-playlist'));
+    document.getElementById('btn-create-playlist-confirm').addEventListener('click', async () => {
+        const name = document.getElementById('new-playlist-name').value.trim();
+        if (!name) return;
+        await window.api.addPlaylist(name);
+        closeModal('modal-create-playlist');
+        await loadPlaylists();
+    });
+
+    // ── MODAL: EDIT PLAYLIST ──────────────────────────────────────────────────
+    document.getElementById('btn-edit-playlist-cancel').addEventListener('click', () => closeModal('modal-edit-playlist'));
+    document.getElementById('btn-edit-playlist-save').addEventListener('click', async () => {
+        const id   = Number(document.getElementById('edit-playlist-id').value);
+        const name = document.getElementById('edit-playlist-name').value.trim();
+        if (!name) return;
+        await window.api.updatePlaylist(id, name);
+        closeModal('modal-edit-playlist');
+        await loadPlaylists();
+    });
+    document.getElementById('btn-edit-playlist-delete').addEventListener('click', async () => {
+        const id = Number(document.getElementById('edit-playlist-id').value);
+        const pl = allPlaylists.find(p => p.id === id);
+        if (!confirm(`Delete playlist "${pl?.name}"?`)) return;
+        await window.api.deletePlaylist(id);
+        closeModal('modal-edit-playlist');
+        if (currentFilter === `playlist:${id}`) setFilter('all');
+        await loadPlaylists();
+    });
+
+    // ── SETTINGS: SCAN CORES ──────────────────────────────────────────────────
+    document.getElementById('btn-scan-cores').addEventListener('click', async () => {
+        const btn      = document.getElementById('btn-scan-cores');
+        const statusEl = document.getElementById('settings-cores-status');
+        btn.textContent = 'Scanning…';
+        btn.disabled = true;
+        const result = await window.api.scanCores();
+        btn.textContent = 'Scan RetroArch Cores';
+        btn.disabled = false;
+        if (result.ok) {
+            await loadCores();
+            statusEl.textContent = `${result.count} core${result.count !== 1 ? 's' : ''} found.`;
+            statusEl.style.color = 'var(--accent)';
+        } else {
+            statusEl.textContent = result.error || 'Scan failed.';
+            statusEl.style.color = '#ef5350';
+        }
     });
 
     // ── MODAL: SS SYSTEM BROWSER ─────────────────────────────────────────────

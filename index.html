@@ -168,6 +168,13 @@
           <button data-filter="recent">Recent</button>
         </div>
         <div id="system-filters" style="margin-top: 8px; display: flex; flex-direction: column; gap: 6px;"></div>
+        <div id="playlist-section" style="margin-top:12px; display:flex; flex-direction:column; gap:6px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-size:10px; font-weight:900; color:var(--text_dim); letter-spacing:2px; text-transform:uppercase; padding-left:2px;">Playlists</div>
+            <button id="btn-add-playlist" style="font-size:10px; padding:2px 8px; background:transparent; border:1px solid var(--border); color:var(--text_dim); border-radius:4px; cursor:pointer; letter-spacing:0; text-transform:none; font-family:inherit; font-weight:900;">+ New</button>
+          </div>
+          <div id="playlist-filters" style="display:flex; flex-direction:column; gap:6px;"></div>
+        </div>
       </fieldset>
       <fieldset>
         <legend>Manage</legend>
@@ -248,6 +255,7 @@
             <div style="display:flex; gap:15px; align-items:center; flex-shrink:0;">
               <button id="btn-gamepage-fav"  class="btn-hero">+ FAV</button>
               <button id="btn-gamepage-want" class="btn-hero">WANT TO PLAY</button>
+              <button id="btn-gamepage-playlist" class="btn-hero">+ PLAYLIST</button>
               <button id="btn-gamepage-scrape" class="btn-hero" title="Scrape metadata &amp; artwork from ScreenScraper.fr">SCRAPE</button>
               <button id="btn-gamepage-edit" class="btn-hero">EDIT</button>
               <button id="btn-gamepage-launch" class="primary" style="font-size:14px; padding:14px 28px; border-radius:8px; font-weight:900; letter-spacing:2px;">▶ PLAY</button>
@@ -375,6 +383,11 @@
         <div style="font-size:10px; font-weight:900; color:var(--text_dim); letter-spacing:1px; text-transform:uppercase; margin-bottom:5px;">Resolved Command</div>
         <div id="edit-cmd-preview" style="font-size:12px; color:var(--accent); word-break:break-all; font-family:monospace;"></div>
       </div>
+      <div class="form-row">
+        <label>Core Override (leave empty to use system default)</label>
+        <select id="edit-core-override"></select>
+        <div class="hint">Scan RetroArch cores in Settings to populate this list.</div>
+      </div>
       <fieldset>
         <legend>Artwork</legend>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
@@ -441,7 +454,13 @@
         <input type="text" id="edit-system-template" placeholder="e.g. retroarch -L {core} {rom}">
         <div class="hint">Variables: {rom} {core} {emulator} — click a preset above to fill</div>
       </div>
-      <div class="form-row"><label>Default Core Path</label><input type="text" id="edit-system-core" placeholder="/path/to/core.so"></div>
+      <div class="form-row">
+        <label>Default Core Path</label>
+        <div class="row">
+          <input type="text" id="edit-system-core" placeholder="/path/to/core.so" style="flex:1;">
+          <button id="btn-edit-system-core-browse" style="flex-shrink:0; white-space:nowrap;">Browse</button>
+        </div>
+      </div>
       <div class="form-row"><label>Default Emulator Path</label><input type="text" id="edit-system-emulator" placeholder="/path/to/emulator or flatpak app ID (e.g. org.ppsspp.PPSSPP)"></div>
       <div class="form-row">
         <label>ScreenScraper System ID (optional)</label>
@@ -485,12 +504,63 @@
         <div id="settings-ss-status" style="font-size:11px; color:var(--text_dim); margin-top:4px;"></div>
       </div>
       <div class="tool-card">
+        <div class="tool-card-title">RetroArch Cores</div>
+        <div id="settings-cores-status" style="font-size:11px; color:var(--text_dim); margin-bottom:8px;"></div>
+        <button id="btn-scan-cores" style="width:100%;">Scan RetroArch Cores</button>
+        <div class="hint">Scans ~/.config/retroarch/cores and the Flatpak location for installed cores.</div>
+      </div>
+      <div class="tool-card">
         <div class="tool-card-title">Data</div>
         <button id="btn-settings-open-data-dir" style="width:100%;">Open Data Folder</button>
       </div>
       <div class="row" style="justify-content:flex-end; margin-top:5px;">
         <button id="btn-settings-cancel">Cancel</button>
         <button id="btn-settings-save" class="primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MODAL: CREATE PLAYLIST ────────────────────────────────────────────── -->
+  <div id="modal-create-playlist" class="modal-overlay">
+    <div class="modal-box" style="width:380px;">
+      <div class="modal-title">New Playlist</div>
+      <div class="form-row">
+        <label>Name</label>
+        <input type="text" id="new-playlist-name" placeholder="e.g. Saturday Morning Games">
+      </div>
+      <div class="row" style="justify-content:flex-end; margin-top:10px;">
+        <button id="btn-create-playlist-cancel">Cancel</button>
+        <button id="btn-create-playlist-confirm" class="primary">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MODAL: EDIT PLAYLIST ───────────────────────────────────────────────── -->
+  <div id="modal-edit-playlist" class="modal-overlay">
+    <div class="modal-box" style="width:380px;">
+      <div class="modal-title">Edit Playlist</div>
+      <input type="hidden" id="edit-playlist-id">
+      <div class="form-row">
+        <label>Name</label>
+        <input type="text" id="edit-playlist-name">
+      </div>
+      <div class="row" style="justify-content:space-between; margin-top:10px;">
+        <button id="btn-edit-playlist-delete" class="danger">Delete</button>
+        <div class="row">
+          <button id="btn-edit-playlist-cancel">Cancel</button>
+          <button id="btn-edit-playlist-save" class="primary">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MODAL: ADD TO PLAYLIST ─────────────────────────────────────────────── -->
+  <div id="modal-add-to-playlist" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-title">Add to Playlist</div>
+      <div id="playlist-picker-list" style="display:flex; flex-direction:column; gap:8px; max-height:350px; overflow-y:auto;"></div>
+      <div class="row" style="justify-content:flex-end; margin-top:10px;">
+        <button id="btn-playlist-picker-close">Close</button>
       </div>
     </div>
   </div>
