@@ -9,7 +9,7 @@ EmuLatte is a ROM library manager for Linux. It handles everything emulation-rel
 - 55 bundled system presets — SNES, Genesis, PS1, N64, GBA, NDS, PSP, and more — with opinionated RetroArch core defaults so you don't start from scratch
 - Launch via RetroArch (auto-detects native vs Flatpak) or any custom emulator command
 - Per-game core override when the system default isn't right
-- Scrape metadata and artwork from [ScreenScraper.fr](https://www.screenscraper.fr/) — box art, hero images, screenshots, descriptions, release dates
+- ScreenScraper.fr integration for metadata and artwork scraping — box art, hero images, screenshots, descriptions, release dates *(pending API approval)*
 - Playlist manager for custom collections
 - All data in `GameManagerConfig/EmuLatte/` — backs up with everything else
 
