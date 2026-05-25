@@ -443,7 +443,13 @@
       </div>
       <div class="form-row"><label>Default Core Path</label><input type="text" id="edit-system-core" placeholder="/path/to/core.so"></div>
       <div class="form-row"><label>Default Emulator Path</label><input type="text" id="edit-system-emulator" placeholder="/path/to/emulator or flatpak app ID (e.g. org.ppsspp.PPSSPP)"></div>
-      <div class="form-row"><label>ScreenScraper System ID (optional)</label><input type="number" id="edit-system-ssid" placeholder="e.g. 3"></div>
+      <div class="form-row">
+        <label>ScreenScraper System ID (optional)</label>
+        <div class="row">
+          <input type="number" id="edit-system-ssid" placeholder="e.g. 3" style="flex:1;">
+          <button id="btn-browse-ss-systems" style="flex-shrink:0; white-space:nowrap;">Browse</button>
+        </div>
+      </div>
       <div class="row" style="justify-content:space-between; margin-top:5px;">
         <button id="btn-edit-system-delete" class="danger" style="display:none;">Delete</button>
         <div class="row" style="margin-left:auto;">
@@ -485,6 +491,18 @@
       <div class="row" style="justify-content:flex-end; margin-top:5px;">
         <button id="btn-settings-cancel">Cancel</button>
         <button id="btn-settings-save" class="primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MODAL: SCREENSCRAPER SYSTEM BROWSER ──────────────────────────────── -->
+  <div id="modal-ss-systems" class="modal-overlay" style="z-index:150;">
+    <div class="modal-box wide tall">
+      <div class="modal-title">ScreenScraper Systems</div>
+      <input type="text" id="ss-systems-search" placeholder="Search by name or ID…">
+      <div id="ss-systems-list" style="display:flex; flex-direction:column; gap:6px; max-height:400px; overflow-y:auto; margin-top:4px;"></div>
+      <div class="row" style="justify-content:flex-end; margin-top:8px;">
+        <button id="btn-ss-systems-cancel">Cancel</button>
       </div>
     </div>
   </div>

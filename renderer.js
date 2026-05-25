@@ -11,6 +11,7 @@ let slideshowIndex = 0;
 let heroCycleTimer = null;
 let heroQueue      = [];
 let scrapeActive   = false;
+let ssSystems      = [];
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {
@@ -793,6 +794,23 @@ function wireUI() {
         openSystemsModal();
     });
 
+    // ── MODAL: SS SYSTEM BROWSER ─────────────────────────────────────────────
+    document.getElementById('btn-browse-ss-systems').addEventListener('click', async () => {
+        const btn = document.getElementById('btn-browse-ss-systems');
+        btn.textContent = '…';
+        btn.disabled = true;
+        const result = await window.api.fetchSsSystems();
+        btn.textContent = 'Browse';
+        btn.disabled = false;
+        if (!result.ok) { alert(result.error || 'Failed to fetch ScreenScraper systems.'); return; }
+        ssSystems = result.systems;
+        document.getElementById('ss-systems-search').value = '';
+        renderSsSystemsList('');
+        openModal('modal-ss-systems');
+    });
+    document.getElementById('ss-systems-search').addEventListener('input', e => renderSsSystemsList(e.target.value));
+    document.getElementById('btn-ss-systems-cancel').addEventListener('click', () => closeModal('modal-ss-systems'));
+
     // ── MODAL: SETTINGS ──────────────────────────────────────────────────────
     document.getElementById('btn-settings-cancel').addEventListener('click', () => closeModal('modal-settings'));
     document.getElementById('btn-settings-save').addEventListener('click', async () => {
@@ -937,6 +955,34 @@ function updateRateInfo(session) {
     if (!session?.requestsToday || !session?.requestsLimit) return;
     const el = document.getElementById('scrape-rate-info');
     if (el) el.textContent = `${session.requestsToday} / ${session.requestsLimit} today`;
+}
+
+// ── SS SYSTEM BROWSER ─────────────────────────────────────────────────────────
+function renderSsSystemsList(query) {
+    const list = document.getElementById('ss-systems-list');
+    const q = query.trim().toLowerCase();
+    const filtered = q
+        ? ssSystems.filter(s => s.name.toLowerCase().includes(q) || String(s.id).includes(q))
+        : ssSystems;
+    if (!filtered.length) {
+        list.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text_dim);">No systems found.</div>`;
+        return;
+    }
+    list.innerHTML = filtered.map(s =>
+        `<div class="ss-system-item" data-id="${s.id}"
+            style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; border-radius:6px; background:rgba(0,0,0,0.2); border:1px solid var(--border); cursor:pointer; transition:background 0.15s, border-color 0.15s;">
+            <span style="color:var(--text_sec); font-size:13px;">${escHtml(s.name)}</span>
+            <span style="color:var(--text_dim); font-size:11px; font-weight:900; margin-left:10px; flex-shrink:0;">#${s.id}</span>
+        </div>`
+    ).join('');
+    list.querySelectorAll('.ss-system-item').forEach(el => {
+        el.addEventListener('mouseenter', () => { el.style.background = 'rgba(212,163,115,0.12)'; el.style.borderColor = 'var(--border_solid)'; });
+        el.addEventListener('mouseleave', () => { el.style.background = 'rgba(0,0,0,0.2)';       el.style.borderColor = 'var(--border)'; });
+        el.addEventListener('click', () => {
+            document.getElementById('edit-system-ssid').value = el.dataset.id;
+            closeModal('modal-ss-systems');
+        });
+    });
 }
 
 // ── UTILITIES ─────────────────────────────────────────────────────────────────
