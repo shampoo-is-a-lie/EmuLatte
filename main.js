@@ -488,21 +488,16 @@ ipcMain.handle('compute-crc32', async (_, filePath) => {
 ipcMain.handle('test-ss-credentials', async (_, ssUser, ssPass) => {
     if (!ssUser || !ssPass) return { ok: false, error: 'Enter username and password first.' };
     try {
-        const result = await ssApiCall('ssUserInfos.php', {
+        const result = await ssApiCall('systemesListe.php', {
             devid: '', devpassword: '', softname: 'emulatte', output: 'json',
             ssid: ssUser, sspassword: ssPass,
         });
-        const user = result.response?.ssuser;
-        if (!user) return { ok: false, error: result.response?.msg || 'Invalid credentials.' };
-        return {
-            ok: true,
-            username: user.id || ssUser,
-            requestsToday: user.requeststoday ?? '?',
-            requestsLimit: user.maxrequestsperday ?? '?',
-        };
+        const systems = result.response?.systemes;
+        if (!systems) return { ok: false, error: result.response?.msg || 'Invalid credentials.' };
+        return { ok: true, username: ssUser, systemCount: systems.length };
     } catch(e) {
-        const msg = e.message.includes('431') || e.message.includes('401') ? 'Invalid credentials.' :
-                    e.message.includes('timeout') ? 'Connection timed out.' : e.message;
+        const msg = e.message.match(/43[01]|401/) ? 'Invalid credentials.' :
+                    e.message.includes('timeout')  ? 'Connection timed out.' : e.message;
         return { ok: false, error: msg };
     }
 });
