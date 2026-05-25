@@ -520,6 +520,19 @@
     </div>
   </div>
 
+  <!-- ── MODAL: SYSTEM PRESET PICKER ──────────────────────────────────────── -->
+  <div id="modal-system-presets" class="modal-overlay">
+    <div class="modal-box wide tall">
+      <div class="modal-title">Add System — Choose a Preset</div>
+      <input type="text" id="preset-search" placeholder="Search systems…">
+      <div id="preset-list" style="display:flex; flex-direction:column; gap:5px; max-height:420px; overflow-y:auto; margin-top:4px;"></div>
+      <div class="row" style="justify-content:space-between; margin-top:10px;">
+        <button id="btn-preset-custom">Start from Scratch</button>
+        <button id="btn-preset-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── MODAL: CREATE PLAYLIST ────────────────────────────────────────────── -->
   <div id="modal-create-playlist" class="modal-overlay">
     <div class="modal-box" style="width:380px;">

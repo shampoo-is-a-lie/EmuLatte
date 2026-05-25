@@ -10,10 +10,11 @@ let slideshowUrls  = [];
 let slideshowIndex = 0;
 let heroCycleTimer = null;
 let heroQueue      = [];
-let scrapeActive        = false;
-let ssSystems           = [];
-let allPlaylists        = [];
-let allCores            = [];
+let scrapeActive         = false;
+let ssSystems            = [];
+let allPlaylists         = [];
+let allCores             = [];
+let allSystemPresets     = [];
 let currentPlaylistGames = [];
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
@@ -23,6 +24,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     await loadGames();
     await loadPlaylists();
     await loadCores();
+    await loadSystemPresets();
     wireUI();
     wireScrapeProgress();
     window.api.signalReady();
@@ -53,6 +55,10 @@ async function loadPlaylists() {
 
 async function loadCores() {
     allCores = await window.api.getCores();
+}
+
+async function loadSystemPresets() {
+    allSystemPresets = await window.api.getSystemPresets();
 }
 
 // ── RENDERING ─────────────────────────────────────────────────────────────────
@@ -516,6 +522,67 @@ function renderSystemsList() {
     });
 }
 
+function resolveCorePath(coreFilename) {
+    if (!coreFilename) return '';
+    const match = allCores.find(c => c.path.split('/').pop() === coreFilename);
+    return match ? match.path : '';
+}
+
+function applySystemPreset(preset) {
+    document.getElementById('edit-system-modal-title').textContent = 'Add System';
+    document.getElementById('edit-system-id').value             = '';
+    document.getElementById('edit-system-name').value           = preset.name;
+    document.getElementById('edit-system-short').value          = preset.short_name || '';
+    document.getElementById('edit-system-extensions').value     = preset.extensions || '';
+    document.getElementById('edit-system-template').value       = preset.launch_template || '';
+    document.getElementById('edit-system-core').value           = resolveCorePath(preset.default_core);
+    document.getElementById('edit-system-emulator').value       = '';
+    document.getElementById('edit-system-ssid').value           = preset.screenscraper_id ?? '';
+    document.getElementById('btn-edit-system-delete').style.display = 'none';
+}
+
+function openSystemPresetsModal() {
+    document.getElementById('preset-search').value = '';
+    renderPresetList('');
+    openModal('modal-system-presets');
+}
+
+function renderPresetList(query) {
+    const list = document.getElementById('preset-list');
+    const q = query.trim().toLowerCase();
+    const filtered = q
+        ? allSystemPresets.filter(p =>
+            p.name.toLowerCase().includes(q) ||
+            (p.short_name || '').toLowerCase().includes(q))
+        : allSystemPresets;
+    list.innerHTML = filtered.map((p, i) => {
+        const hasCore = !!resolveCorePath(p.default_core);
+        return `<div class="preset-item" data-index="${allSystemPresets.indexOf(p)}"
+            style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; border-radius:6px; background:rgba(0,0,0,0.2); border:1px solid var(--border); cursor:pointer; transition:background 0.15s, border-color 0.15s; gap:10px;">
+            <div style="min-width:0;">
+                <div style="font-size:13px; font-weight:900; color:var(--text_main); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escHtml(p.name)}</div>
+                <div style="font-size:10px; color:var(--text_dim); margin-top:2px; letter-spacing:1px;">${escHtml(p.extensions || '')}</div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                ${hasCore ? `<span style="font-size:9px; font-weight:900; color:var(--accent); background:rgba(212,163,115,0.12); border:1px solid var(--border); padding:2px 7px; border-radius:4px; letter-spacing:1px; text-transform:uppercase;">CORE READY</span>` : ''}
+                <span style="font-size:11px; color:var(--text_dim);">${p.short_name || ''}</span>
+            </div>
+        </div>`;
+    }).join('') || `<div style="text-align:center; padding:30px; color:var(--text_dim);">No systems found.</div>`;
+
+    list.querySelectorAll('.preset-item').forEach(el => {
+        el.addEventListener('mouseenter', () => { el.style.background = 'rgba(212,163,115,0.1)'; el.style.borderColor = 'var(--border_solid)'; });
+        el.addEventListener('mouseleave', () => { el.style.background = 'rgba(0,0,0,0.2)';       el.style.borderColor = 'var(--border)'; });
+        el.addEventListener('click', () => {
+            const preset = allSystemPresets[Number(el.dataset.index)];
+            if (!preset) return;
+            applySystemPreset(preset);
+            closeModal('modal-system-presets');
+            openModal('modal-edit-system');
+        });
+    });
+}
+
 function openEditSystemModal(sys = null) {
     const isNew = !sys;
     document.getElementById('edit-system-modal-title').textContent = isNew ? 'Add System' : 'Edit System';
@@ -826,6 +893,17 @@ function wireUI() {
     // ── MODAL: SYSTEMS ───────────────────────────────────────────────────────
     document.getElementById('btn-add-system').addEventListener('click', () => {
         closeModal('modal-systems');
+        openSystemPresetsModal();
+    });
+
+    // ── MODAL: SYSTEM PRESET PICKER ──────────────────────────────────────────
+    document.getElementById('preset-search').addEventListener('input', e => renderPresetList(e.target.value));
+    document.getElementById('btn-preset-cancel').addEventListener('click', () => {
+        closeModal('modal-system-presets');
+        openSystemsModal();
+    });
+    document.getElementById('btn-preset-custom').addEventListener('click', () => {
+        closeModal('modal-system-presets');
         openEditSystemModal(null);
     });
 

@@ -499,6 +499,13 @@ ipcMain.handle('fetch-ss-systems', async () => {
     }
 });
 
+// ── SYSTEM PRESETS ────────────────────────────────────────────────────────────
+ipcMain.handle('get-system-presets', () => {
+    try {
+        return JSON.parse(fs.readFileSync(path.join(__dirname, 'assets', 'systems.json'), 'utf8'));
+    } catch { return []; }
+});
+
 // ── CORES ─────────────────────────────────────────────────────────────────────
 ipcMain.handle('scan-cores', () => {
     if (!db) return { ok: false, error: 'DB not ready' };

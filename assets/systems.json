@@ -1,0 +1,442 @@
+[
+  {
+    "name": "Nintendo Entertainment System",
+    "short_name": "nes",
+    "extensions": "nes, fds, unf, unif",
+    "screenscraper_id": 3,
+    "default_core": "nestopia_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Famicom Disk System",
+    "short_name": "fds",
+    "extensions": "fds",
+    "screenscraper_id": 106,
+    "default_core": "nestopia_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Super Nintendo",
+    "short_name": "snes",
+    "extensions": "sfc, smc, fig, bs, swc",
+    "screenscraper_id": 4,
+    "default_core": "snes9x_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Nintendo 64",
+    "short_name": "n64",
+    "extensions": "n64, z64, v64",
+    "screenscraper_id": 14,
+    "default_core": "mupen64plus_next_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Nintendo GameCube",
+    "short_name": "gc",
+    "extensions": "iso, gcm, gcz, rvz, wia",
+    "screenscraper_id": 13,
+    "default_core": "dolphin_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Nintendo Wii",
+    "short_name": "wii",
+    "extensions": "iso, rvz, wbfs, wad, wia",
+    "screenscraper_id": 117,
+    "default_core": "dolphin_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Game Boy",
+    "short_name": "gb",
+    "extensions": "gb, sgb",
+    "screenscraper_id": 9,
+    "default_core": "gambatte_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Game Boy Color",
+    "short_name": "gbc",
+    "extensions": "gbc, gb, sgb",
+    "screenscraper_id": 10,
+    "default_core": "gambatte_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Game Boy Advance",
+    "short_name": "gba",
+    "extensions": "gba, agb, gbz",
+    "screenscraper_id": 12,
+    "default_core": "mgba_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Nintendo DS",
+    "short_name": "nds",
+    "extensions": "nds, dsi",
+    "screenscraper_id": 15,
+    "default_core": "desmume_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Nintendo 3DS",
+    "short_name": "3ds",
+    "extensions": "3ds, 3dsx, cia, cxi",
+    "screenscraper_id": 17,
+    "default_core": "citra_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Virtual Boy",
+    "short_name": "vb",
+    "extensions": "vb, vboy",
+    "screenscraper_id": 11,
+    "default_core": "mednafen_vb_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Sega Master System",
+    "short_name": "sms",
+    "extensions": "sms, sg, sc",
+    "screenscraper_id": 2,
+    "default_core": "genesis_plus_gx_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Sega Mega Drive / Genesis",
+    "short_name": "genesis",
+    "extensions": "md, bin, smd, gen, 32x",
+    "screenscraper_id": 1,
+    "default_core": "genesis_plus_gx_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Sega 32X",
+    "short_name": "32x",
+    "extensions": "32x, bin, smd",
+    "screenscraper_id": 19,
+    "default_core": "picodrive_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Sega CD / Mega CD",
+    "short_name": "segacd",
+    "extensions": "iso, bin, cue, img, chd",
+    "screenscraper_id": 20,
+    "default_core": "genesis_plus_gx_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Sega Saturn",
+    "short_name": "saturn",
+    "extensions": "iso, bin, cue, img, chd, mds",
+    "screenscraper_id": 22,
+    "default_core": "mednafen_saturn_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Sega Dreamcast",
+    "short_name": "dc",
+    "extensions": "cdi, gdi, chd, iso",
+    "screenscraper_id": 23,
+    "default_core": "flycast_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Game Gear",
+    "short_name": "gg",
+    "extensions": "gg",
+    "screenscraper_id": 21,
+    "default_core": "genesis_plus_gx_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "SG-1000",
+    "short_name": "sg1000",
+    "extensions": "sg, sc, sms",
+    "screenscraper_id": 109,
+    "default_core": "genesis_plus_gx_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Sony PlayStation",
+    "short_name": "ps1",
+    "extensions": "bin, cue, iso, img, chd, pbp, ecm, mds",
+    "screenscraper_id": 57,
+    "default_core": "pcsx_rearmed_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Sony PlayStation 2",
+    "short_name": "ps2",
+    "extensions": "iso, bin, img, mdf, chd",
+    "screenscraper_id": 58,
+    "default_core": "pcsx2_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "PlayStation Portable",
+    "short_name": "psp",
+    "extensions": "iso, cso, pbp, elf",
+    "screenscraper_id": 61,
+    "default_core": "ppsspp_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "PlayStation Vita",
+    "short_name": "vita",
+    "extensions": "vpk",
+    "screenscraper_id": 62,
+    "default_core": "",
+    "launch_template": "{emulator} {rom}"
+  },
+  {
+    "name": "Atari 2600",
+    "short_name": "a2600",
+    "extensions": "a26, bin, rom",
+    "screenscraper_id": 26,
+    "default_core": "stella_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Atari 5200",
+    "short_name": "a5200",
+    "extensions": "a52, bin, rom, car, atr, xex",
+    "screenscraper_id": 40,
+    "default_core": "a5200_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Atari 7800",
+    "short_name": "a7800",
+    "extensions": "a78, bin",
+    "screenscraper_id": 41,
+    "default_core": "prosystem_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Atari Lynx",
+    "short_name": "lynx",
+    "extensions": "lnx, o",
+    "screenscraper_id": 28,
+    "default_core": "handy_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Atari Jaguar",
+    "short_name": "jaguar",
+    "extensions": "j64, jag, abs, cof, rom, bin",
+    "screenscraper_id": 27,
+    "default_core": "virtualjaguar_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Atari ST",
+    "short_name": "atarist",
+    "extensions": "st, stx, msa, img, zip",
+    "screenscraper_id": 42,
+    "default_core": "hatari_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "NEC PC Engine / TurboGrafx-16",
+    "short_name": "pce",
+    "extensions": "pce, sgx",
+    "screenscraper_id": 31,
+    "default_core": "mednafen_pce_fast_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "PC Engine CD / TurboGrafx-CD",
+    "short_name": "pcecd",
+    "extensions": "cue, ccd, iso, img, chd",
+    "screenscraper_id": 114,
+    "default_core": "mednafen_pce_fast_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "SuperGrafx",
+    "short_name": "sgfx",
+    "extensions": "pce",
+    "screenscraper_id": 105,
+    "default_core": "mednafen_supergrafx_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "PC-FX",
+    "short_name": "pcfx",
+    "extensions": "pcfx, img, iso",
+    "screenscraper_id": 72,
+    "default_core": "mednafen_pcfx_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Neo Geo AES",
+    "short_name": "neogeo",
+    "extensions": "neo, zip, 7z",
+    "screenscraper_id": 142,
+    "default_core": "fbalpha2012_neogeo_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Neo Geo CD",
+    "short_name": "neocd",
+    "extensions": "cue, iso, chd",
+    "screenscraper_id": 70,
+    "default_core": "neocd_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Neo Geo Pocket",
+    "short_name": "ngp",
+    "extensions": "ngp, ngc",
+    "screenscraper_id": 25,
+    "default_core": "mednafen_ngp_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Neo Geo Pocket Color",
+    "short_name": "ngpc",
+    "extensions": "ngc, ngp",
+    "screenscraper_id": 82,
+    "default_core": "mednafen_ngp_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Commodore 64",
+    "short_name": "c64",
+    "extensions": "d64, t64, prg, g64, p00, crt",
+    "screenscraper_id": null,
+    "default_core": "vice_x64_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Commodore Amiga",
+    "short_name": "amiga",
+    "extensions": "adf, adz, dms, fdi, ipf, hdf, lha",
+    "screenscraper_id": 64,
+    "default_core": "puae_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Amstrad CPC",
+    "short_name": "cpc",
+    "extensions": "cpc, dsk, sna, tap, cdt",
+    "screenscraper_id": 65,
+    "default_core": "crocods_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "ZX Spectrum",
+    "short_name": "zxs",
+    "extensions": "tzx, tap, z80, rzx, scl, trd, dsk",
+    "screenscraper_id": 76,
+    "default_core": "fuse_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "MSX",
+    "short_name": "msx",
+    "extensions": "rom, ri, mx1, col, dsk, cas",
+    "screenscraper_id": null,
+    "default_core": "bluemsx_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "MSX2",
+    "short_name": "msx2",
+    "extensions": "rom, ri, mx2, col, dsk, cas",
+    "screenscraper_id": null,
+    "default_core": "bluemsx_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "ColecoVision",
+    "short_name": "coleco",
+    "extensions": "col, bin, rom",
+    "screenscraper_id": 48,
+    "default_core": "bluemsx_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Intellivision",
+    "short_name": "intv",
+    "extensions": "int, bin, rom",
+    "screenscraper_id": null,
+    "default_core": "freeintv_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "3DO",
+    "short_name": "3do",
+    "extensions": "iso, bin, cue, chd",
+    "screenscraper_id": 29,
+    "default_core": "opera_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Wonderswan",
+    "short_name": "ws",
+    "extensions": "ws",
+    "screenscraper_id": 45,
+    "default_core": "mednafen_wswan_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Wonderswan Color",
+    "short_name": "wsc",
+    "extensions": "wsc",
+    "screenscraper_id": 46,
+    "default_core": "mednafen_wswan_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Vectrex",
+    "short_name": "vectrex",
+    "extensions": "vec, gam, bin, rom",
+    "screenscraper_id": 102,
+    "default_core": "vecx_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Arcade (MAME)",
+    "short_name": "mame",
+    "extensions": "zip, 7z, chd",
+    "screenscraper_id": 75,
+    "default_core": "mame_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "Arcade (FinalBurn Neo)",
+    "short_name": "fbn",
+    "extensions": "zip, 7z",
+    "screenscraper_id": 75,
+    "default_core": "fbneo_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "DOS / PC",
+    "short_name": "dos",
+    "extensions": "exe, com, bat, conf",
+    "screenscraper_id": 135,
+    "default_core": "dosbox_pure_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
+  },
+  {
+    "name": "PlayStation 3",
+    "short_name": "ps3",
+    "extensions": "pkg, iso, bin",
+    "screenscraper_id": 59,
+    "default_core": "",
+    "launch_template": "{emulator} {rom}"
+  },
+  {
+    "name": "Nintendo Switch",
+    "short_name": "switch",
+    "extensions": "nsp, xci",
+    "screenscraper_id": null,
+    "default_core": "",
+    "launch_template": "{emulator} {rom}"
+  }
+]
