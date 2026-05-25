@@ -1,0 +1,25 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Base background -->
+  <rect width="512" height="512" rx="112" fill="#2C1E16"/>
+  <!-- Outer border -->
+  <rect x="24" y="24" width="464" height="464" rx="88" fill="none" stroke="#8B5A2B" stroke-width="12"/>
+
+  <!-- Coffee cup body -->
+  <path d="M 140 180 L 372 180 L 340 390 C 336 410 318 424 298 424 L 214 424 C 194 424 176 410 172 390 Z"
+        fill="#432818" stroke="#D4A373" stroke-width="16" stroke-linejoin="round"/>
+
+  <!-- Cup handle -->
+  <path d="M 372 230 C 440 230 440 310 372 310"
+        fill="none" stroke="#D4A373" stroke-width="20" stroke-linecap="round"/>
+
+  <!-- Cartridge top (game slot) -->
+  <rect x="160" y="140" width="192" height="50" rx="10"
+        fill="#432818" stroke="#D4A373" stroke-width="14"/>
+  <!-- Cartridge notch -->
+  <rect x="220" y="145" width="72" height="20" rx="4" fill="#2C1E16"/>
+
+  <!-- Steam wisps -->
+  <path d="M 220 140 C 210 110 230 90 220 65" fill="none" stroke="#FFE6A7" stroke-width="8" stroke-linecap="round" opacity="0.6"/>
+  <path d="M 256 140 C 246 105 266 80 256 50"  fill="none" stroke="#FFE6A7" stroke-width="8" stroke-linecap="round" opacity="0.6"/>
+  <path d="M 292 140 C 282 110 302 90 292 65" fill="none" stroke="#FFE6A7" stroke-width="8" stroke-linecap="round" opacity="0.6"/>
+</svg>

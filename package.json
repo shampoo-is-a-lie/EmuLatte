@@ -1,0 +1,42 @@
+{
+  "name": "emulatte_electron_build",
+  "version": "1.0.0",
+  "description": "EmuLatte by Cafe Neurotico",
+  "main": "main.js",
+  "scripts": {
+    "postinstall": "electron-builder install-app-deps",
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --linux AppImage",
+    "postdist": "D=/home/jose/Games/CNGM; F=EmuLatte.AppImage; [ -f $D/$F ] && mv $D/$F $D/EmuLatte_old.AppImage; cp dist/$F $D/$F && echo \"Deployed $F to $D\""
+  },
+  "keywords": ["emulation", "retro", "game", "manager", "linux"],
+  "author": "Shampoo is a Lie",
+  "license": "ISC",
+  "dependencies": {
+    "better-sqlite3": "^12.9.0"
+  },
+  "devDependencies": {
+    "electron": "41.3.0",
+    "electron-builder": "^26.8.1"
+  },
+  "build": {
+    "appId": "com.cafeneurotico.emulatte",
+    "productName": "EmuLatte",
+    "linux": {
+      "target": "AppImage",
+      "icon": "assets/icons/EmuLatte.svg",
+      "category": "Game"
+    },
+    "appImage": {
+      "artifactName": "EmuLatte.AppImage"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer.js",
+      "index.html",
+      "assets/**/*"
+    ]
+  }
+}
