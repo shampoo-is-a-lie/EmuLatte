@@ -734,6 +734,7 @@ function wireUI() {
         document.getElementById('settings-ss-pass').value = await window.api.getSetting('ss_pass') || '';
         const z = await window.api.getSetting('zoom') || '1.0';
         document.getElementById('settings-zoom').value = z;
+        document.getElementById('settings-ss-status').textContent = '';
         const raStatusEl = document.getElementById('settings-retroarch-status');
         raStatusEl.textContent = retroarchStatusLabel(retroarchVariant);
         raStatusEl.style.color = retroarchStatusColor(retroarchVariant);
@@ -1117,6 +1118,25 @@ function wireUI() {
     document.getElementById('btn-ss-systems-cancel').addEventListener('click', () => closeModal('modal-ss-systems'));
 
     // ── MODAL: SETTINGS ──────────────────────────────────────────────────────
+    document.getElementById('btn-test-ss').addEventListener('click', async () => {
+        const btn      = document.getElementById('btn-test-ss');
+        const statusEl = document.getElementById('settings-ss-status');
+        const user = document.getElementById('settings-ss-user').value.trim();
+        const pass = document.getElementById('settings-ss-pass').value.trim();
+        btn.textContent = 'Testing…';
+        btn.disabled = true;
+        const result = await window.api.testSsCredentials(user, pass);
+        btn.textContent = 'Test Credentials';
+        btn.disabled = false;
+        if (result.ok) {
+            statusEl.textContent = `✓ Connected as ${result.username} — ${result.requestsToday} / ${result.requestsLimit} requests today`;
+            statusEl.style.color = 'var(--accent)';
+        } else {
+            statusEl.textContent = `✗ ${result.error}`;
+            statusEl.style.color = '#ef5350';
+        }
+    });
+
     document.getElementById('btn-settings-cancel').addEventListener('click', () => closeModal('modal-settings'));
     document.getElementById('btn-settings-save').addEventListener('click', async () => {
         const z = document.getElementById('settings-zoom').value;

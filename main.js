@@ -485,6 +485,28 @@ ipcMain.handle('compute-crc32', async (_, filePath) => {
     try { return await computeFileCrc32(filePath); } catch { return null; }
 });
 
+ipcMain.handle('test-ss-credentials', async (_, ssUser, ssPass) => {
+    if (!ssUser || !ssPass) return { ok: false, error: 'Enter username and password first.' };
+    try {
+        const result = await ssApiCall('ssUserInfos.php', {
+            devid: '', devpassword: '', softname: 'emulatte', output: 'json',
+            ssid: ssUser, sspassword: ssPass,
+        });
+        const user = result.response?.ssuser;
+        if (!user) return { ok: false, error: result.response?.msg || 'Invalid credentials.' };
+        return {
+            ok: true,
+            username: user.id || ssUser,
+            requestsToday: user.requeststoday ?? '?',
+            requestsLimit: user.maxrequestsperday ?? '?',
+        };
+    } catch(e) {
+        const msg = e.message.includes('431') || e.message.includes('401') ? 'Invalid credentials.' :
+                    e.message.includes('timeout') ? 'Connection timed out.' : e.message;
+        return { ok: false, error: msg };
+    }
+});
+
 ipcMain.handle('fetch-ss-systems', async () => {
     if (!db) return { ok: false, error: 'DB not ready' };
     const ssUser = db.prepare('SELECT value FROM settings WHERE key=?').get('ss_user')?.value;

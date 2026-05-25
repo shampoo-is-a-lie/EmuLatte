@@ -42,7 +42,8 @@ contextBridge.exposeInMainWorld('api', {
     cancelScrape:       ()       => ipcRenderer.invoke('cancel-scrape'),
     computeCrc32:       (p)      => ipcRenderer.invoke('compute-crc32', p),
     onScrapeProgress:   (cb)     => ipcRenderer.on('scrape-progress', (_, d) => cb(d)),
-    fetchSsSystems:     ()       => ipcRenderer.invoke('fetch-ss-systems'),
+    fetchSsSystems:       ()             => ipcRenderer.invoke('fetch-ss-systems'),
+    testSsCredentials:    (user, pass)   => ipcRenderer.invoke('test-ss-credentials', user, pass),
 
     // RetroArch detection
     detectRetroArch: () => ipcRenderer.invoke('detect-retroarch'),
