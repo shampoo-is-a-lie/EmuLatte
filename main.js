@@ -423,7 +423,7 @@ function ssPickMedia(medias, type) {
     return candidates[0];
 }
 
-async function scrapeGameById(gameId, ssUser, ssPass, win) {
+async function scrapeGameById(gameId, ssUser, ssPass, win, metaOnly = false) {
     const game = db.prepare(`
         SELECT g.*, s.screenscraper_id AS system_ss_id
         FROM games g LEFT JOIN systems s ON g.system_id = s.id WHERE g.id=?
@@ -480,25 +480,28 @@ async function scrapeGameById(gameId, ssUser, ssPass, win) {
     };
 
     // Download media
-    const medias = jeu.medias || [];
-    const mediaMap = { 'box-2D': 'cover', fanart: 'hero', wheel: 'logo', ss: 'screenshot' };
-    const subdirMap = { cover: 'covers', hero: 'heroes', logo: 'logos', screenshot: 'screenshots' };
+    if (!metaOnly) {
+        const medias = jeu.medias || [];
+        const mediaMap = { 'box-2D': 'cover', fanart: 'hero', wheel: 'logo', ss: 'screenshot' };
+        const subdirMap = { cover: 'covers', hero: 'heroes', logo: 'logos', screenshot: 'screenshots' };
 
-    for (const [ssType, field] of Object.entries(mediaMap)) {
-        const media = ssPickMedia(medias, ssType);
-        if (!media?.url) continue;
-        const ext     = media.format ? `.${media.format}` : '.jpg';
-        const subdir  = subdirMap[field];
-        const dest    = path.join(imagesDir, subdir, `${gameId}_${field}${ext}`);
-        const dlUrl   = media.url.includes('ssid=')
-            ? media.url
-            : `${media.url}&ssid=${encodeURIComponent(ssUser)}&sspassword=${encodeURIComponent(ssPass)}&softname=emulatte&output=image`;
-        try { await downloadFile(dlUrl, dest); updates[field] = dest; } catch {}
+        for (const [ssType, field] of Object.entries(mediaMap)) {
+            const media = ssPickMedia(medias, ssType);
+            if (!media?.url) continue;
+            const ext     = media.format ? `.${media.format}` : '.jpg';
+            const subdir  = subdirMap[field];
+            const dest    = path.join(imagesDir, subdir, `${gameId}_${field}${ext}`);
+            const dlUrl   = media.url.includes('ssid=')
+                ? media.url
+                : `${media.url}&ssid=${encodeURIComponent(ssUser)}&sspassword=${encodeURIComponent(ssPass)}&softname=emulatte&output=image`;
+            try { await downloadFile(dlUrl, dest); updates[field] = dest; } catch {}
+        }
     }
 
     // Persist
-    const allowed = ['title','description','year','developer','publisher','genre','players',
-                     'rating','screenscraper_id','cover','hero','logo','screenshot'];
+    const allowed = metaOnly
+        ? ['title','description','year','developer','publisher','genre','players','rating','screenscraper_id']
+        : ['title','description','year','developer','publisher','genre','players','rating','screenscraper_id','cover','hero','logo','screenshot'];
     const keys   = Object.keys(updates).filter(k => allowed.includes(k));
     const fields = keys.map(k => `${k}=@${k}`).join(', ');
     db.prepare(`UPDATE games SET ${fields} WHERE id=${gameId}`).run(updates);
@@ -508,12 +511,12 @@ async function scrapeGameById(gameId, ssUser, ssPass, win) {
 
 let batchScrapeCancel = false;
 
-ipcMain.handle('scrape-game', async (event, gameId) => {
+ipcMain.handle('scrape-game', async (event, gameId, metaOnly = false) => {
     if (!db) return { ok: false, error: 'DB not ready' };
     const ssUser = db.prepare('SELECT value FROM settings WHERE key=?').get('ss_user')?.value;
     const ssPass = db.prepare('SELECT value FROM settings WHERE key=?').get('ss_pass')?.value;
     if (!ssUser || !ssPass) return { ok: false, error: 'ScreenScraper credentials not set. Go to Settings.' };
-    return scrapeGameById(gameId, ssUser, ssPass, BrowserWindow.fromWebContents(event.sender));
+    return scrapeGameById(gameId, ssUser, ssPass, BrowserWindow.fromWebContents(event.sender), metaOnly);
 });
 
 ipcMain.handle('scrape-batch', async (event, gameIds) => {
@@ -951,7 +954,7 @@ ipcMain.handle('test-igdb-credentials', async (_, clientId, clientSecret) => {
     } catch(e) { return { ok: false, error: e.message }; }
 });
 
-ipcMain.handle('igdb-scrape-game', async (_, gameId) => {
+ipcMain.handle('igdb-scrape-game', async (_, gameId, metaOnly = false) => {
     if (!db) return { ok: false, error: 'DB not ready' };
     const game = db.prepare(`SELECT g.*, s.short_name AS system_short
         FROM games g LEFT JOIN systems s ON g.system_id=s.id WHERE g.id=?`).get(gameId);
@@ -984,22 +987,24 @@ ipcMain.handle('igdb-scrape-game', async (_, gameId) => {
         if (pubs.length) updates.publisher = pubs[0];
         if (g.videos?.length) updates.igdb_trailer = g.videos[0].video_id;
 
-        if (g.cover?.url) {
-            const dest = path.join(imagesDir, 'covers', `${gameId}.jpg`);
-            fs.mkdirSync(path.dirname(dest), { recursive: true });
-            await downloadFile(igdbImg(g.cover.url, 'cover_big'), dest);
-            updates.cover = dest;
-        }
-        if (g.screenshots?.length) {
-            const heroUrl  = igdbImg(g.screenshots[0].url, 'screenshot_big');
-            const heroDest = path.join(imagesDir, 'heroes', `${gameId}.jpg`);
-            fs.mkdirSync(path.dirname(heroDest), { recursive: true });
-            await downloadFile(heroUrl, heroDest);
-            updates.hero = heroDest;
-            const ssDest = path.join(imagesDir, 'screenshots', `${gameId}.jpg`);
-            fs.mkdirSync(path.dirname(ssDest), { recursive: true });
-            await downloadFile(igdbImg(g.screenshots[0].url, 'screenshot_big'), ssDest);
-            updates.screenshot = ssDest;
+        if (!metaOnly) {
+            if (g.cover?.url) {
+                const dest = path.join(imagesDir, 'covers', `${gameId}.jpg`);
+                fs.mkdirSync(path.dirname(dest), { recursive: true });
+                await downloadFile(igdbImg(g.cover.url, 'cover_big'), dest);
+                updates.cover = dest;
+            }
+            if (g.screenshots?.length) {
+                const heroUrl  = igdbImg(g.screenshots[0].url, 'screenshot_big');
+                const heroDest = path.join(imagesDir, 'heroes', `${gameId}.jpg`);
+                fs.mkdirSync(path.dirname(heroDest), { recursive: true });
+                await downloadFile(heroUrl, heroDest);
+                updates.hero = heroDest;
+                const ssDest = path.join(imagesDir, 'screenshots', `${gameId}.jpg`);
+                fs.mkdirSync(path.dirname(ssDest), { recursive: true });
+                await downloadFile(igdbImg(g.screenshots[0].url, 'screenshot_big'), ssDest);
+                updates.screenshot = ssDest;
+            }
         }
 
         if (Object.keys(updates).length) {
@@ -1025,7 +1030,7 @@ ipcMain.handle('test-tgdb-key', async (_, apiKey) => {
     } catch(e) { return { ok: false, error: e.message }; }
 });
 
-ipcMain.handle('tgdb-scrape-game', async (_, gameId) => {
+ipcMain.handle('tgdb-scrape-game', async (_, gameId, metaOnly = false) => {
     if (!db) return { ok: false, error: 'DB not ready' };
     const game = db.prepare(`SELECT g.*, s.short_name AS system_short
         FROM games g LEFT JOIN systems s ON g.system_id=s.id WHERE g.id=?`).get(gameId);
@@ -1066,17 +1071,19 @@ ipcMain.handle('tgdb-scrape-game', async (_, gameId) => {
             updates[field] = dest;
         }
 
-        await fetchBoxart('boxart',    'covers',      'cover');
-        await fetchBoxart('fanart',    'heroes',      'hero');
-        await fetchBoxart('clearlogo', 'logos',       'logo');
+        if (!metaOnly) {
+            await fetchBoxart('boxart',    'covers',      'cover');
+            await fetchBoxart('fanart',    'heroes',      'hero');
+            await fetchBoxart('clearlogo', 'logos',       'logo');
 
-        const ss = byType('screenshot') || byType('titlescreen');
-        if (ss && boxartBase) {
-            const ext  = ss.filename.split('.').pop() || 'jpg';
-            const dest = path.join(imagesDir, 'screenshots', `${gameId}.${ext}`);
-            fs.mkdirSync(path.dirname(dest), { recursive: true });
-            await downloadFile(`${boxartBase}${ss.filename}`, dest);
-            updates.screenshot = dest;
+            const ss = byType('screenshot') || byType('titlescreen');
+            if (ss && boxartBase) {
+                const ext  = ss.filename.split('.').pop() || 'jpg';
+                const dest = path.join(imagesDir, 'screenshots', `${gameId}.${ext}`);
+                fs.mkdirSync(path.dirname(dest), { recursive: true });
+                await downloadFile(`${boxartBase}${ss.filename}`, dest);
+                updates.screenshot = dest;
+            }
         }
 
         if (Object.keys(updates).length) {

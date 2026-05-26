@@ -1341,6 +1341,13 @@ function wireUI() {
     document.getElementById('btn-scrape-logo').addEventListener('click',       () => openArtPicker('logo'));
     document.getElementById('btn-scrape-screenshot').addEventListener('click', () => openArtPicker('screenshot'));
 
+    document.getElementById('btn-scrape-meta').addEventListener('click', () => {
+        if (!currentGame) return;
+        _scraperPickerMode = 'meta';
+        document.getElementById('scraper-picker-status').textContent = '';
+        openModal('modal-scraper-picker');
+    });
+
     for (const type of ['cover', 'hero', 'logo', 'screenshot']) {
         document.getElementById(`btn-delete-${type}`).addEventListener('click', async () => {
             const id = Number(document.getElementById('edit-game-id').value);
@@ -1751,25 +1758,34 @@ function wireUI() {
     }
 
     document.getElementById('btn-scrape-with-ss').addEventListener('click', async () => {
-        if (_scraperPickerMode === 'art') { await _pickArt('ss'); return; }
+        if (_scraperPickerMode === 'art')   { await _pickArt('ss'); return; }
         if (_scraperPickerMode === 'batch') { closeModal('modal-scraper-picker'); scrapeAll(_scrapeAllSystemId); return; }
+        if (_scraperPickerMode === 'meta')  { runScraper(id => window.api.scrapeGameMeta(id), 'ScreenScraper'); return; }
         if (!currentGame) return;
         closeModal('modal-scraper-picker');
         scrapeGame(currentGame.id);
     });
     document.getElementById('btn-scrape-with-igdb').addEventListener('click', async () => {
-        if (_scraperPickerMode === 'art') { await _pickArt('igdb'); return; }
+        if (_scraperPickerMode === 'art')   { await _pickArt('igdb'); return; }
         if (_scraperPickerMode === 'batch') { closeModal('modal-scraper-picker'); scrapeAllWith(_scrapeAllSystemId, 'igdb'); return; }
+        if (_scraperPickerMode === 'meta')  { runScraper(id => window.api.igdbScrapeGameMeta(id), 'IGDB'); return; }
         runScraper(id => window.api.igdbScrapeGame(id), 'IGDB');
     });
     document.getElementById('btn-scrape-with-tgdb').addEventListener('click', async () => {
-        if (_scraperPickerMode === 'art') { await _pickArt('tgdb'); return; }
+        if (_scraperPickerMode === 'art')   { await _pickArt('tgdb'); return; }
         if (_scraperPickerMode === 'batch') { closeModal('modal-scraper-picker'); scrapeAllWith(_scrapeAllSystemId, 'tgdb'); return; }
+        if (_scraperPickerMode === 'meta')  { runScraper(id => window.api.tgdbScrapeGameMeta(id), 'TheGamesDB'); return; }
         runScraper(id => window.api.tgdbScrapeGame(id), 'TheGamesDB');
     });
     document.getElementById('btn-scrape-with-sgdb').addEventListener('click', async () => {
-        if (_scraperPickerMode === 'art') { await _pickArt('sgdb'); return; }
+        if (_scraperPickerMode === 'art')   { await _pickArt('sgdb'); return; }
         if (_scraperPickerMode === 'batch') { closeModal('modal-scraper-picker'); scrapeAllWith(_scrapeAllSystemId, 'sgdb'); return; }
+        if (_scraperPickerMode === 'meta')  {
+            const statusEl = document.getElementById('scraper-picker-status');
+            statusEl.textContent = 'SteamGridDB provides artwork only — no text metadata.';
+            statusEl.style.color = 'var(--text_dim)';
+            return;
+        }
         runScraper(id => window.api.sgdbScrapeGame(id), 'SteamGridDB');
     });
 

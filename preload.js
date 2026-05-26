@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld('api', {
 
     // Screenscraper
     scrapeGame:         (id)     => ipcRenderer.invoke('scrape-game', id),
+    scrapeGameMeta:     (id)     => ipcRenderer.invoke('scrape-game', id, true),
     scrapeBatch:        (ids)    => ipcRenderer.invoke('scrape-batch', ids),
     cancelScrape:       ()       => ipcRenderer.invoke('cancel-scrape'),
     computeCrc32:       (p)      => ipcRenderer.invoke('compute-crc32', p),
@@ -64,10 +65,12 @@ contextBridge.exposeInMainWorld('api', {
     // IGDB
     testIgdbCredentials: (id, secret) => ipcRenderer.invoke('test-igdb-credentials', id, secret),
     igdbScrapeGame:      (id)         => ipcRenderer.invoke('igdb-scrape-game', id),
+    igdbScrapeGameMeta:  (id)         => ipcRenderer.invoke('igdb-scrape-game', id, true),
 
     // TheGamesDB
     testTgdbKey:   (key) => ipcRenderer.invoke('test-tgdb-key', key),
     tgdbScrapeGame:(id)  => ipcRenderer.invoke('tgdb-scrape-game', id),
+    tgdbScrapeGameMeta:(id) => ipcRenderer.invoke('tgdb-scrape-game', id, true),
 
     // SteamGridDB
     testSgdbKey:   (key) => ipcRenderer.invoke('test-sgdb-key', key),
