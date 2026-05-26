@@ -154,6 +154,15 @@
     .theme-swatch { cursor:pointer; border-radius:8px; border:2px solid transparent; overflow:hidden; transition:border-color 0.15s, transform 0.15s; }
     .theme-swatch:hover { transform:scale(1.04); border-color:var(--text_main); }
     .theme-swatch.active { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+
+    .modal-box.tall .modal-hdr,
+    .modal-box.wide.tall .modal-hdr {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: var(--bg_menu);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+    }
   </style>
   <script>
     try {
