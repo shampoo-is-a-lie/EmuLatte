@@ -52,6 +52,7 @@ async function loadSystems() {
 
 async function loadGames() {
     allGames = await window.api.getGames();
+    renderSystemFilters();
     renderCurrentView();
     startHeroCycle();
 }
