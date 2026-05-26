@@ -152,15 +152,20 @@ function renderGallery(games) {
                 </div>
             </div>
             <div class="gallery-title">${escHtml(g.title)}</div>
+            <button class="btn-play-gallery" data-id="${g.id}">▶ PLAY</button>
         </div>`;
     }).join('');
 
     grid.querySelectorAll('.gallery-item').forEach(el => {
         el.addEventListener('click', e => {
-            if (e.target.closest('.btn-gallery-fav, .btn-gallery-want')) return;
+            if (e.target.closest('.btn-gallery-fav, .btn-gallery-want, .btn-play-gallery')) return;
             const game = allGames.find(g => g.id === Number(el.dataset.id));
             if (game) openGamePage(game);
         });
+    });
+
+    grid.querySelectorAll('.btn-play-gallery').forEach(btn => {
+        btn.addEventListener('click', e => { e.stopPropagation(); launchGame(Number(btn.dataset.id)); });
     });
 
     grid.querySelectorAll('.btn-gallery-fav, .btn-gallery-want').forEach(btn => {
