@@ -83,7 +83,7 @@ function getFilteredGames() {
         else if (currentFilter === 'recent') games = [...games].sort((a,b) => (b.last_played||0)-(a.last_played||0)).slice(0,50);
         else if (currentFilter !== 'all')    games = games.filter(g => g.system_id === Number(currentFilter));
     }
-    const q = document.getElementById('search-bar')?.value.trim().toLowerCase();
+    const q = document.getElementById('gallery-search')?.value.trim().toLowerCase();
     if (q) {
         games = games.filter(g =>
             (g.title       || '').toLowerCase().includes(q) ||
@@ -117,12 +117,19 @@ function updateCategoryHeader(games) {
         const sys = allSystems.find(s => s.id === Number(currentFilter));
         if (sys) label = sys.name.toUpperCase();
     }
-    const q = document.getElementById('search-bar')?.value.trim();
+    const q = document.getElementById('gallery-search')?.value.trim();
     if (q) label = `RESULTS FOR "${q.toUpperCase()}"`;
 
     document.getElementById('gallery-category-text').textContent = label;
     document.getElementById('gallery-category-count').textContent =
         `${games.length} ${games.length === 1 ? 'GAME' : 'GAMES'}`;
+
+    const searchEl  = document.getElementById('gallery-search');
+    const countEl   = document.getElementById('gallery-search-count');
+    const clearBtn  = document.getElementById('btn-gsearch-clear');
+    if (searchEl && !q) searchEl.placeholder = `Search ${label === 'ALL GAMES' ? 'All Games' : label}…`;
+    if (countEl) countEl.textContent = `${games.length} ${games.length === 1 ? 'game' : 'games'}`;
+    if (clearBtn) clearBtn.style.display = q ? 'flex' : 'none';
 
     const isSystem = currentFilter !== 'all' && currentFilter !== 'favs' &&
                      currentFilter !== 'want' && currentFilter !== 'recent' && !isPlaylist;
@@ -833,13 +840,12 @@ function openPanel(section) {
     if (_activePanelSection === section) { closePanel(); return; }
     _activePanelSection = section;
     document.getElementById('side-panel').classList.add('open');
-    ['systems', 'playlists', 'search'].forEach(s => {
+    ['systems', 'playlists'].forEach(s => {
         document.getElementById(`panel-sec-${s}`).style.display = s === section ? '' : 'none';
     });
     document.querySelectorAll('.rail-btn[data-panel]').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.panel === section);
     });
-    if (section === 'search') setTimeout(() => document.getElementById('search-bar')?.focus(), 240);
 }
 
 function closePanel() {
@@ -1054,19 +1060,31 @@ function wireUI() {
         btn.style.animation = '';
     });
 
-    // Search
-    document.getElementById('search-bar').addEventListener('input', () => renderCurrentView());
+    // Gallery search
+    document.getElementById('gallery-search').addEventListener('input', () => renderCurrentView());
+    document.getElementById('btn-gsearch-clear').addEventListener('click', () => {
+        document.getElementById('gallery-search').value = '';
+        document.getElementById('btn-gsearch-clear').style.display = 'none';
+        renderCurrentView();
+        document.getElementById('gallery-search').focus();
+    });
 
     // Rail nav filter buttons
     document.querySelectorAll('.rail-btn[data-rail]').forEach(btn => {
         btn.addEventListener('click', () => { closePanel(); setFilter(btn.dataset.rail); });
     });
-    // Rail panel toggle buttons
+    // Rail panel toggle buttons (search icon focuses gallery search instead of opening panel)
     document.querySelectorAll('.rail-btn[data-panel]').forEach(btn => {
-        btn.addEventListener('click', () => openPanel(btn.dataset.panel));
+        btn.addEventListener('click', () => {
+            if (btn.dataset.panel === 'search') {
+                document.getElementById('gallery-search')?.focus();
+            } else {
+                openPanel(btn.dataset.panel);
+            }
+        });
     });
     // Panel close buttons
-    ['btn-panel-close', 'btn-panel-close-2', 'btn-panel-close-3'].forEach(id => {
+    ['btn-panel-close', 'btn-panel-close-2'].forEach(id => {
         document.getElementById(id)?.addEventListener('click', closePanel);
     });
 

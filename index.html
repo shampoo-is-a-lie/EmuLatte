@@ -66,6 +66,17 @@
     .panel-content { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
     #main-content { flex: 1; display: flex; flex-direction: column; background-color: transparent; position: relative; overflow: hidden; }
 
+    #gallery-search-wrap { display: flex; align-items: center; gap: 14px; padding: 0 0 18px; }
+    #gallery-search-inner { position: relative; flex: 1; }
+    #gallery-search { width: 100%; box-sizing: border-box; padding: 13px 44px 13px 46px; background: rgba(0,0,0,0.35); border: 1.5px solid var(--border_solid); border-radius: 12px; color: var(--text_main); font-family: 'Raleway', sans-serif; font-size: 14px; font-weight: 700; letter-spacing: 0.5px; transition: border-color 0.2s, box-shadow 0.2s; }
+    #gallery-search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--border), 0 6px 24px rgba(0,0,0,0.4); }
+    #gallery-search::placeholder { color: var(--text_dim); font-weight: 400; font-style: italic; letter-spacing: 0; }
+    .gsearch-icon { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: var(--text_dim); pointer-events: none; transition: color 0.2s; }
+    #gallery-search-inner:focus-within .gsearch-icon { color: var(--accent); }
+    #btn-gsearch-clear { position: absolute; right: 11px; top: 50%; transform: translateY(-50%); width: 26px; height: 26px; border-radius: 50%; border: none; background: rgba(255,255,255,0.08); color: var(--text_dim); cursor: pointer; display: none; align-items: center; justify-content: center; font-size: 11px; padding: 0; letter-spacing: 0; text-transform: none; transition: background 0.15s, color 0.15s, transform 0.15s; }
+    #btn-gsearch-clear:hover { background: var(--accent); color: var(--bg); transform: translateY(-50%) scale(1.1); box-shadow: 0 0 10px var(--accent); }
+    #gallery-search-count { font-size: 10px; font-weight: 900; color: var(--text_dim); letter-spacing: 1.5px; text-transform: uppercase; white-space: nowrap; flex-shrink: 0; min-width: 64px; text-align: right; transition: color 0.2s; }
+
     .row { display: flex; gap: 10px; }
     button { background-color: var(--bg_panel); color: var(--text_main); border: 1px solid var(--border_solid); padding: 10px 12px; font-family: 'Raleway', sans-serif; font-weight: 900; cursor: pointer; border-radius: 6px; transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; text-transform: uppercase; letter-spacing: 1px; }
     button:hover { background-color: var(--text_main); color: var(--bg); }
@@ -280,16 +291,6 @@
           <div id="playlist-filters" style="display:flex; flex-direction:column; gap:6px;"></div>
         </div>
       </div>
-      <!-- Search section -->
-      <div id="panel-sec-search" class="panel-section" style="display:none;">
-        <div class="panel-hdr">
-          <span class="panel-hdr-title">Search</span>
-          <button id="btn-panel-close-3" class="btn-modal-x" style="width:24px; height:24px; font-size:10px;">✕</button>
-        </div>
-        <div class="panel-content">
-          <input type="text" id="search-bar" placeholder="SEARCH..." style="width:100%; box-sizing:border-box; margin-bottom:0;">
-        </div>
-      </div>
     </div>
 
     <div id="main-content">
@@ -334,6 +335,16 @@
             <button id="btn-hero-scrape-all" class="btn-hero" title="Scrape all ROMs in this system from ScreenScraper.fr">SCRAPE ALL</button>
           </div>
         </div>
+        <!-- Gallery inline search -->
+        <div id="gallery-search-wrap">
+          <div id="gallery-search-inner">
+            <svg class="gsearch-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="gallery-search" placeholder="Search All Games…" autocomplete="off" spellcheck="false">
+            <button id="btn-gsearch-clear" title="Clear search">✕</button>
+          </div>
+          <span id="gallery-search-count"></span>
+        </div>
+
         <div id="gallery-grid"></div>
       </div>
 
