@@ -6,7 +6,7 @@ const os = require('os');
 const https = require('https');
 const zlib = require('zlib');
 const Database = require('better-sqlite3');
-const { spawn, spawnSync } = require('child_process');
+const { spawn, spawnSync, execFile } = require('child_process');
 const crypto = require('crypto');
 
 let baseDir;
@@ -595,11 +595,6 @@ function detectRetroArch() {
     ];
     if (flatpakPaths.some(p => fs.existsSync(p))) return 'flatpak';
 
-    try {
-        const list = spawnSync('flatpak', ['list', '--app', '--columns=application'], { encoding: 'utf8' });
-        if (list.stdout?.includes('org.libretro.RetroArch')) return 'flatpak';
-    } catch {}
-
     return 'none';
 }
 
@@ -668,7 +663,13 @@ async function raApiCall(endpoint, params) {
     catch { throw new Error(text.slice(0, 120) || 'Invalid JSON from RetroAchievements'); }
 }
 function computeFileMd5(filePath) {
-    return crypto.createHash('md5').update(fs.readFileSync(filePath)).digest('hex');
+    return new Promise((resolve, reject) => {
+        const hash   = crypto.createHash('md5');
+        const stream = fs.createReadStream(filePath);
+        stream.on('data',  chunk => hash.update(chunk));
+        stream.on('end',   ()    => resolve(hash.digest('hex')));
+        stream.on('error', err   => reject(err));
+    });
 }
 function raMapAchievements(rows) {
     return rows.map(a => ({
@@ -702,7 +703,7 @@ ipcMain.handle('fetch-ra-achievements', async (_, gameId) => {
     let raGameId = game.ra_game_id;
     if (!raGameId && game.rom_path && fs.existsSync(game.rom_path)) {
         try {
-            const md5 = computeFileMd5(game.rom_path);
+            const md5 = await computeFileMd5(game.rom_path);
             const r   = await raApiCall('API_GetGameInfoByHash.php', { z: raUser, y: raKey, m: md5 });
             raGameId  = r?.GameID || 0;
             if (raGameId) db.prepare('UPDATE games SET ra_game_id=? WHERE id=?').run(raGameId, gameId);
@@ -1287,7 +1288,7 @@ ipcMain.handle('select-local-image', async (_, gameId, type) => {
     const ext = path.extname(src);
     const subdir = { cover: 'covers', hero: 'heroes', logo: 'logos', screenshot: 'screenshots' }[type] || 'covers';
     const dest = path.join(imagesDir, subdir, `${gameId}_${type}${ext}`);
-    fs.copyFileSync(src, dest);
+    try { fs.copyFileSync(src, dest); } catch { return null; }
     return dest;
 });
 
@@ -1310,7 +1311,6 @@ ipcMain.handle('delete-trailer', (_, title) => {
 });
 
 ipcMain.handle('search-youtube', async (_, query) => {
-    const { execFile } = require('child_process');
     return new Promise((resolve) => {
         const args = ['--config-location', ytDlpConfigPath, `ytsearch5:${query}`, '--print', '%(id)s|%(thumbnail)s|%(title)s', '--no-playlist'];
         execFile(ytDlpPath, args, { timeout: 20000 }, (error, stdout) => {
@@ -1323,9 +1323,9 @@ ipcMain.handle('search-youtube', async (_, query) => {
     });
 });
 
-ipcMain.handle('download-trailer', (_, title, videoId) => {
+ipcMain.handle('download-trailer', (event, title, videoId) => {
     const filePath = trailerFilePath(title);
-    const win = BrowserWindow.getFocusedWindow();
+    const win = event.sender.getOwnerBrowserWindow();
     const args = ['--config-location', ytDlpConfigPath, '--ffmpeg-location', ffmpegPath,
         `https://www.youtube.com/watch?v=${videoId}`,
         '-f', 'bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4]/best',

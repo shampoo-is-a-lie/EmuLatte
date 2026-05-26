@@ -654,7 +654,7 @@ function openEditGameModal(game) {
     const setPreview = (imgId, src) => {
         const el = document.getElementById(imgId);
         el.src = src || '';
-        el.style.display = src ? 'block' : 'block';
+        el.style.display = 'block';
     };
     setPreview('edit-cover-preview',      game.cover);
     setPreview('edit-hero-preview',       game.hero);
@@ -946,7 +946,6 @@ function wireUI() {
 
     // Back to library
     document.getElementById('btn-gamepage-back').addEventListener('click', () => {
-        switchView(currentView === 'view-gamepage' ? 'view-gallery' : currentView);
         switchView('view-gallery');
         renderGallery(getFilteredGames());
     });
@@ -1011,7 +1010,7 @@ function wireUI() {
         const div = document.createElement('div');
         div.className = 'yt-search-item';
         if (res.official) div.style.border = '2px solid var(--accent)';
-        div.innerHTML = `<img src="${res.thumbnail}" style="width:120px; border-radius:4px; flex-shrink:0;"><div style="color:${res.official ? 'var(--accent)' : 'var(--text_main)'}; font-weight:bold; font-size:13px;">${res.title}</div>`;
+        div.innerHTML = `<img src="${res.thumbnail}" style="width:120px; border-radius:4px; flex-shrink:0;"><div style="color:${res.official ? 'var(--accent)' : 'var(--text_main)'}; font-weight:bold; font-size:13px;">${escHtml(res.title)}</div>`;
         div.addEventListener('click', () => {
             closeModal('modal-trailer-search');
             openTrailerProgress(_trailerTitle, res.id);
