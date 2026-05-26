@@ -20,6 +20,7 @@ let allCores             = [];
 let allSystemPresets     = [];
 let currentPlaylistGames = [];
 let retroarchVariant     = 'none';
+let _activePanelSection  = null; // 'systems' | 'playlists' | 'search' | null
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {
@@ -428,6 +429,9 @@ function switchView(viewId) {
     const backBar = document.getElementById('gamepage-back-bar');
     backBar.style.display = viewId === 'view-gamepage' ? 'block' : 'none';
 
+    document.getElementById('btn-view-gallery')?.classList.toggle('active', viewId === 'view-gallery');
+    document.getElementById('btn-view-list')?.classList.toggle('active', viewId === 'view-list');
+
     if (viewId !== 'view-gamepage') {
         currentGame = null;
         clearInterval(ssBannerKbInterval);
@@ -824,11 +828,31 @@ function openEditSystemModal(sys = null) {
     openModal('modal-edit-system');
 }
 
+// ── SIDE PANEL ────────────────────────────────────────────────────────────────
+function openPanel(section) {
+    if (_activePanelSection === section) { closePanel(); return; }
+    _activePanelSection = section;
+    document.getElementById('side-panel').classList.add('open');
+    ['systems', 'playlists', 'search'].forEach(s => {
+        document.getElementById(`panel-sec-${s}`).style.display = s === section ? '' : 'none';
+    });
+    document.querySelectorAll('.rail-btn[data-panel]').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.panel === section);
+    });
+    if (section === 'search') setTimeout(() => document.getElementById('search-bar')?.focus(), 240);
+}
+
+function closePanel() {
+    _activePanelSection = null;
+    document.getElementById('side-panel').classList.remove('open');
+    document.querySelectorAll('.rail-btn[data-panel]').forEach(btn => btn.classList.remove('active'));
+}
+
 // ── FILTER / SORT ─────────────────────────────────────────────────────────────
 async function setFilter(filter) {
     currentFilter = filter;
 
-    document.querySelectorAll('.filter-grid button, .filter-btn-system, .filter-btn-playlist').forEach(btn => {
+    document.querySelectorAll('.rail-btn[data-rail], .filter-btn-system, .filter-btn-playlist').forEach(btn => {
         btn.classList.remove('active');
         btn.style.background  = '';
         btn.style.color       = '';
@@ -837,7 +861,7 @@ async function setFilter(filter) {
     });
 
     const active = document.querySelector(
-        `.filter-grid button[data-filter="${CSS.escape(filter)}"], ` +
+        `.rail-btn[data-rail="${CSS.escape(filter)}"], ` +
         `.filter-btn-system[data-filter="${CSS.escape(filter)}"], ` +
         `.filter-btn-playlist[data-filter="${CSS.escape(filter)}"]`
     );
@@ -1033,9 +1057,17 @@ function wireUI() {
     // Search
     document.getElementById('search-bar').addEventListener('input', () => renderCurrentView());
 
-    // Sidebar static filters
-    document.querySelectorAll('.filter-grid button').forEach(btn => {
-        btn.addEventListener('click', () => setFilter(btn.dataset.filter));
+    // Rail nav filter buttons
+    document.querySelectorAll('.rail-btn[data-rail]').forEach(btn => {
+        btn.addEventListener('click', () => { closePanel(); setFilter(btn.dataset.filter); });
+    });
+    // Rail panel toggle buttons
+    document.querySelectorAll('.rail-btn[data-panel]').forEach(btn => {
+        btn.addEventListener('click', () => openPanel(btn.dataset.panel));
+    });
+    // Panel close buttons
+    ['btn-panel-close', 'btn-panel-close-2', 'btn-panel-close-3'].forEach(id => {
+        document.getElementById(id)?.addEventListener('click', closePanel);
     });
 
     // Add ROM button
