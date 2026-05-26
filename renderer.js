@@ -1046,12 +1046,14 @@ function wireUI() {
         }
     });
 
-    // Hero scrape all (system-scoped)
+    // Hero scrape all (system-scoped) — opens source picker
     document.getElementById('btn-hero-scrape-all').addEventListener('click', () => {
         if (scrapeActive) return;
-        const systemId = (currentFilter !== 'all' && currentFilter !== 'favs' && currentFilter !== 'want' && currentFilter !== 'recent')
+        _scrapeAllSystemId = (currentFilter !== 'all' && currentFilter !== 'favs' && currentFilter !== 'want' && currentFilter !== 'recent')
             ? currentFilter : null;
-        scrapeAll(systemId);
+        _scraperPickerMode = 'batch';
+        document.getElementById('scraper-picker-status').textContent = '';
+        openModal('modal-scraper-picker');
     });
 
     // Hero add ROM button (system-scoped)
@@ -1750,20 +1752,24 @@ function wireUI() {
 
     document.getElementById('btn-scrape-with-ss').addEventListener('click', async () => {
         if (_scraperPickerMode === 'art') { await _pickArt('ss'); return; }
+        if (_scraperPickerMode === 'batch') { closeModal('modal-scraper-picker'); scrapeAll(_scrapeAllSystemId); return; }
         if (!currentGame) return;
         closeModal('modal-scraper-picker');
         scrapeGame(currentGame.id);
     });
     document.getElementById('btn-scrape-with-igdb').addEventListener('click', async () => {
         if (_scraperPickerMode === 'art') { await _pickArt('igdb'); return; }
+        if (_scraperPickerMode === 'batch') { closeModal('modal-scraper-picker'); scrapeAllWith(_scrapeAllSystemId, 'igdb'); return; }
         runScraper(id => window.api.igdbScrapeGame(id), 'IGDB');
     });
     document.getElementById('btn-scrape-with-tgdb').addEventListener('click', async () => {
         if (_scraperPickerMode === 'art') { await _pickArt('tgdb'); return; }
+        if (_scraperPickerMode === 'batch') { closeModal('modal-scraper-picker'); scrapeAllWith(_scrapeAllSystemId, 'tgdb'); return; }
         runScraper(id => window.api.tgdbScrapeGame(id), 'TheGamesDB');
     });
     document.getElementById('btn-scrape-with-sgdb').addEventListener('click', async () => {
         if (_scraperPickerMode === 'art') { await _pickArt('sgdb'); return; }
+        if (_scraperPickerMode === 'batch') { closeModal('modal-scraper-picker'); scrapeAllWith(_scrapeAllSystemId, 'sgdb'); return; }
         runScraper(id => window.api.sgdbScrapeGame(id), 'SteamGridDB');
     });
 
@@ -1953,7 +1959,8 @@ async function browseArt(type) {
 // ── ART PICKER ────────────────────────────────────────────────────────────────
 let _artPickerType          = 'cover';
 let _artPickerScraper       = 'sgdb';
-let _scraperPickerMode      = 'full'; // 'full' | 'art'
+let _scraperPickerMode      = 'full'; // 'full' | 'art' | 'batch'
+let _scrapeAllSystemId      = null;
 let _artPickerSystemShort   = '';
 
 const _artPreviewId   = { cover: 'edit-cover-preview', hero: 'edit-hero-preview', logo: 'edit-logo-preview', screenshot: 'edit-screenshot-preview' };
@@ -2136,6 +2143,42 @@ async function scrapeAll(systemId) {
         const updated = allGames.find(g => g.id === currentGame.id);
         if (updated) openGamePage(updated);
     }
+}
+
+async function scrapeAllWith(systemId, source) {
+    const scraperFn = source === 'igdb' ? id => window.api.igdbScrapeGame(id)
+                    : source === 'tgdb' ? id => window.api.tgdbScrapeGame(id)
+                    :                     id => window.api.sgdbScrapeGame(id);
+    const label = _scraperLabels[source] || source;
+
+    const games = systemId
+        ? allGames.filter(g => g.system_id === Number(systemId))
+        : allGames;
+    if (!games.length) { showLaunchToast('No ROMs to scrape in this system.', null); return; }
+
+    scrapeActive = true;
+    showScrapePanel(true);
+    let done = 0, failed = 0;
+    for (const g of games) {
+        if (!scrapeActive) break;
+        document.getElementById('scrape-panel-title').textContent = g.name || g.rom_path?.split('/').pop() || '';
+        document.getElementById('scrape-panel-count').textContent = `${done + 1} / ${games.length}`;
+        document.getElementById('scrape-progress-bar').style.width = `${Math.round((done / games.length) * 100)}%`;
+        const result = await scraperFn(g.id);
+        if (!result?.ok) failed++;
+        done++;
+    }
+    scrapeActive = false;
+    showScrapePanel(false);
+    await loadGames();
+    if (currentGame) {
+        const updated = allGames.find(g => g.id === currentGame.id);
+        if (updated) openGamePage(updated);
+    }
+    const msg = failed
+        ? `Done. ${done - failed} scraped with ${label}, ${failed} failed.`
+        : `Done. ${done} ROM${done !== 1 ? 's' : ''} scraped with ${label}.`;
+    showLaunchToast(msg, null);
 }
 
 function wireScrapeProgress() {
