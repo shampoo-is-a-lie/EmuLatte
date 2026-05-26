@@ -182,6 +182,9 @@ function renderGallery(games) {
             const wrap = btn.closest('.gallery-flag-btns');
             const anyActive = wrap.querySelector('.active');
             wrap.classList.toggle('has-active', !!anyActive);
+            btn.style.animation = '';
+            void btn.offsetWidth;
+            btn.style.animation = 'gallery-flag-glow 0.35s ease-out';
         });
     });
 }
