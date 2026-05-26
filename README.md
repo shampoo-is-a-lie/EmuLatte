@@ -142,11 +142,15 @@ Create named collections and assign any game to as many playlists as you want. F
 ## ◈ &nbsp; Ecosystem Integration
 
 ```
-  CREMA          Boot splash and system branding
-     │
-     └──▸  CNGM           Game Manager — PC games, GOG, Steam, Epic, itch.io
-               │
-               └──▸  EmuLatte       This. ROM libraries, emulation, achievements. ◈
+  CNGM           Central hub — PC game library, store sync, launches all companion apps
+    │
+    ├──▸  CREMA       Fullscreen / gamepad counterpart for CNGM + EmuLatte
+    │
+    ├──▸  GRINDER     GOG & Epic install engine — feeds games back into CNGM
+    │
+    ├──▸  EmuLatte ◈  ROM library manager — emulation counterpart to CNGM
+    │
+    └──▸  CN Clock    Floating desktop clock — shows art from CNGM + EmuLatte
 ```
 
 CNGM and CREMA can each optionally read EmuLatte's library and surface your ROMs under an **Emulation** category — no import, no duplication. They read EmuLatte's DB directly and use the same launch commands it stores. Management always stays in EmuLatte.
