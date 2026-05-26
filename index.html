@@ -155,14 +155,8 @@
     .theme-swatch:hover { transform:scale(1.04); border-color:var(--text_main); }
     .theme-swatch.active { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
 
-    .modal-box.tall .modal-hdr,
-    .modal-box.wide.tall .modal-hdr {
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      background: var(--bg_menu);
-      box-shadow: 0 2px 10px rgba(0,0,0,0.4);
-    }
+    .modal-wrapper { position: relative; width: fit-content; }
+    .modal-float-btns { position: absolute; top: 20px; right: 20px; display: flex; gap: 8px; z-index: 200; filter: drop-shadow(0 4px 18px rgba(0,0,0,0.85)); pointer-events: auto; }
   </style>
   <script>
     try {
@@ -409,12 +403,10 @@
 
   <!-- ── MODAL: SCAN FOLDER ─────────────────────────────────────────────────── -->
   <div id="modal-scan-folder" class="modal-overlay">
+    <div class="modal-wrapper">
     <div class="modal-box wide tall">
       <div class="modal-hdr">
         <div class="modal-title">Scan ROM Folder</div>
-        <div class="modal-hdr-btns">
-          <button id="btn-scan-cancel" class="btn-modal-x">✕</button>
-        </div>
       </div>
       <div class="form-row">
         <label>System</label>
@@ -441,6 +433,10 @@
           <button id="btn-scan-import" class="primary">Import Selected</button>
         </div>
       </div>
+    </div>
+    <div class="modal-float-btns">
+      <button id="btn-scan-cancel" class="btn-modal-x">✕</button>
+    </div>
     </div>
   </div>
 
@@ -574,15 +570,17 @@
 
   <!-- ── MODAL: SYSTEMS MANAGER ─────────────────────────────────────────────── -->
   <div id="modal-systems" class="modal-overlay">
+    <div class="modal-wrapper">
     <div class="modal-box wide tall">
       <div class="modal-hdr">
         <div class="modal-title">System Manager</div>
-        <div class="modal-hdr-btns">
-          <button id="btn-systems-close" class="btn-modal-x">✕</button>
-        </div>
       </div>
       <div id="systems-list"></div>
       <button id="btn-add-system" class="primary" style="width:100%; margin-top:5px;">+ Add System</button>
+    </div>
+    <div class="modal-float-btns">
+      <button id="btn-systems-close" class="btn-modal-x">✕</button>
+    </div>
     </div>
   </div>
 
@@ -637,13 +635,10 @@
 
   <!-- ── MODAL: SETTINGS ────────────────────────────────────────────────────── -->
   <div id="modal-settings" class="modal-overlay">
+    <div class="modal-wrapper">
     <div class="modal-box tall">
       <div class="modal-hdr">
         <div class="modal-title">Settings</div>
-        <div class="modal-hdr-btns">
-          <button id="btn-settings-save" class="btn-modal-save-x">Save</button>
-          <button id="btn-settings-cancel" class="btn-modal-x">✕</button>
-        </div>
       </div>
       <input type="text" id="settings-search" placeholder="Search settings…">
       <div class="tool-card" data-search="appearance theme color palette ui scale zoom interface">
@@ -729,16 +724,19 @@
         <button id="btn-settings-open-data-dir" style="width:100%;">Open Data Folder</button>
       </div>
     </div>
+    <div class="modal-float-btns">
+      <button id="btn-settings-save" class="btn-modal-save-x">Save</button>
+      <button id="btn-settings-cancel" class="btn-modal-x">✕</button>
+    </div>
+    </div>
   </div>
 
   <!-- ── MODAL: ADD EMULATOR ──────────────────────────────────────────────── -->
   <div id="modal-add-emulator" class="modal-overlay">
+    <div class="modal-wrapper">
     <div class="modal-box wide tall">
       <div class="modal-hdr">
         <div class="modal-title">Add Emulator</div>
-        <div class="modal-hdr-btns">
-          <button id="btn-add-emulator-cancel" class="btn-modal-x">✕</button>
-        </div>
       </div>
 
       <!-- Step 1: pick an emulator -->
@@ -785,22 +783,28 @@
       </div>
 
     </div>
+    <div class="modal-float-btns">
+      <button id="btn-add-emulator-cancel" class="btn-modal-x">✕</button>
+    </div>
+    </div>
   </div>
 
   <!-- ── MODAL: SYSTEM PRESET PICKER ──────────────────────────────────────── -->
   <div id="modal-system-presets" class="modal-overlay">
+    <div class="modal-wrapper">
     <div class="modal-box wide tall">
       <div class="modal-hdr">
         <div class="modal-title">Add System — Choose a Preset</div>
-        <div class="modal-hdr-btns">
-          <button id="btn-preset-cancel" class="btn-modal-x">✕</button>
-        </div>
       </div>
       <input type="text" id="preset-search" placeholder="Search systems…">
       <div id="preset-list" style="display:flex; flex-direction:column; gap:5px; max-height:420px; overflow-y:auto; margin-top:4px;"></div>
       <div style="margin-top:10px;">
         <button id="btn-preset-custom">Start from Scratch</button>
       </div>
+    </div>
+    <div class="modal-float-btns">
+      <button id="btn-preset-cancel" class="btn-modal-x">✕</button>
+    </div>
     </div>
   </div>
 
@@ -857,15 +861,17 @@
 
   <!-- ── MODAL: SCREENSCRAPER SYSTEM BROWSER ──────────────────────────────── -->
   <div id="modal-ss-systems" class="modal-overlay" style="z-index:150;">
+    <div class="modal-wrapper">
     <div class="modal-box wide tall">
       <div class="modal-hdr">
         <div class="modal-title">ScreenScraper Systems</div>
-        <div class="modal-hdr-btns">
-          <button id="btn-ss-systems-cancel" class="btn-modal-x">✕</button>
-        </div>
       </div>
       <input type="text" id="ss-systems-search" placeholder="Search by name or ID…">
       <div id="ss-systems-list" style="display:flex; flex-direction:column; gap:6px; max-height:400px; overflow-y:auto; margin-top:4px;"></div>
+    </div>
+    <div class="modal-float-btns">
+      <button id="btn-ss-systems-cancel" class="btn-modal-x">✕</button>
+    </div>
     </div>
   </div>
 
