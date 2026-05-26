@@ -142,8 +142,8 @@ function renderGallery(games) {
             <div class="gallery-cover-wrap">
                 ${hasCover
                     ? `<img class="gallery-cover" src="${g.cover}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-                       <div class="gallery-cover" style="display:none; align-items:center; justify-content:center; color:var(--text_dim); font-size:11px; font-weight:900; letter-spacing:1px;">${escHtml(g.title)}</div>`
-                    : `<div class="gallery-cover" style="display:flex; align-items:center; justify-content:center; color:var(--text_dim); font-size:11px; font-weight:900; letter-spacing:1px; padding:10px;">${escHtml(g.title)}</div>`
+                       <div class="gallery-cover" style="display:none; align-items:center; justify-content:center; color:var(--text_dim); font-size:11px; font-weight:900; letter-spacing:1px; text-align:center;">${escHtml(g.title)}</div>`
+                    : `<div class="gallery-cover" style="display:flex; align-items:center; justify-content:center; color:var(--text_dim); font-size:11px; font-weight:900; letter-spacing:1px; text-align:center;">${escHtml(g.title)}</div>`
                 }
                 ${sysLabel ? `<div class="gallery-system-badge">${escHtml(sysLabel)}</div>` : ''}
                 <div class="gallery-flag-btns ${g.fav || g.want ? 'has-active' : ''}">
