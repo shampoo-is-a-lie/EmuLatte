@@ -1059,7 +1059,7 @@ function wireUI() {
 
     // Rail nav filter buttons
     document.querySelectorAll('.rail-btn[data-rail]').forEach(btn => {
-        btn.addEventListener('click', () => { closePanel(); setFilter(btn.dataset.filter); });
+        btn.addEventListener('click', () => { closePanel(); setFilter(btn.dataset.rail); });
     });
     // Rail panel toggle buttons
     document.querySelectorAll('.rail-btn[data-panel]').forEach(btn => {
