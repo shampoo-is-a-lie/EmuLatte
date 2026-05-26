@@ -8,9 +8,12 @@ let currentView    = 'view-gallery';
 let currentGame    = null;
 let slideshowUrls  = [];
 let slideshowIndex = 0;
-let heroCycleTimer = null;
+let heroCycleTimer     = null;
+let ssBannerKbInterval = null;
 let heroQueue      = [];
 let scrapeActive         = false;
+let _achAll = [];
+let _achFilter = 'all';
 let ssSystems            = [];
 let allPlaylists         = [];
 let allCores             = [];
@@ -344,10 +347,7 @@ function openGamePage(game) {
     favBtn.classList.toggle('active',  !!game.fav);
     wantBtn.classList.toggle('active', !!game.want);
 
-    const coverWrap = document.getElementById('gamepage-cover-wrap');
-    const coverImg  = document.getElementById('gamepage-cover');
-    if (game.cover) { coverImg.src = game.cover; coverWrap.style.display = 'block'; }
-    else            { coverWrap.style.display = 'none'; }
+    document.getElementById('gamepage-cover').src = game.cover || '';
 
     const stats = [];
     if (game.system_name) stats.push({ label: 'System',    val: game.system_name });
@@ -362,12 +362,46 @@ function openGamePage(game) {
     ).join('');
 
     document.getElementById('gamepage-description').textContent = game.description || '';
+    document.getElementById('gp-ach-container').innerHTML = '';
+    loadGamepageAchievements(game);
 
-    const banner = document.getElementById('gamepage-screenshots-banner');
+    const trailerBtn = document.getElementById('btn-gamepage-trailer');
+    trailerBtn.style.display = 'none';
+    trailerBtn.onclick = null;
+    const capturedTitle = game.title;
+    window.api.checkLocalTrailer(capturedTitle).then(localUrl => {
+        if (localUrl && currentGame?.title === capturedTitle) {
+            trailerBtn.style.display = 'block';
+            trailerBtn.onclick = () => {
+                document.getElementById('modal-trailer-player').classList.add('active');
+                const vid = document.getElementById('detail-video-player');
+                vid.src = localUrl; vid.play();
+            };
+        }
+    });
+
+    clearInterval(ssBannerKbInterval);
+    const banner   = document.getElementById('gamepage-screenshots-banner');
+    const ssKbImg  = document.getElementById('gamepage-ss-kb-img');
     if (game.screenshot) {
-        banner.style.backgroundImage = `url("${game.screenshot}")`;
-        banner.style.display = 'block';
-        banner.onclick = () => openSlideshow([game.screenshot]);
+        const screens = String(game.screenshot).split('|').filter(s => s.trim());
+        if (screens.length) {
+            banner.style.display = 'block';
+            let kbIdx = 0;
+            const showNextSs = () => {
+                ssKbImg.style.opacity = '0';
+                setTimeout(() => {
+                    ssKbImg.src     = screens[kbIdx];
+                    ssKbImg.style.opacity = '1';
+                    kbIdx = (kbIdx + 1) % screens.length;
+                }, 500);
+            };
+            showNextSs();
+            if (screens.length > 1) ssBannerKbInterval = setInterval(showNextSs, 5000);
+            banner.onclick = () => openSlideshow(screens, 0);
+        } else {
+            banner.style.display = 'none';
+        }
     } else {
         banner.style.display = 'none';
     }
@@ -385,6 +419,7 @@ function switchView(viewId) {
 
     if (viewId !== 'view-gamepage') {
         currentGame = null;
+        clearInterval(ssBannerKbInterval);
         startHeroCycle();
     }
 }
@@ -410,6 +445,156 @@ function showLaunchToast(msg, cmd) {
     toast.onclick = () => { toast.style.display = 'none'; clearTimeout(toastTimer); };
 }
 
+// ── RETROACHIEVEMENTS ────────────────────────────────────────────────────────
+
+function _relativeDate(iso) {
+    if (!iso) return '';
+    try {
+        const d    = new Date(iso);
+        const days = Math.floor((Date.now() - d) / 86400000);
+        if (days === 0) return 'today';
+        if (days === 1) return 'yesterday';
+        if (days < 7)  return `${days} days ago`;
+        if (days < 30) return `${Math.floor(days / 7)} week${days < 14 ? '' : 's'} ago`;
+        return d.toLocaleDateString();
+    } catch { return iso; }
+}
+
+async function loadGamepageAchievements(game) {
+    const container = document.getElementById('gp-ach-container');
+    container.innerHTML = '';
+    _achAll = [];
+
+    let res = await window.api.getRaAchievements(game.ra_game_id);
+    if (!res.ok || !res.achievements.length) {
+        res = await window.api.fetchRaAchievements(game.id);
+    }
+    if (!res.ok || !res.achievements.length) return;
+
+    _achAll = res.achievements;
+    _renderAchStrip(container, res.achievements);
+}
+
+function _renderAchStrip(container, achievements) {
+    const total    = achievements.length;
+    const unlocked = achievements.filter(a => a.date_unlocked).length;
+    const pct      = total ? Math.round(unlocked / total * 100) : 0;
+
+    const strip = document.createElement('div');
+    strip.style.cssText = 'background:var(--bg_panel); border-radius:8px; padding:14px; border:1px solid var(--border_solid); display:flex; flex-direction:column; gap:10px; cursor:pointer; margin-top:20px;';
+    strip.title   = 'View all achievements';
+    strip.onclick = () => openAchievementsModal();
+
+    strip.innerHTML = `
+        <div style="display:flex; align-items:center; gap:8px;">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M5 7H3v4a4 4 0 0 0 4 4h10a4 4 0 0 0 4-4V7h-2"/><path d="M5 3h14v8a7 7 0 0 1-7 7 7 7 0 0 1-7-7V3z"/></svg>
+            <span class="stat-label" style="flex:1;">ACHIEVEMENTS <span style="font-size:9px; opacity:0.7; font-weight:400; letter-spacing:1px;">— RETROACHIEVEMENTS</span></span>
+            <span style="font-size:11px; font-weight:900; color:var(--accent);">${unlocked} / ${total}</span>
+        </div>
+        <div style="height:3px; border-radius:2px; background:var(--border_solid); overflow:hidden;">
+            <div style="height:100%; width:${pct}%; border-radius:2px; background:linear-gradient(90deg, color-mix(in srgb, var(--accent) 60%, transparent), var(--accent)); transition:width 0.5s ease;"></div>
+        </div>`;
+
+    const preview = document.createElement('div');
+    preview.style.cssText = 'display:flex; flex-direction:column; gap:5px;';
+    const recent = achievements.filter(a => a.date_unlocked).slice(0, 3);
+    if (recent.length) {
+        for (const a of recent) {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex; align-items:center; gap:7px;';
+            if (a.image_unlocked) {
+                const img = document.createElement('img');
+                img.src = a.image_unlocked;
+                img.style.cssText = 'width:22px; height:22px; border-radius:3px; object-fit:cover; flex-shrink:0;';
+                img.onerror = () => img.style.display = 'none';
+                row.appendChild(img);
+            }
+            const nameEl = document.createElement('span');
+            nameEl.style.cssText = 'font-size:10px; color:#82c882; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1;';
+            nameEl.textContent = a.name;
+            row.appendChild(nameEl);
+            const dateEl = document.createElement('span');
+            dateEl.style.cssText = 'font-size:9px; color:rgba(130,200,130,0.55); flex-shrink:0;';
+            dateEl.textContent = _relativeDate(a.date_unlocked);
+            row.appendChild(dateEl);
+            preview.appendChild(row);
+        }
+    } else {
+        const noEl = document.createElement('span');
+        noEl.style.cssText = 'font-size:10px; color:var(--text_dim); font-style:italic;';
+        noEl.textContent = 'No achievements unlocked yet';
+        preview.appendChild(noEl);
+    }
+    strip.appendChild(preview);
+    strip.insertAdjacentHTML('beforeend', '<div style="font-size:10px; color:var(--text_dim); text-align:right; letter-spacing:0.5px;">TAP TO VIEW ALL →</div>');
+    container.appendChild(strip);
+}
+
+function openAchievementsModal() {
+    if (!_achAll.length) return;
+    const modal = document.getElementById('modal-achievements');
+    document.getElementById('ach-modal-game-title').textContent = currentGame?.title || '';
+    const total    = _achAll.length;
+    const unlocked = _achAll.filter(a => a.date_unlocked).length;
+    const pct      = total ? Math.round(unlocked / total * 100) : 0;
+    document.getElementById('ach-ring').setAttribute('stroke-dasharray', `${pct} 100`);
+    document.getElementById('ach-ring-pct').textContent   = `${pct}%`;
+    document.getElementById('ach-ring-count').textContent = `${unlocked}/${total}`;
+    _achFilter = 'all';
+    document.querySelectorAll('.ach-filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === 'all'));
+    _renderAchGrid();
+    modal.classList.add('active');
+}
+
+function _renderAchGrid() {
+    const grid  = document.getElementById('ach-modal-grid');
+    const empty = document.getElementById('ach-modal-empty');
+    grid.innerHTML = '';
+    const list = _achAll.filter(a =>
+        _achFilter === 'all'      ? true
+      : _achFilter === 'unlocked' ? !!a.date_unlocked
+      :                             !a.date_unlocked
+    );
+    if (!list.length) { grid.style.display = 'none'; empty.style.display = 'flex'; return; }
+    grid.style.display = 'grid'; empty.style.display = 'none';
+    for (const a of list) {
+        const isUnlocked = !!a.date_unlocked;
+        const card = document.createElement('div');
+        card.className = 'ach-card' + (isUnlocked ? ' unlocked' : '');
+        const iconUrl = isUnlocked ? a.image_unlocked : a.image_locked;
+        if (iconUrl) {
+            const img = document.createElement('img');
+            img.src = iconUrl;
+            if (!isUnlocked) img.style.cssText = 'filter:grayscale(1) opacity(0.4);';
+            img.onerror = () => img.replaceWith(Object.assign(document.createElement('div'), { style: 'width:52px;height:52px;border-radius:6px;background:rgba(255,255,255,0.05);' }));
+            card.appendChild(img);
+        } else {
+            card.appendChild(Object.assign(document.createElement('div'), { style: `width:52px;height:52px;border-radius:6px;background:rgba(255,255,255,0.05);${!isUnlocked?'opacity:0.4;':''}` }));
+        }
+        const name = document.createElement('div');
+        name.className = 'ach-name'; name.textContent = a.name;
+        card.appendChild(name);
+        if (a.description) {
+            const desc = document.createElement('div');
+            desc.className = 'ach-desc'; desc.textContent = a.description;
+            card.appendChild(desc);
+        }
+        if (a.points) {
+            const pts = document.createElement('div');
+            pts.className = 'ach-pts'; pts.textContent = `${a.points} pts`;
+            card.appendChild(pts);
+        }
+        if (isUnlocked) {
+            const date = document.createElement('div');
+            date.className = 'ach-date'; date.textContent = _relativeDate(a.date_unlocked);
+            card.appendChild(date);
+        } else {
+            card.appendChild(Object.assign(document.createElement('div'), { className: 'ach-lock', textContent: '🔒' }));
+        }
+        grid.appendChild(card);
+    }
+}
+
 // ── SLIDESHOW ─────────────────────────────────────────────────────────────────
 function openSlideshow(urls, startIndex = 0) {
     slideshowUrls  = urls;
@@ -421,8 +606,11 @@ function openSlideshow(urls, startIndex = 0) {
 function showSlide() {
     const img = document.getElementById('slideshow-img');
     img.src = slideshowUrls[slideshowIndex] || '';
-    document.getElementById('slide-prev').style.display = slideshowUrls.length > 1 ? 'flex' : 'none';
-    document.getElementById('slide-next').style.display = slideshowUrls.length > 1 ? 'flex' : 'none';
+    const multi = slideshowUrls.length > 1;
+    document.getElementById('slide-prev').style.display    = multi ? 'flex' : 'none';
+    document.getElementById('slide-next').style.display    = multi ? 'flex' : 'none';
+    const counter = document.getElementById('slide-counter');
+    if (counter) counter.textContent = multi ? `${slideshowIndex + 1} / ${slideshowUrls.length}` : '';
 }
 
 // ── MODALS ────────────────────────────────────────────────────────────────────
@@ -461,6 +649,7 @@ function openEditGameModal(game) {
     document.getElementById('edit-rating').value         = game.rating || '';
     document.getElementById('edit-description').value    = game.description || '';
     document.getElementById('edit-launch-override').value = game.launch_override || '';
+    document.getElementById('edit-ra-game-id').value      = game.ra_game_id || '';
 
     const setPreview = (imgId, src) => {
         const el = document.getElementById(imgId);
@@ -470,7 +659,7 @@ function openEditGameModal(game) {
     setPreview('edit-cover-preview',      game.cover);
     setPreview('edit-hero-preview',       game.hero);
     setPreview('edit-logo-preview',       game.logo);
-    setPreview('edit-screenshot-preview', game.screenshot);
+    setPreview('edit-screenshot-preview', game.screenshot ? game.screenshot.split('|')[0] : '');
 
     populateCoreOverrideSelect(game);
     openModal('modal-edit-game');
@@ -730,11 +919,23 @@ function wireUI() {
 
     // Settings
     document.getElementById('btn-open-settings').addEventListener('click', async () => {
-        document.getElementById('settings-ss-user').value = await window.api.getSetting('ss_user') || '';
-        document.getElementById('settings-ss-pass').value = await window.api.getSetting('ss_pass') || '';
+        document.getElementById('settings-ss-user').value          = await window.api.getSetting('ss_user')           || '';
+        document.getElementById('settings-ss-pass').value          = await window.api.getSetting('ss_pass')           || '';
+        document.getElementById('settings-ra-user').value          = await window.api.getSetting('ra_user')           || '';
+        document.getElementById('settings-ra-key').value           = await window.api.getSetting('ra_api_key')        || '';
+        document.getElementById('settings-igdb-client-id').value   = await window.api.getSetting('igdb_client_id')    || '';
+        document.getElementById('settings-igdb-client-secret').value = await window.api.getSetting('igdb_client_secret') || '';
+        document.getElementById('settings-tgdb-key').value         = await window.api.getSetting('tgdb_api_key')      || '';
+        document.getElementById('settings-sgdb-key').value         = await window.api.getSetting('sgdb_api_key')      || '';
         const z = await window.api.getSetting('zoom') || '1.0';
         document.getElementById('settings-zoom').value = z;
-        document.getElementById('settings-ss-status').textContent = '';
+        document.getElementById('settings-ss-status').textContent   = '';
+        document.getElementById('settings-ra-status').textContent   = '';
+        document.getElementById('settings-igdb-status').textContent = '';
+        document.getElementById('settings-tgdb-status').textContent = '';
+        document.getElementById('settings-sgdb-status').textContent = '';
+        const cngmImportEl = document.getElementById('settings-cngm-import-status');
+        cngmImportEl.style.display = 'none'; cngmImportEl.textContent = '';
         const raStatusEl = document.getElementById('settings-retroarch-status');
         raStatusEl.textContent = retroarchStatusLabel(retroarchVariant);
         raStatusEl.style.color = retroarchStatusColor(retroarchVariant);
@@ -771,14 +972,109 @@ function wireUI() {
         document.getElementById('btn-gamepage-want').classList.toggle('active', !!currentGame.want);
     });
 
-    // Gamepage scrape
+    // Gamepage scrape — opens picker modal in full-scrape mode
     document.getElementById('btn-gamepage-scrape').addEventListener('click', () => {
-        if (currentGame) scrapeGame(currentGame.id);
+        if (!currentGame) return;
+        _scraperPickerMode = 'full';
+        document.getElementById('scraper-picker-status').textContent = '';
+        openModal('modal-scraper-picker');
     });
 
     // Gamepage edit
     document.getElementById('btn-gamepage-edit').addEventListener('click', () => {
         if (currentGame) openEditGameModal(currentGame);
+    });
+
+    // ── TRAILERS ─────────────────────────────────────────────────────────────
+    let _trailerTitle  = '';
+    let _trailerIgdbId = '';
+
+    async function _runYtSearch(query) {
+        const lst  = document.getElementById('yt-search-list');
+        const stat = document.getElementById('yt-search-status');
+        lst.innerHTML = '';
+        stat.textContent = `Searching YouTube for "${query}"…`;
+
+        if (_trailerIgdbId) {
+            _renderYtResult({ id: _trailerIgdbId, thumbnail: `https://img.youtube.com/vi/${_trailerIgdbId}/hqdefault.jpg`, title: '🎬 Official Trailer (via IGDB)', official: true });
+        }
+
+        const results  = await window.api.searchYoutube(query);
+        const filtered = results.filter(r => r.id !== _trailerIgdbId);
+        filtered.forEach(res => _renderYtResult(res));
+        const total = (_trailerIgdbId ? 1 : 0) + filtered.length;
+        stat.textContent = total ? 'Click a result to download it.' : 'No results found.';
+    }
+
+    function _renderYtResult(res) {
+        const lst = document.getElementById('yt-search-list');
+        const div = document.createElement('div');
+        div.className = 'yt-search-item';
+        if (res.official) div.style.border = '2px solid var(--accent)';
+        div.innerHTML = `<img src="${res.thumbnail}" style="width:120px; border-radius:4px; flex-shrink:0;"><div style="color:${res.official ? 'var(--accent)' : 'var(--text_main)'}; font-weight:bold; font-size:13px;">${res.title}</div>`;
+        div.addEventListener('click', () => {
+            closeModal('modal-trailer-search');
+            openTrailerProgress(_trailerTitle, res.id);
+        });
+        lst.appendChild(div);
+    }
+
+    document.getElementById('btn-watch-trailer').addEventListener('click', async () => {
+        const gameId = Number(document.getElementById('edit-game-id').value);
+        const game   = allGames.find(g => g.id === gameId);
+        _trailerTitle  = document.getElementById('edit-title').value.trim() || game?.title || '';
+        _trailerIgdbId = game?.igdb_trailer || '';
+        if (!_trailerTitle) return;
+        const localUrl = await window.api.checkLocalTrailer(_trailerTitle);
+        if (localUrl) {
+            document.getElementById('modal-trailer-player').classList.add('active');
+            const vid = document.getElementById('detail-video-player');
+            vid.src = localUrl; vid.play();
+        } else {
+            const sysName = game?.system_name || '';
+            const defaultQuery = [_trailerTitle, sysName, 'trailer'].filter(Boolean).join(' ');
+            document.getElementById('yt-search-input').value = defaultQuery;
+            openModal('modal-trailer-search');
+            await _runYtSearch(defaultQuery);
+        }
+    });
+
+    document.getElementById('btn-yt-search').addEventListener('click', async () => {
+        const query = document.getElementById('yt-search-input').value.trim();
+        if (query) await _runYtSearch(query);
+    });
+
+    document.getElementById('yt-search-input').addEventListener('keydown', async (e) => {
+        if (e.key === 'Enter') {
+            const query = document.getElementById('yt-search-input').value.trim();
+            if (query) await _runYtSearch(query);
+        }
+    });
+
+    document.getElementById('btn-delete-trailer').addEventListener('click', async () => {
+        const title = document.getElementById('edit-title').value.trim();
+        if (!title) return;
+        const ok = await window.api.deleteTrailer(title);
+        showLaunchToast(ok ? 'Trailer deleted.' : 'No local trailer found.', null);
+        if (ok) {
+            const trailerBtn = document.getElementById('btn-gamepage-trailer');
+            trailerBtn.style.display = 'none';
+            trailerBtn.onclick = null;
+        }
+    });
+
+    document.getElementById('btn-close-yt-search').addEventListener('click', () => closeModal('modal-trailer-search'));
+    document.getElementById('btn-close-player').addEventListener('click', () => {
+        closeModal('modal-trailer-player');
+        const vid = document.getElementById('detail-video-player');
+        vid.pause(); vid.removeAttribute('src'); vid.load();
+    });
+
+    window.api.onDownloadProgress(pct => {
+        const fill = document.getElementById('dl-progress-fill');
+        const text = document.getElementById('dl-progress-text');
+        if (fill) fill.style.width = `${pct}%`;
+        if (text) text.textContent  = `${Math.floor(pct)}%`;
     });
 
     // ── MODAL: ADD ROM ───────────────────────────────────────────────────────
@@ -889,6 +1185,40 @@ function wireUI() {
     document.getElementById('btn-edit-hero').addEventListener('click',       () => browseArt('hero'));
     document.getElementById('btn-edit-logo').addEventListener('click',       () => browseArt('logo'));
     document.getElementById('btn-edit-screenshot').addEventListener('click', () => browseArt('screenshot'));
+
+    document.getElementById('btn-scrape-cover').addEventListener('click',      () => openArtPicker('cover'));
+    document.getElementById('btn-scrape-hero').addEventListener('click',       () => openArtPicker('hero'));
+    document.getElementById('btn-scrape-logo').addEventListener('click',       () => openArtPicker('logo'));
+    document.getElementById('btn-scrape-screenshot').addEventListener('click', () => openArtPicker('screenshot'));
+
+    for (const type of ['cover', 'hero', 'logo', 'screenshot']) {
+        document.getElementById(`btn-delete-${type}`).addEventListener('click', async () => {
+            const id = Number(document.getElementById('edit-game-id').value);
+            await window.api.deleteGameArt(id, type);
+            const prev = document.getElementById(_artPreviewId[type]);
+            if (prev) prev.src = '';
+            const g = allGames.find(x => x.id === id);
+            if (g) g[type] = null;
+        });
+    }
+
+    // Art picker modal
+    document.getElementById('btn-art-picker-close').addEventListener('click', () =>
+        document.getElementById('modal-art-picker').classList.remove('active'));
+    document.getElementById('modal-art-picker').addEventListener('click', e => {
+        if (e.target === document.getElementById('modal-art-picker'))
+            document.getElementById('modal-art-picker').classList.remove('active');
+    });
+    document.getElementById('btn-art-picker-search').addEventListener('click', async () => {
+        const query = document.getElementById('art-picker-search').value.trim();
+        if (query) await _artPickerSearch(query);
+    });
+    document.getElementById('art-picker-search').addEventListener('keydown', async e => {
+        if (e.key === 'Enter') {
+            const query = document.getElementById('art-picker-search').value.trim();
+            if (query) await _artPickerSearch(query);
+        }
+    });
     document.getElementById('btn-edit-cancel').addEventListener('click', () => closeModal('modal-edit-game'));
     document.getElementById('btn-edit-save').addEventListener('click', async () => {
         const id = Number(document.getElementById('edit-game-id').value);
@@ -905,6 +1235,7 @@ function wireUI() {
             description:     document.getElementById('edit-description').value.trim(),
             launch_override: document.getElementById('edit-launch-override').value.trim(),
             core_override:   document.getElementById('edit-core-override').value || null,
+            ra_game_id:      parseInt(document.getElementById('edit-ra-game-id').value) || null,
         };
         if (!data.title) { alert('Title is required.'); return; }
         await window.api.updateGame(id, data);
@@ -1137,13 +1468,108 @@ function wireUI() {
         }
     });
 
+    document.getElementById('btn-test-ra').addEventListener('click', async () => {
+        const btn      = document.getElementById('btn-test-ra');
+        const statusEl = document.getElementById('settings-ra-status');
+        const user = document.getElementById('settings-ra-user').value.trim();
+        const key  = document.getElementById('settings-ra-key').value.trim();
+        btn.textContent = 'Testing…'; btn.disabled = true;
+        const result = await window.api.testRaCredentials(user, key);
+        btn.textContent = 'Test Credentials'; btn.disabled = false;
+        if (result.ok) {
+            statusEl.textContent = `✓ Connected as ${result.username}`;
+            statusEl.style.color = 'var(--accent)';
+        } else {
+            statusEl.textContent = `✗ ${result.error}`;
+            statusEl.style.color = '#ef5350';
+        }
+    });
+
+    document.getElementById('btn-import-cngm-creds').addEventListener('click', async () => {
+        const btn      = document.getElementById('btn-import-cngm-creds');
+        const statusEl = document.getElementById('settings-cngm-import-status');
+        btn.textContent = 'Importing…'; btn.disabled = true;
+        const result = await window.api.importCngmCredentials();
+        btn.textContent = 'Import from CNGM'; btn.disabled = false;
+        statusEl.style.display = 'block';
+        if (result.ok) {
+            if (result.igdb_client_id)     document.getElementById('settings-igdb-client-id').value     = result.igdb_client_id;
+            if (result.igdb_client_secret) document.getElementById('settings-igdb-client-secret').value = result.igdb_client_secret;
+            if (result.sgdb_api_key)       document.getElementById('settings-sgdb-key').value           = result.sgdb_api_key;
+            const imported = [
+                result.igdb_client_id     ? 'IGDB' : null,
+                result.sgdb_api_key       ? 'SteamGridDB' : null,
+            ].filter(Boolean).join(', ');
+            statusEl.textContent = `✓ Imported: ${imported}. Save to apply.`;
+            statusEl.style.color = 'var(--accent)';
+        } else {
+            statusEl.textContent = `✗ ${result.error}`;
+            statusEl.style.color = '#ef5350';
+        }
+    });
+
+    document.getElementById('btn-test-igdb').addEventListener('click', async () => {
+        const btn      = document.getElementById('btn-test-igdb');
+        const statusEl = document.getElementById('settings-igdb-status');
+        const id     = document.getElementById('settings-igdb-client-id').value.trim();
+        const secret = document.getElementById('settings-igdb-client-secret').value.trim();
+        btn.textContent = 'Testing…'; btn.disabled = true;
+        const result = await window.api.testIgdbCredentials(id, secret);
+        btn.textContent = 'Test Credentials'; btn.disabled = false;
+        statusEl.textContent = result.ok ? '✓ IGDB credentials valid.' : `✗ ${result.error}`;
+        statusEl.style.color  = result.ok ? 'var(--accent)' : '#ef5350';
+    });
+
+    document.getElementById('btn-test-tgdb').addEventListener('click', async () => {
+        const btn      = document.getElementById('btn-test-tgdb');
+        const statusEl = document.getElementById('settings-tgdb-status');
+        const key = document.getElementById('settings-tgdb-key').value.trim();
+        btn.textContent = 'Testing…'; btn.disabled = true;
+        const result = await window.api.testTgdbKey(key);
+        btn.textContent = 'Test Key'; btn.disabled = false;
+        statusEl.textContent = result.ok ? '✓ TheGamesDB key valid.' : `✗ ${result.error}`;
+        statusEl.style.color  = result.ok ? 'var(--accent)' : '#ef5350';
+    });
+
+    document.getElementById('btn-test-sgdb').addEventListener('click', async () => {
+        const btn      = document.getElementById('btn-test-sgdb');
+        const statusEl = document.getElementById('settings-sgdb-status');
+        const key = document.getElementById('settings-sgdb-key').value.trim();
+        btn.textContent = 'Testing…'; btn.disabled = true;
+        const result = await window.api.testSgdbKey(key);
+        btn.textContent = 'Test Key'; btn.disabled = false;
+        statusEl.textContent = result.ok ? '✓ SteamGridDB key valid.' : `✗ ${result.error}`;
+        statusEl.style.color  = result.ok ? 'var(--accent)' : '#ef5350';
+    });
+
+    // Achievements modal
+    document.getElementById('btn-ach-modal-close').addEventListener('click', () =>
+        document.getElementById('modal-achievements').classList.remove('active'));
+    document.getElementById('modal-achievements').addEventListener('click', e => {
+        if (e.target === document.getElementById('modal-achievements'))
+            document.getElementById('modal-achievements').classList.remove('active');
+    });
+    document.querySelectorAll('.ach-filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            _achFilter = btn.dataset.filter;
+            document.querySelectorAll('.ach-filter-btn').forEach(b => b.classList.toggle('active', b === btn));
+            _renderAchGrid();
+        });
+    });
+
     document.getElementById('btn-settings-cancel').addEventListener('click', () => closeModal('modal-settings'));
     document.getElementById('btn-settings-save').addEventListener('click', async () => {
         const z = document.getElementById('settings-zoom').value;
         await window.api.setSetting('zoom', z);
         window.api.setZoom(parseFloat(z));
-        await window.api.setSetting('ss_user', document.getElementById('settings-ss-user').value.trim());
-        await window.api.setSetting('ss_pass', document.getElementById('settings-ss-pass').value.trim());
+        await window.api.setSetting('ss_user',             document.getElementById('settings-ss-user').value.trim());
+        await window.api.setSetting('ss_pass',             document.getElementById('settings-ss-pass').value.trim());
+        await window.api.setSetting('ra_user',             document.getElementById('settings-ra-user').value.trim());
+        await window.api.setSetting('ra_api_key',          document.getElementById('settings-ra-key').value.trim());
+        await window.api.setSetting('igdb_client_id',      document.getElementById('settings-igdb-client-id').value.trim());
+        await window.api.setSetting('igdb_client_secret',  document.getElementById('settings-igdb-client-secret').value.trim());
+        await window.api.setSetting('tgdb_api_key',        document.getElementById('settings-tgdb-key').value.trim());
+        await window.api.setSetting('sgdb_api_key',        document.getElementById('settings-sgdb-key').value.trim());
         closeModal('modal-settings');
     });
     document.getElementById('btn-settings-open-data-dir').addEventListener('click', async () => {
@@ -1151,9 +1577,163 @@ function wireUI() {
         window.api.openPath(dir);
     });
 
+    // ── MODAL: SCRAPER PICKER ────────────────────────────────────────────────
+    document.getElementById('btn-scraper-picker-cancel').addEventListener('click', () => closeModal('modal-scraper-picker'));
+    document.getElementById('modal-scraper-picker').addEventListener('click', e => {
+        if (e.target === document.getElementById('modal-scraper-picker')) closeModal('modal-scraper-picker');
+    });
+
+    async function runScraper(scraperFn, scraperLabel) {
+        if (!currentGame) return;
+        const statusEl = document.getElementById('scraper-picker-status');
+        const btns = document.querySelectorAll('.scraper-pick-btn');
+        btns.forEach(b => b.disabled = true);
+        statusEl.textContent = `Scraping with ${scraperLabel}…`;
+        statusEl.style.color = 'var(--text_dim)';
+        const result = await scraperFn(currentGame.id);
+        btns.forEach(b => b.disabled = false);
+        if (result.ok) {
+            closeModal('modal-scraper-picker');
+            await loadGames();
+            const updated = allGames.find(g => g.id === currentGame.id);
+            if (updated) openGamePage(updated);
+            showLaunchToast(`Scraped with ${scraperLabel}: ${result.updated?.join(', ') || 'done'}.`, null);
+        } else {
+            statusEl.textContent = `✗ ${result.error}`;
+            statusEl.style.color = '#ef5350';
+        }
+    }
+
+    async function _pickArt(scraper) {
+        closeModal('modal-scraper-picker');
+        _artPickerScraper = scraper;
+        await _openArtPickerModal();
+    }
+
+    document.getElementById('btn-scrape-with-ss').addEventListener('click', async () => {
+        if (_scraperPickerMode === 'art') { await _pickArt('ss'); return; }
+        if (!currentGame) return;
+        closeModal('modal-scraper-picker');
+        scrapeGame(currentGame.id);
+    });
+    document.getElementById('btn-scrape-with-igdb').addEventListener('click', async () => {
+        if (_scraperPickerMode === 'art') { await _pickArt('igdb'); return; }
+        runScraper(id => window.api.igdbScrapeGame(id), 'IGDB');
+    });
+    document.getElementById('btn-scrape-with-tgdb').addEventListener('click', async () => {
+        if (_scraperPickerMode === 'art') { await _pickArt('tgdb'); return; }
+        runScraper(id => window.api.tgdbScrapeGame(id), 'TheGamesDB');
+    });
+    document.getElementById('btn-scrape-with-sgdb').addEventListener('click', async () => {
+        if (_scraperPickerMode === 'art') { await _pickArt('sgdb'); return; }
+        runScraper(id => window.api.sgdbScrapeGame(id), 'SteamGridDB');
+    });
+
+    // ── MODAL: ADD EMULATOR ──────────────────────────────────────────────────
+    let emulatorChosen = null;
+    let allEmulators   = [];
+
+    function renderEmulatorList(query = '') {
+        const list  = document.getElementById('emulator-list');
+        const empty = document.getElementById('emulator-empty');
+        const q = query.toLowerCase();
+        const filtered = allEmulators.filter(e =>
+            !q || e.name.toLowerCase().includes(q) || e.exec.toLowerCase().includes(q)
+        );
+        list.innerHTML = '';
+        if (!filtered.length) { empty.style.display = ''; return; }
+        empty.style.display = 'none';
+        filtered.forEach(em => {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex; flex-direction:column; gap:2px; padding:10px 12px; border-radius:6px; border:1px solid var(--border_solid); cursor:pointer; background:rgba(0,0,0,0.2);';
+            row.innerHTML = `<span style="font-weight:700; font-size:13px;">${em.name}</span>
+                             <span style="font-size:11px; color:var(--text_dim); font-family:monospace;">${em.exec}</span>
+                             ${em.comment ? `<span style="font-size:11px; color:var(--text_dim);">${em.comment}</span>` : ''}`;
+            row.addEventListener('mouseenter', () => row.style.background = 'rgba(255,255,255,0.06)');
+            row.addEventListener('mouseleave', () => row.style.background = 'rgba(0,0,0,0.2)');
+            row.addEventListener('click', () => {
+                emulatorChosen = em;
+                document.getElementById('emulator-chosen-name').textContent = em.name;
+                document.getElementById('emulator-chosen-exec').textContent = em.exec;
+                const sel = document.getElementById('emulator-system-select');
+                sel.innerHTML = allSystems.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+                showEmulatorStep(2);
+            });
+            list.appendChild(row);
+        });
+    }
+
+    document.getElementById('btn-add-emulator').addEventListener('click', async () => {
+        closeModal('modal-settings');
+        showEmulatorStep(1);
+        document.getElementById('emulator-search').value = '';
+        document.getElementById('emulator-list').innerHTML = '<div style="color:var(--text_dim); font-size:12px; padding:20px 0; text-align:center;">Scanning…</div>';
+        document.getElementById('emulator-empty').style.display = 'none';
+        openModal('modal-add-emulator');
+        allEmulators = await window.api.scanEmulators();
+        renderEmulatorList();
+    });
+
+    document.getElementById('emulator-search').addEventListener('input', e => renderEmulatorList(e.target.value));
+
+    function showEmulatorStep(step) {
+        document.getElementById('add-emulator-step1').style.display  = step === 1 ? ''     : 'none';
+        document.getElementById('add-emulator-custom').style.display  = step === 'c' ? 'flex' : 'none';
+        document.getElementById('add-emulator-step2').style.display  = step === 2 ? 'flex' : 'none';
+    }
+
+    document.getElementById('btn-emulator-back').addEventListener('click', () => showEmulatorStep(1));
+
+    document.getElementById('btn-emulator-custom').addEventListener('click', () => {
+        document.getElementById('custom-emulator-name').value = '';
+        document.getElementById('custom-emulator-exec').value = '';
+        showEmulatorStep('c');
+    });
+
+    document.getElementById('btn-custom-emulator-browse').addEventListener('click', async () => {
+        const file = await window.api.selectFile([{ name: 'All Files', extensions: ['*'] }]);
+        if (file) document.getElementById('custom-emulator-exec').value = file;
+    });
+
+    document.getElementById('btn-custom-emulator-continue').addEventListener('click', () => {
+        const name = document.getElementById('custom-emulator-name').value.trim();
+        const exec = document.getElementById('custom-emulator-exec').value.trim();
+        if (!name || !exec) return;
+        emulatorChosen = { name, exec, icon: '', comment: 'Custom' };
+        document.getElementById('emulator-chosen-name').textContent = name;
+        document.getElementById('emulator-chosen-exec').textContent = exec;
+        const sel = document.getElementById('emulator-system-select');
+        sel.innerHTML = allSystems.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+        showEmulatorStep(2);
+    });
+
+    document.getElementById('btn-custom-emulator-back').addEventListener('click', () => showEmulatorStep(1));
+
+    document.getElementById('btn-emulator-assign').addEventListener('click', async () => {
+        if (!emulatorChosen) return;
+        const sysId = parseInt(document.getElementById('emulator-system-select').value);
+        await window.api.updateSystem(sysId, {
+            launch_template:  '{emulator} {rom}',
+            default_emulator: emulatorChosen.exec,
+        });
+        await loadSystems();
+        closeModal('modal-add-emulator');
+        showLaunchToast(`${emulatorChosen.name} assigned to system.`);
+    });
+
+    document.getElementById('btn-emulator-new-system').addEventListener('click', () => {
+        closeModal('modal-add-emulator');
+        openEditSystemModal(null);
+        document.getElementById('edit-system-name').value     = emulatorChosen.name;
+        document.getElementById('edit-system-emulator').value = emulatorChosen.exec;
+        document.getElementById('edit-system-template').value = '{emulator} {rom}';
+    });
+
+    document.getElementById('btn-add-emulator-cancel').addEventListener('click', () => closeModal('modal-add-emulator'));
+
     // ── MODAL: SLIDESHOW ─────────────────────────────────────────────────────
     document.getElementById('modal-slideshow').addEventListener('click', e => {
-        if (!e.target.closest('.slideshow-img') && !e.target.closest('.slide-nav')) closeModal('modal-slideshow');
+        if (!e.target.closest('.slideshow-img') && !e.target.closest('.slide-nav') && !e.target.closest('#slide-close')) closeModal('modal-slideshow');
     });
     document.getElementById('slide-prev').addEventListener('click', e => {
         e.stopPropagation();
@@ -1164,6 +1744,10 @@ function wireUI() {
         e.stopPropagation();
         slideshowIndex = (slideshowIndex + 1) % slideshowUrls.length;
         showSlide();
+    });
+    document.getElementById('slide-close').addEventListener('click', e => {
+        e.stopPropagation();
+        closeModal('modal-slideshow');
     });
 
     // Close modals on backdrop click
@@ -1202,6 +1786,157 @@ async function browseArt(type) {
     await window.api.updateGame(id, { [type]: dest });
     const g = allGames.find(g => g.id === id);
     if (g) g[type] = dest;
+}
+
+// ── ART PICKER ────────────────────────────────────────────────────────────────
+let _artPickerType          = 'cover';
+let _artPickerScraper       = 'sgdb';
+let _scraperPickerMode      = 'full'; // 'full' | 'art'
+let _artPickerSystemShort   = '';
+
+const _artPreviewId   = { cover: 'edit-cover-preview', hero: 'edit-hero-preview', logo: 'edit-logo-preview', screenshot: 'edit-screenshot-preview' };
+const _artPickerCols  = { cover: 3, hero: 2, logo: 3, screenshot: 2 };
+const _artIsContain   = { logo: true, screenshot: false, cover: false, hero: false };
+const _scraperLabels  = { ss: 'ScreenScraper', igdb: 'IGDB', tgdb: 'TheGamesDB', sgdb: 'SteamGridDB' };
+const _artTypeLabels  = { cover: 'Cover Art', hero: 'Hero Art', logo: 'Logo', screenshot: 'Screenshot' };
+
+function openArtPicker(type) {
+    _artPickerType    = type;
+    _scraperPickerMode = 'art';
+    document.getElementById('scraper-picker-status').textContent = '';
+    openModal('modal-scraper-picker');
+}
+
+async function _openArtPickerModal() {
+    const gameId    = Number(document.getElementById('edit-game-id').value);
+    const gameTitle = document.getElementById('edit-title').value.trim() || 'Unknown';
+    const romPath   = document.getElementById('edit-rom-path').value.trim();
+    const romFile   = romPath.split(/[\\/]/).pop() || gameTitle;
+    const sysId     = Number(document.getElementById('edit-system').value);
+    const sys       = allSystems.find(s => s.id === sysId);
+    _artPickerSystemShort = sys?.short_name || '';
+
+    document.getElementById('art-picker-title').textContent =
+        `${_artTypeLabels[_artPickerType]} — ${_scraperLabels[_artPickerScraper]}`;
+    document.getElementById('art-picker-search').value =
+        _artPickerScraper === 'ss' ? romFile : gameTitle;
+    document.getElementById('art-picker-grid').innerHTML = '';
+    document.getElementById('art-picker-grid').style.gridTemplateColumns =
+        `repeat(${_artPickerCols[_artPickerType] || 3}, 1fr)`;
+    document.getElementById('art-picker-status').textContent = '';
+    openModal('modal-art-picker');
+
+    const query = document.getElementById('art-picker-search').value;
+    await _artPickerSearch(query, gameId);
+}
+
+async function _artPickerSearch(query, gameId) {
+    const stat       = document.getElementById('art-picker-status');
+    const grid       = document.getElementById('art-picker-grid');
+    const capturedId = gameId ?? Number(document.getElementById('edit-game-id').value);
+    grid.innerHTML   = '';
+    stat.textContent = `Searching ${_scraperLabels[_artPickerScraper]} for "${query}"…`;
+    stat.style.color = 'var(--text_dim)';
+
+    let result;
+    switch (_artPickerScraper) {
+        case 'sgdb': result = await window.api.sgdbSearchArt(query, _artPickerType); break;
+        case 'tgdb': result = await window.api.tgdbSearchArt(query, _artPickerType, _artPickerSystemShort); break;
+        case 'igdb': result = await window.api.igdbSearchArt(query, _artPickerType, _artPickerSystemShort); break;
+        case 'ss':   result = await window.api.ssSearchArt(capturedId, _artPickerType); break;
+        default:     result = { ok: false, error: 'Unknown scraper.' };
+    }
+
+    if (!result.ok) {
+        stat.textContent = `✗ ${result.error}`;
+        stat.style.color = '#ef5350';
+        return;
+    }
+    if (!result.results.length) {
+        stat.textContent = 'No results found. Try a different search.';
+        return;
+    }
+    stat.textContent = `${result.results.length} result${result.results.length !== 1 ? 's' : ''} — click to apply.`;
+
+    for (const item of result.results) {
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'position:relative; border-radius:6px; overflow:hidden; cursor:pointer; border:2px solid transparent; transition:border 0.15s;';
+
+        const img = document.createElement('img');
+        img.src = item.thumb;
+        img.style.cssText = 'width:100%; display:block; border-radius:4px; transition:transform 0.15s; object-fit:'
+            + (_artIsContain[_artPickerType] ? 'contain; background:rgba(0,0,0,0.4); padding:8px;' : 'cover;');
+
+        wrap.addEventListener('mouseover', () => { if (!wrap.dataset.saved) { wrap.style.borderColor = 'var(--accent)'; img.style.transform = 'scale(1.04)'; } });
+        wrap.addEventListener('mouseout',  () => { if (!wrap.dataset.saved) { wrap.style.borderColor = 'transparent'; img.style.transform = 'scale(1)'; } });
+
+        wrap.addEventListener('click', async () => {
+            if (wrap.dataset.saved) return;
+            stat.textContent = 'Downloading…';
+            stat.style.color = 'var(--text_dim)';
+            grid.style.opacity = '0.5'; grid.style.pointerEvents = 'none';
+            const r = await window.api.sgdbApplyArt(capturedId, item.url, _artPickerType);
+            grid.style.opacity = '1'; grid.style.pointerEvents = '';
+            if (r.ok) {
+                if (_artPickerType === 'screenshot') {
+                    wrap.dataset.saved = '1';
+                    wrap.style.borderColor = '#66bb6a';
+                    img.style.transform = 'scale(1)';
+                    const check = document.createElement('div');
+                    check.textContent = '✓';
+                    check.style.cssText = 'position:absolute; top:6px; right:8px; color:#66bb6a; font-size:20px; font-weight:900; text-shadow:0 1px 4px #000; pointer-events:none;';
+                    wrap.appendChild(check);
+                    stat.style.color = '#66bb6a';
+                    stat.textContent = 'Added! Click more screenshots to keep adding.';
+                    const g = allGames.find(x => x.id === capturedId);
+                    const hadScreenshot = !!g?.screenshot;
+                    if (g) g.screenshot = hadScreenshot ? `${g.screenshot}|${r.path}` : r.path;
+                    const prev = document.getElementById(_artPreviewId[_artPickerType]);
+                    if (prev && !hadScreenshot) prev.src = r.path;
+                } else {
+                    const prev = document.getElementById(_artPreviewId[_artPickerType]);
+                    if (prev) prev.src = r.path;
+                    const g = allGames.find(x => x.id === capturedId);
+                    if (g) g[_artPickerType] = r.path;
+                    document.getElementById('modal-art-picker').classList.remove('active');
+                }
+            } else {
+                stat.textContent = `✗ ${r.error || 'Download failed.'}`;
+                stat.style.color = '#ef5350';
+            }
+        });
+
+        wrap.appendChild(img);
+        grid.appendChild(wrap);
+    }
+}
+
+// ── TRAILER HELPERS ───────────────────────────────────────────────────────────
+function openTrailerProgress(title, videoId) {
+    document.getElementById('modal-trailer-progress').classList.add('active');
+    document.getElementById('dl-progress-game').textContent = title;
+    document.getElementById('dl-progress-fill').style.width = '0%';
+    document.getElementById('dl-progress-text').textContent = '0%';
+    window.api.downloadTrailer(title, videoId).then(success => {
+        document.getElementById('modal-trailer-progress').classList.remove('active');
+        if (success) {
+            showLaunchToast('Trailer downloaded!', null);
+            if (currentGame?.title === title) {
+                const btn = document.getElementById('btn-gamepage-trailer');
+                window.api.checkLocalTrailer(title).then(url => {
+                    if (!url) return;
+                    btn.style.display = 'block';
+                    btn.onclick = () => {
+                        document.getElementById('modal-trailer-player').classList.add('active');
+                        const vid = document.getElementById('detail-video-player');
+                        vid.src = url; vid.play();
+                    };
+                });
+            }
+        } else {
+            showLaunchToast('Download failed.', null);
+        }
+    });
 }
 
 // ── SCREENSCRAPER ─────────────────────────────────────────────────────────────

@@ -7,6 +7,7 @@ const https = require('https');
 const zlib = require('zlib');
 const Database = require('better-sqlite3');
 const { spawn, spawnSync } = require('child_process');
+const crypto = require('crypto');
 
 let baseDir;
 if (process.env.APPIMAGE) {
@@ -17,9 +18,16 @@ if (process.env.APPIMAGE) {
     baseDir = __dirname;
 }
 
-const configDir = path.join(baseDir, 'GameManagerConfig', 'EmuLatte');
-const imagesDir = path.join(configDir, 'images');
-const dbPath    = path.join(configDir, 'emulatte.db');
+const configDir    = path.join(baseDir, 'GameManagerConfig', 'EmuLatte');
+const imagesDir    = path.join(configDir, 'images');
+const trailersDir  = path.join(configDir, 'videos');
+const dbPath       = path.join(configDir, 'emulatte.db');
+
+const baseAssetPath  = app.isPackaged ? process.resourcesPath : __dirname;
+const binDir         = path.join(baseAssetPath, 'assets', 'bin', 'linux');
+const ytDlpPath      = path.join(binDir, 'yt-dlp');
+const ffmpegPath     = path.join(binDir, 'ffmpeg');
+const ytDlpConfigPath = path.join(binDir, 'yt-dlp.conf');
 
 let db;
 
@@ -59,6 +67,7 @@ app.whenReady().then(() => {
     ['covers', 'heroes', 'logos', 'screenshots'].forEach(d =>
         fs.mkdirSync(path.join(imagesDir, d), { recursive: true })
     );
+    fs.mkdirSync(trailersDir, { recursive: true });
 
     try {
         db = new Database(dbPath);
@@ -123,6 +132,18 @@ app.whenReady().then(() => {
         )`).run();
 
         try { db.prepare(`ALTER TABLE games ADD COLUMN core_override TEXT`).run(); } catch {}
+        try { db.prepare(`ALTER TABLE games ADD COLUMN ra_game_id INTEGER`).run(); } catch {}
+        try { db.prepare(`ALTER TABLE games ADD COLUMN igdb_trailer TEXT`).run(); } catch {}
+        db.prepare(`CREATE TABLE IF NOT EXISTS ra_achievements (
+            ra_game_id  INTEGER NOT NULL,
+            ach_id      TEXT    NOT NULL,
+            title       TEXT,
+            description TEXT,
+            points      INTEGER DEFAULT 0,
+            badge_name  TEXT,
+            date_earned TEXT,
+            PRIMARY KEY (ra_game_id, ach_id)
+        )`).run();
 
         const raVariant = detectRetroArch();
         db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run('retroarch_variant', raVariant);
@@ -231,7 +252,7 @@ ipcMain.handle('update-game', (_, id, data) => {
     if (!db) return false;
     const allowed = ['system_id','title','rom_path','description','year','developer','publisher',
                      'genre','players','rating','cover','hero','logo','screenshot',
-                     'fav','want','launch_override','core_override','screenscraper_id'];
+                     'fav','want','launch_override','core_override','screenscraper_id','ra_game_id'];
     const keys = Object.keys(data).filter(k => allowed.includes(k));
     if (!keys.length) return false;
     const fields = keys.map(k => `${k}=@${k}`).join(', ');
@@ -333,6 +354,38 @@ async function downloadFile(url, destPath) {
     if (status !== 200) throw new Error(`HTTP ${status}`);
     fs.writeFileSync(destPath, body);
 }
+
+// Maps system short_name → { igdb: platform_id, tgdb: platform_id }
+const PLATFORM_MAP = {
+    nes:    { igdb: 18,  tgdb: 7    }, fds:    { igdb: 51,  tgdb: 4918 },
+    snes:   { igdb: 19,  tgdb: 6    }, n64:    { igdb: 4,   tgdb: 3    },
+    gc:     { igdb: 21,  tgdb: 2    }, wii:    { igdb: 5,   tgdb: 9    },
+    gb:     { igdb: 33,  tgdb: 4    }, gbc:    { igdb: 22,  tgdb: 41   },
+    gba:    { igdb: 24,  tgdb: 5    }, nds:    { igdb: 20,  tgdb: 8    },
+    '3ds':  { igdb: 37,  tgdb: 4911 }, vb:     { igdb: 87,  tgdb: null },
+    sms:    { igdb: 64,  tgdb: 35   }, genesis:{ igdb: 29,  tgdb: 36   },
+    '32x':  { igdb: 30,  tgdb: 33   }, segacd: { igdb: 78,  tgdb: 21   },
+    saturn: { igdb: 32,  tgdb: 17   }, dc:     { igdb: 23,  tgdb: 16   },
+    gg:     { igdb: 35,  tgdb: 20   }, sg1000: { igdb: 84,  tgdb: null },
+    ps1:    { igdb: 7,   tgdb: 10   }, ps2:    { igdb: 8,   tgdb: 11   },
+    psp:    { igdb: 38,  tgdb: 13   }, vita:   { igdb: 46,  tgdb: 39   },
+    a2600:  { igdb: 59,  tgdb: 22   }, a5200:  { igdb: 66,  tgdb: 26   },
+    a7800:  { igdb: 60,  tgdb: 27   }, lynx:   { igdb: 61,  tgdb: 4924 },
+    jaguar: { igdb: 62,  tgdb: 32   }, atarist:{ igdb: 63,  tgdb: 4938 },
+    pce:    { igdb: 86,  tgdb: 34   }, pcecd:  { igdb: 150, tgdb: 4955 },
+    sgfx:   { igdb: 128, tgdb: null }, pcfx:   { igdb: 274, tgdb: 4930 },
+    neogeo: { igdb: 80,  tgdb: 24   }, neocd:  { igdb: 136, tgdb: null },
+    ngp:    { igdb: 119, tgdb: 4922 }, ngpc:   { igdb: 120, tgdb: null },
+    c64:    { igdb: 15,  tgdb: 40   }, amiga:  { igdb: 16,  tgdb: 4911 },
+    cpc:    { igdb: 25,  tgdb: 4914 }, zxs:    { igdb: 26,  tgdb: 4913 },
+    msx:    { igdb: 27,  tgdb: 4929 }, msx2:   { igdb: 53,  tgdb: null },
+    coleco: { igdb: 68,  tgdb: 29   }, intv:   { igdb: 67,  tgdb: 30   },
+    '3do':  { igdb: 50,  tgdb: 50   }, ws:     { igdb: 57,  tgdb: 4925 },
+    wsc:    { igdb: 123, tgdb: 4926 }, vectrex:{ igdb: 70,  tgdb: 4931 },
+    mame:   { igdb: 52,  tgdb: 23   }, fbn:    { igdb: 52,  tgdb: 23   },
+    dos:    { igdb: 13,  tgdb: 1    }, ps3:    { igdb: 9,   tgdb: 12   },
+    switch: { igdb: 130, tgdb: 4971 },
+};
 
 function ssApiUrl(endpoint, params) {
     return `https://www.screenscraper.fr/api2/${endpoint}?${new URLSearchParams(params).toString()}`;
@@ -602,6 +655,534 @@ ipcMain.handle('get-cores', () => {
     return db.prepare('SELECT * FROM cores ORDER BY name').all();
 });
 
+// ── RETROACHIEVEMENTS ────────────────────────────────────────────────────────
+
+function raApiUrl(endpoint, params) {
+    return `https://retroachievements.org/API/${endpoint}?${new URLSearchParams(params).toString()}`;
+}
+async function raApiCall(endpoint, params) {
+    const { status, body } = await httpsGet(raApiUrl(endpoint, params));
+    if (status !== 200) throw new Error(`HTTP ${status}`);
+    const text = body.toString('utf8');
+    try { return JSON.parse(text); }
+    catch { throw new Error(text.slice(0, 120) || 'Invalid JSON from RetroAchievements'); }
+}
+function computeFileMd5(filePath) {
+    return crypto.createHash('md5').update(fs.readFileSync(filePath)).digest('hex');
+}
+function raMapAchievements(rows) {
+    return rows.map(a => ({
+        name:           a.title,
+        description:    a.description,
+        points:         a.points,
+        date_unlocked:  a.date_earned || null,
+        image_unlocked: `https://media.retroachievements.org/Badge/${a.badge_name}.png`,
+        image_locked:   `https://media.retroachievements.org/Badge/${a.badge_name}_lock.png`,
+    }));
+}
+
+ipcMain.handle('test-ra-credentials', async (_, user, key) => {
+    if (!user || !key) return { ok: false, error: 'Enter username and API key first.' };
+    try {
+        const result = await raApiCall('API_GetUserSummary.php', { z: user, y: key, u: user, g: 1 });
+        if (result.Error) return { ok: false, error: result.Error };
+        return { ok: true, username: result.User || user };
+    } catch(e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('fetch-ra-achievements', async (_, gameId) => {
+    if (!db) return { ok: false, error: 'DB not ready' };
+    const raUser = db.prepare('SELECT value FROM settings WHERE key=?').get('ra_user')?.value;
+    const raKey  = db.prepare('SELECT value FROM settings WHERE key=?').get('ra_api_key')?.value;
+    if (!raUser || !raKey) return { ok: false, error: 'RetroAchievements credentials not set in Settings.' };
+
+    const game = db.prepare('SELECT * FROM games WHERE id=?').get(gameId);
+    if (!game) return { ok: false, error: 'Game not found.' };
+
+    let raGameId = game.ra_game_id;
+    if (!raGameId && game.rom_path && fs.existsSync(game.rom_path)) {
+        try {
+            const md5 = computeFileMd5(game.rom_path);
+            const r   = await raApiCall('API_GetGameInfoByHash.php', { z: raUser, y: raKey, m: md5 });
+            raGameId  = r?.GameID || 0;
+            if (raGameId) db.prepare('UPDATE games SET ra_game_id=? WHERE id=?').run(raGameId, gameId);
+        } catch {}
+    }
+    if (!raGameId) return { ok: false, error: 'Game not found on RetroAchievements. Set the RA Game ID manually in Edit ROM.' };
+
+    try {
+        const data = await raApiCall('API_GetGameInfoAndUserProgress.php', { z: raUser, y: raKey, u: raUser, g: raGameId });
+        if (data.Error) return { ok: false, error: data.Error };
+
+        const achievements = Object.values(data.Achievements || {}).map(a => ({
+            ach_id:      String(a.ID),
+            title:       a.Title       || '',
+            description: a.Description || '',
+            points:      a.Points      || 0,
+            badge_name:  a.BadgeName   || '',
+            date_earned: a.DateEarned  ? a.DateEarned.replace(' ', 'T') : null,
+        }));
+
+        const ins = db.prepare(`INSERT OR REPLACE INTO ra_achievements
+            (ra_game_id,ach_id,title,description,points,badge_name,date_earned)
+            VALUES (@ra_game_id,@ach_id,@title,@description,@points,@badge_name,@date_earned)`);
+        db.transaction(list => list.forEach(a => ins.run({ ra_game_id: raGameId, ...a })))(achievements);
+
+        return { ok: true, raGameId, achievements: raMapAchievements(achievements) };
+    } catch(e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('get-ra-achievements', (_, raGameId) => {
+    if (!db || !raGameId) return { ok: false, achievements: [] };
+    const rows = db.prepare('SELECT * FROM ra_achievements WHERE ra_game_id=?').all(raGameId);
+    if (!rows.length) return { ok: false, achievements: [] };
+    return { ok: true, achievements: raMapAchievements(rows) };
+});
+
+// ── ART PICKER ────────────────────────────────────────────────────────────────
+ipcMain.handle('sgdb-search-art', async (_, gameName, assetType) => {
+    const apiKey = db?.prepare('SELECT value FROM settings WHERE key=?').get('sgdb_api_key')?.value;
+    if (!apiKey) return { ok: false, error: 'No SteamGridDB API key set in Settings.' };
+    try {
+        const headers = { 'Authorization': `Bearer ${apiKey}` };
+        const searchRes  = await fetch(`https://www.steamgriddb.com/api/v2/search/autocomplete/${encodeURIComponent(gameName)}`, { headers });
+        const searchData = await searchRes.json();
+        if (!searchData.success || !searchData.data?.length) return { ok: true, results: [] };
+        const sgdbId = searchData.data[0].id;
+
+        const endpointMap = { cover: 'grids', hero: 'heroes', logo: 'logos', screenshot: 'grids' };
+        const endpoint = endpointMap[assetType] || 'grids';
+        const query    = assetType === 'cover' ? '?dimensions=600x900' : '';
+        const artRes   = await fetch(`https://www.steamgriddb.com/api/v2/${endpoint}/game/${sgdbId}${query}`, { headers });
+        const artData  = await artRes.json();
+        if (!artData.success) return { ok: true, results: [] };
+        return { ok: true, results: artData.data.map(g => ({ thumb: g.thumb, url: g.url })) };
+    } catch(e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('sgdb-apply-art', async (_, gameId, url, assetType) => {
+    if (!db) return { ok: false };
+    const subdir = { cover: 'covers', hero: 'heroes', logo: 'logos', screenshot: 'screenshots' }[assetType] || 'covers';
+    const ext  = url.split('.').pop().split('?')[0] || 'jpg';
+    const dest = path.join(imagesDir, subdir, `${gameId}_${assetType}_${Date.now()}.${ext}`);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    try {
+        const res = await fetch(url);
+        if (!res.ok) return { ok: false };
+        fs.writeFileSync(dest, Buffer.from(await res.arrayBuffer()));
+        if (assetType === 'screenshot') {
+            const cur    = db.prepare('SELECT screenshot FROM games WHERE id=?').get(gameId)?.screenshot || '';
+            const newVal = cur ? `${cur}|${dest}` : dest;
+            db.prepare('UPDATE games SET screenshot=? WHERE id=?').run(newVal, gameId);
+        } else {
+            db.prepare(`UPDATE games SET ${assetType}=? WHERE id=?`).run(dest, gameId);
+        }
+        return { ok: true, path: dest };
+    } catch(e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('delete-game-art', (_, gameId, assetType) => {
+    if (!db) return false;
+    const allowed = ['cover', 'hero', 'logo', 'screenshot'];
+    if (!allowed.includes(assetType)) return false;
+    db.prepare(`UPDATE games SET ${assetType}=NULL WHERE id=?`).run(gameId);
+    return true;
+});
+
+ipcMain.handle('ss-search-art', async (_, gameId, assetType) => {
+    if (!db) return { ok: false, error: 'DB not ready' };
+    const ssUser = db.prepare('SELECT value FROM settings WHERE key=?').get('ss_user')?.value;
+    const ssPass = db.prepare('SELECT value FROM settings WHERE key=?').get('ss_pass')?.value;
+    if (!ssUser || !ssPass) return { ok: false, error: 'ScreenScraper credentials not set in Settings.' };
+
+    const game = db.prepare(`SELECT g.*, s.screenscraper_id AS system_ss_id
+        FROM games g LEFT JOIN systems s ON g.system_id=s.id WHERE g.id=?`).get(gameId);
+    if (!game) return { ok: false, error: 'Game not found.' };
+
+    const romFileName = game.rom_path ? path.basename(game.rom_path) : (game.title + '.rom');
+    let crc = '', romSize = 0;
+    if (game.rom_path && fs.existsSync(game.rom_path)) {
+        try { crc = await computeFileCrc32(game.rom_path); romSize = fs.statSync(game.rom_path).size; } catch {}
+    }
+    const params = {
+        devid: ssUser, devpassword: ssPass, softname: 'emulatte', output: 'json',
+        ssid: ssUser, sspassword: ssPass, romtype: 'rom', romnom: romFileName,
+    };
+    if (crc)               params.crc       = crc;
+    if (romSize)           params.romtaille = romSize;
+    if (game.system_ss_id) params.systemeid = game.system_ss_id;
+
+    let apiResult;
+    try { apiResult = await ssApiCall('jeuInfos.php', params); }
+    catch(e) { return { ok: false, error: e.message }; }
+
+    const jeu = apiResult.response?.jeu;
+    if (!jeu) return { ok: false, error: apiResult.response?.msg || 'Game not found on ScreenScraper.' };
+
+    const typeMap = {
+        cover:      ['box-2D', 'box-2D-side', 'box-3D'],
+        hero:       ['fanart', 'ss', 'sstitle'],
+        logo:       ['wheel', 'wheel-carbon', 'wheel-steel'],
+        screenshot: ['ss', 'sstitle', 'fanart'],
+    };
+    const wanted = new Set(typeMap[assetType] || ['box-2D']);
+    const results = (jeu.medias || [])
+        .filter(m => wanted.has(m.type))
+        .map(m => {
+            const url = m.url.includes('ssid=') ? m.url
+                : `${m.url}&ssid=${encodeURIComponent(ssUser)}&sspassword=${encodeURIComponent(ssPass)}&softname=emulatte&output=image`;
+            return { thumb: url, url };
+        });
+    return { ok: true, results };
+});
+
+ipcMain.handle('tgdb-search-art', async (_, gameName, assetType, systemShortName) => {
+    const apiKey = db?.prepare('SELECT value FROM settings WHERE key=?').get('tgdb_api_key')?.value;
+    if (!apiKey) return { ok: false, error: 'TheGamesDB API key not set in Settings.' };
+    try {
+        const tgdbPlatId = systemShortName ? PLATFORM_MAP[systemShortName]?.tgdb : null;
+        const platformFilter = tgdbPlatId ? `&filter[platform]=${tgdbPlatId}` : '';
+        const { status, body } = await httpsGet(
+            `https://api.thegamesdb.net/v1/Games/ByGameName?apikey=${encodeURIComponent(apiKey)}&name=${encodeURIComponent(gameName)}&fields=overview&include=boxart${platformFilter}`
+        );
+        if (status !== 200) return { ok: false, error: `HTTP ${status}` };
+        const data = JSON.parse(body.toString('utf8'));
+        if (!data.data?.games?.length) return { ok: true, results: [] };
+
+        const gId        = data.data.games[0].id;
+        const boxartBase = data.include?.boxart?.base_url?.original || '';
+        const boxarts    = data.include?.boxart?.data?.[String(gId)] || [];
+        const typeMap    = { cover: ['boxart'], hero: ['fanart'], logo: ['clearlogo'], screenshot: ['screenshot', 'titlescreen'] };
+        const wanted     = new Set(typeMap[assetType] || ['boxart']);
+
+        const results = boxarts
+            .filter(b => wanted.has(b.type))
+            .map(b => ({ thumb: `${boxartBase}${b.filename}`, url: `${boxartBase}${b.filename}` }));
+        return { ok: true, results };
+    } catch(e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('igdb-search-art', async (_, gameName, assetType, systemShortName) => {
+    if (assetType === 'logo') return { ok: false, error: 'IGDB does not provide logo/wheel artwork.' };
+    const clientId     = db?.prepare('SELECT value FROM settings WHERE key=?').get('igdb_client_id')?.value;
+    const clientSecret = db?.prepare('SELECT value FROM settings WHERE key=?').get('igdb_client_secret')?.value;
+    if (!clientId || !clientSecret) return { ok: false, error: 'IGDB credentials not set in Settings.' };
+    try {
+        const token      = await getIgdbToken(clientId, clientSecret);
+        const escaped    = gameName.replace(/"/g, '');
+        const igdbPlatId = systemShortName ? PLATFORM_MAP[systemShortName]?.igdb : null;
+        const whereClause = igdbPlatId ? `where platforms = [${igdbPlatId}];` : '';
+        const results = await igdbQuery('games',
+            `fields cover.url,screenshots.url; search "${escaped}"; ${whereClause} limit 1;`,
+            clientId, token);
+        if (!results.length) return { ok: true, results: [] };
+        const g = results[0];
+        let items = [];
+        if (assetType === 'cover' && g.cover?.url) {
+            items = [{ url: igdbImg(g.cover.url, 'cover_big'), thumb: igdbImg(g.cover.url, 'cover_big') }];
+        } else if ((assetType === 'hero' || assetType === 'screenshot') && g.screenshots?.length) {
+            items = g.screenshots.map(s => ({
+                url:   igdbImg(s.url, 'screenshot_big'),
+                thumb: igdbImg(s.url, 'screenshot_med'),
+            }));
+        }
+        return { ok: true, results: items };
+    } catch(e) { return { ok: false, error: e.message }; }
+});
+
+// ── CNGM CREDENTIAL IMPORT ────────────────────────────────────────────────────
+ipcMain.handle('import-cngm-credentials', () => {
+    const cngmDb = path.join(baseDir, 'GameManagerConfig', 'games.db');
+    if (!fs.existsSync(cngmDb)) return { ok: false, error: 'CNGM database not found. Make sure CNGM is installed in the same folder.' };
+    try {
+        const cdb = new Database(cngmDb, { readonly: true, timeout: 3000 });
+        const get = (key) => cdb.prepare('SELECT value FROM settings WHERE key=?').get(key)?.value || '';
+        const result = {
+            igdb_client_id:     get('igdb_client_id'),
+            igdb_client_secret: get('igdb_client_secret'),
+            sgdb_api_key:       get('steamgriddb_api'),
+        };
+        cdb.close();
+        const found = Object.values(result).some(v => v);
+        if (!found) return { ok: false, error: 'No IGDB or SteamGridDB credentials found in CNGM.' };
+        return { ok: true, ...result };
+    } catch(e) { return { ok: false, error: e.message }; }
+});
+
+// ── IGDB ──────────────────────────────────────────────────────────────────────
+let _igdbToken = null;
+let _igdbTokenExp = 0;
+
+async function getIgdbToken(clientId, clientSecret) {
+    if (_igdbToken && Date.now() < _igdbTokenExp) return _igdbToken;
+    const res = await fetch(
+        `https://id.twitch.tv/oauth2/token?client_id=${encodeURIComponent(clientId)}&client_secret=${encodeURIComponent(clientSecret)}&grant_type=client_credentials`,
+        { method: 'POST' }
+    );
+    if (!res.ok) throw new Error(`Twitch OAuth error ${res.status}`);
+    const data = await res.json();
+    _igdbToken    = data.access_token;
+    _igdbTokenExp = Date.now() + (data.expires_in - 60) * 1000;
+    return _igdbToken;
+}
+
+async function igdbQuery(endpoint, body, clientId, token) {
+    const res = await fetch(`https://api.igdb.com/v4/${endpoint}`, {
+        method: 'POST',
+        headers: { 'Client-ID': clientId, 'Authorization': `Bearer ${token}`, 'Content-Type': 'text/plain' },
+        body,
+    });
+    if (!res.ok) throw new Error(`IGDB HTTP ${res.status}`);
+    return res.json();
+}
+
+function igdbImg(url, size) {
+    if (!url) return null;
+    return `https:${url.replace('t_thumb', `t_${size}`)}`;
+}
+
+ipcMain.handle('test-igdb-credentials', async (_, clientId, clientSecret) => {
+    if (!clientId || !clientSecret) return { ok: false, error: 'Enter Client ID and Client Secret first.' };
+    try {
+        _igdbToken = null;
+        await getIgdbToken(clientId, clientSecret);
+        return { ok: true };
+    } catch(e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('igdb-scrape-game', async (_, gameId) => {
+    if (!db) return { ok: false, error: 'DB not ready' };
+    const game = db.prepare(`SELECT g.*, s.short_name AS system_short
+        FROM games g LEFT JOIN systems s ON g.system_id=s.id WHERE g.id=?`).get(gameId);
+    if (!game) return { ok: false, error: 'Game not found.' };
+
+    const clientId     = db.prepare('SELECT value FROM settings WHERE key=?').get('igdb_client_id')?.value;
+    const clientSecret = db.prepare('SELECT value FROM settings WHERE key=?').get('igdb_client_secret')?.value;
+    if (!clientId || !clientSecret) return { ok: false, error: 'IGDB credentials not set in Settings.' };
+
+    try {
+        const token      = await getIgdbToken(clientId, clientSecret);
+        const escaped    = game.title.replace(/"/g, '');
+        const igdbPlatId = PLATFORM_MAP[game.system_short]?.igdb;
+        const whereClause = igdbPlatId ? `where platforms = [${igdbPlatId}];` : '';
+        const results = await igdbQuery('games',
+            `fields name,summary,first_release_date,genres.name,involved_companies.developer,involved_companies.publisher,involved_companies.company.name,cover.url,screenshots.url,videos.video_id,rating; search "${escaped}"; ${whereClause} limit 1;`,
+            clientId, token);
+        if (!results.length) return { ok: false, error: `No IGDB results for "${game.title}"` };
+
+        const g = results[0];
+        const updates = {};
+        if (g.summary)              updates.description = g.summary;
+        if (g.first_release_date)   updates.year        = new Date(g.first_release_date * 1000).getFullYear().toString();
+        if (g.rating)               updates.rating      = (g.rating / 10).toFixed(1);
+        if (g.genres?.length)       updates.genre       = g.genres.map(x => x.name).join(', ');
+
+        const devs = (g.involved_companies || []).filter(c => c.developer).map(c => c.company?.name).filter(Boolean);
+        const pubs = (g.involved_companies || []).filter(c => c.publisher).map(c => c.company?.name).filter(Boolean);
+        if (devs.length) updates.developer = devs[0];
+        if (pubs.length) updates.publisher = pubs[0];
+        if (g.videos?.length) updates.igdb_trailer = g.videos[0].video_id;
+
+        if (g.cover?.url) {
+            const dest = path.join(imagesDir, 'covers', `${gameId}.jpg`);
+            fs.mkdirSync(path.dirname(dest), { recursive: true });
+            await downloadFile(igdbImg(g.cover.url, 'cover_big'), dest);
+            updates.cover = dest;
+        }
+        if (g.screenshots?.length) {
+            const heroUrl  = igdbImg(g.screenshots[0].url, 'screenshot_big');
+            const heroDest = path.join(imagesDir, 'heroes', `${gameId}.jpg`);
+            fs.mkdirSync(path.dirname(heroDest), { recursive: true });
+            await downloadFile(heroUrl, heroDest);
+            updates.hero = heroDest;
+            const ssDest = path.join(imagesDir, 'screenshots', `${gameId}.jpg`);
+            fs.mkdirSync(path.dirname(ssDest), { recursive: true });
+            await downloadFile(igdbImg(g.screenshots[0].url, 'screenshot_big'), ssDest);
+            updates.screenshot = ssDest;
+        }
+
+        if (Object.keys(updates).length) {
+            const sets = Object.keys(updates).map(k => `${k}=@${k}`).join(',');
+            db.prepare(`UPDATE games SET ${sets} WHERE id=@id`).run({ ...updates, id: gameId });
+        }
+        return { ok: true, updated: Object.keys(updates) };
+    } catch(e) { return { ok: false, error: e.message }; }
+});
+
+// ── THEGAMESDB ────────────────────────────────────────────────────────────────
+ipcMain.handle('test-tgdb-key', async (_, apiKey) => {
+    if (!apiKey) return { ok: false, error: 'Enter API key first.' };
+    try {
+        const { status, body } = await httpsGet(
+            `https://api.thegamesdb.net/v1/Games/ByGameName?apikey=${encodeURIComponent(apiKey)}&name=mario&fields=overview`
+        );
+        if (status === 403) return { ok: false, error: 'Invalid API key.' };
+        if (status !== 200) return { ok: false, error: `HTTP ${status}` };
+        const data = JSON.parse(body.toString('utf8'));
+        if (data.code !== 200) return { ok: false, error: data.status || 'API error' };
+        return { ok: true };
+    } catch(e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('tgdb-scrape-game', async (_, gameId) => {
+    if (!db) return { ok: false, error: 'DB not ready' };
+    const game = db.prepare(`SELECT g.*, s.short_name AS system_short
+        FROM games g LEFT JOIN systems s ON g.system_id=s.id WHERE g.id=?`).get(gameId);
+    if (!game) return { ok: false, error: 'Game not found.' };
+
+    const apiKey = db.prepare('SELECT value FROM settings WHERE key=?').get('tgdb_api_key')?.value;
+    if (!apiKey) return { ok: false, error: 'TheGamesDB API key not set in Settings.' };
+
+    try {
+        const tgdbPlatId = PLATFORM_MAP[game.system_short]?.tgdb;
+        const platformFilter = tgdbPlatId ? `&filter[platform]=${tgdbPlatId}` : '';
+        const { status, body } = await httpsGet(
+            `https://api.thegamesdb.net/v1/Games/ByGameName?apikey=${encodeURIComponent(apiKey)}&name=${encodeURIComponent(game.title)}&fields=overview,rating,players,release_date&include=boxart${platformFilter}`
+        );
+        if (status !== 200) return { ok: false, error: `HTTP ${status}` };
+        const data = JSON.parse(body.toString('utf8'));
+        if (!data.data?.games?.length) return { ok: false, error: `No TheGamesDB results for "${game.title}"` };
+
+        const g    = data.data.games[0];
+        const gId  = g.id;
+        const updates = {};
+        if (g.overview)     updates.description = g.overview;
+        if (g.rating)       updates.rating      = g.rating;
+        if (g.players)      updates.players     = String(g.players);
+        if (g.release_date) updates.year        = g.release_date.slice(0, 4);
+
+        const boxartBase = data.include?.boxart?.base_url?.original;
+        const boxarts    = data.include?.boxart?.data?.[String(gId)] || [];
+        const byType     = (t) => boxarts.find(b => b.type === t);
+
+        async function fetchBoxart(type, subdir, field) {
+            const b = byType(type);
+            if (!b || !boxartBase) return;
+            const ext  = b.filename.split('.').pop() || 'jpg';
+            const dest = path.join(imagesDir, subdir, `${gameId}.${ext}`);
+            fs.mkdirSync(path.dirname(dest), { recursive: true });
+            await downloadFile(`${boxartBase}${b.filename}`, dest);
+            updates[field] = dest;
+        }
+
+        await fetchBoxart('boxart',    'covers',      'cover');
+        await fetchBoxart('fanart',    'heroes',      'hero');
+        await fetchBoxart('clearlogo', 'logos',       'logo');
+
+        const ss = byType('screenshot') || byType('titlescreen');
+        if (ss && boxartBase) {
+            const ext  = ss.filename.split('.').pop() || 'jpg';
+            const dest = path.join(imagesDir, 'screenshots', `${gameId}.${ext}`);
+            fs.mkdirSync(path.dirname(dest), { recursive: true });
+            await downloadFile(`${boxartBase}${ss.filename}`, dest);
+            updates.screenshot = dest;
+        }
+
+        if (Object.keys(updates).length) {
+            const sets = Object.keys(updates).map(k => `${k}=@${k}`).join(',');
+            db.prepare(`UPDATE games SET ${sets} WHERE id=@id`).run({ ...updates, id: gameId });
+        }
+        return { ok: true, updated: Object.keys(updates) };
+    } catch(e) { return { ok: false, error: e.message }; }
+});
+
+// ── STEAMGRIDDB ───────────────────────────────────────────────────────────────
+async function sgdbFetch(sgdbPath, apiKey) {
+    const res = await fetch(`https://www.steamgriddb.com/api/v2${sgdbPath}`, {
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+    });
+    if (!res.ok) throw new Error(`SGDB HTTP ${res.status}`);
+    return res.json();
+}
+
+ipcMain.handle('test-sgdb-key', async (_, apiKey) => {
+    if (!apiKey) return { ok: false, error: 'Enter API key first.' };
+    try {
+        const data = await sgdbFetch('/search/autocomplete/mario', apiKey);
+        if (!data.success) return { ok: false, error: data.errors?.join(', ') || 'API error' };
+        return { ok: true };
+    } catch(e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('sgdb-scrape-game', async (_, gameId) => {
+    if (!db) return { ok: false, error: 'DB not ready' };
+    const game = db.prepare('SELECT * FROM games WHERE id=?').get(gameId);
+    if (!game) return { ok: false, error: 'Game not found.' };
+
+    const apiKey = db.prepare('SELECT value FROM settings WHERE key=?').get('sgdb_api_key')?.value;
+    if (!apiKey) return { ok: false, error: 'SteamGridDB API key not set in Settings.' };
+
+    try {
+        const search = await sgdbFetch(`/search/autocomplete/${encodeURIComponent(game.title)}`, apiKey);
+        if (!search.success || !search.data?.length) return { ok: false, error: `No SteamGridDB results for "${game.title}"` };
+
+        const sgdbId = search.data[0].id;
+        const updates = {};
+
+        async function fetchSgdbArt(type, subdir, field, query = '') {
+            try {
+                const data = await sgdbFetch(`/${type}/game/${sgdbId}${query}`, apiKey);
+                if (!data.success || !data.data?.length) return;
+                const url  = data.data[0].url;
+                const ext  = url.split('.').pop().split('?')[0] || 'png';
+                const dest = path.join(imagesDir, subdir, `${gameId}.${ext}`);
+                fs.mkdirSync(path.dirname(dest), { recursive: true });
+                await downloadFile(url, dest);
+                updates[field] = dest;
+            } catch {}
+        }
+
+        await fetchSgdbArt('grids',  'covers', 'cover', '?dimensions=600x900');
+        await fetchSgdbArt('heroes', 'heroes', 'hero');
+        await fetchSgdbArt('logos',  'logos',  'logo');
+
+        if (Object.keys(updates).length) {
+            const sets = Object.keys(updates).map(k => `${k}=@${k}`).join(',');
+            db.prepare(`UPDATE games SET ${sets} WHERE id=@id`).run({ ...updates, id: gameId });
+        }
+        return { ok: true, updated: Object.keys(updates) };
+    } catch(e) { return { ok: false, error: e.message }; }
+});
+
+// ── EMULATOR SCANNER ─────────────────────────────────────────────────────────
+ipcMain.handle('scan-emulators', () => {
+    const dirs = [
+        '/usr/share/applications',
+        '/usr/local/share/applications',
+        path.join(os.homedir(), '.local/share/applications'),
+        '/var/lib/flatpak/exports/share/applications',
+        path.join(os.homedir(), '.local/share/flatpak/exports/share/applications'),
+    ];
+    const seen = new Set();
+    const emulators = [];
+    for (const dir of dirs) {
+        if (!fs.existsSync(dir)) continue;
+        let files;
+        try { files = fs.readdirSync(dir).filter(f => f.endsWith('.desktop')); }
+        catch { continue; }
+        for (const file of files) {
+            try {
+                const content = fs.readFileSync(path.join(dir, file), 'utf8');
+                const entrySection = content.split('\n');
+                const get = (key) => {
+                    const line = entrySection.find(l => l.startsWith(key + '='));
+                    return line ? line.slice(key.length + 1).trim() : '';
+                };
+                if (get('Type') && get('Type') !== 'Application') continue;
+                if (!get('Categories').toLowerCase().includes('emulator')) continue;
+                const name = get('Name');
+                const execRaw = get('Exec');
+                if (!name || !execRaw) continue;
+                const exec = execRaw.replace(/\s*%[a-zA-Z]\s*/g, '').trim();
+                if (!exec || seen.has(exec)) continue;
+                seen.add(exec);
+                emulators.push({ name, exec, icon: get('Icon'), comment: get('Comment') });
+            } catch {}
+        }
+    }
+    return emulators.sort((a, b) => a.name.localeCompare(b.name));
+});
+
 // ── PLAYLISTS ─────────────────────────────────────────────────────────────────
 ipcMain.handle('get-playlists', () => {
     if (!db) return [];
@@ -712,6 +1293,51 @@ ipcMain.handle('select-local-image', async (_, gameId, type) => {
 
 ipcMain.handle('read-file-base64', (_, filePath) => {
     try { return fs.readFileSync(filePath).toString('base64'); } catch { return null; }
+});
+
+// ── TRAILERS ──────────────────────────────────────────────────────────────────
+function trailerFilePath(title) { return path.join(trailersDir, `${title.replace(/[\\/:*?"<>|#]/g, '').trim()}.mp4`); }
+
+ipcMain.handle('check-local-trailer', (_, title) => {
+    const p = trailerFilePath(title);
+    return fs.existsSync(p) ? `file://${p}` : null;
+});
+
+ipcMain.handle('delete-trailer', (_, title) => {
+    const p = trailerFilePath(title);
+    try { if (fs.existsSync(p)) { fs.unlinkSync(p); return true; } } catch {}
+    return false;
+});
+
+ipcMain.handle('search-youtube', async (_, query) => {
+    const { execFile } = require('child_process');
+    return new Promise((resolve) => {
+        const args = ['--config-location', ytDlpConfigPath, `ytsearch5:${query}`, '--print', '%(id)s|%(thumbnail)s|%(title)s', '--no-playlist'];
+        execFile(ytDlpPath, args, { timeout: 20000 }, (error, stdout) => {
+            if (!stdout?.trim()) { resolve([]); return; }
+            resolve(stdout.split('\n').filter(l => l.trim()).map(line => {
+                const parts = line.split('|');
+                return { id: parts[0], thumbnail: parts[1], title: parts.slice(2).join('|') };
+            }));
+        });
+    });
+});
+
+ipcMain.handle('download-trailer', (_, title, videoId) => {
+    const filePath = trailerFilePath(title);
+    const win = BrowserWindow.getFocusedWindow();
+    const args = ['--config-location', ytDlpConfigPath, '--ffmpeg-location', ffmpegPath,
+        `https://www.youtube.com/watch?v=${videoId}`,
+        '-f', 'bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        '-o', filePath, '--no-part', '--newline'];
+    return new Promise((resolve) => {
+        const ytdlp = spawn(ytDlpPath, args);
+        ytdlp.stdout.on('data', (data) => {
+            const match = data.toString().match(/\[download\]\s+(\d+(\.\d+)?)%/);
+            if (match && win) win.webContents.send('download-progress', parseFloat(match[1]));
+        });
+        ytdlp.on('close', (code) => resolve(code === 0));
+    });
 });
 
 // ── MISC ──────────────────────────────────────────────────────────────────────

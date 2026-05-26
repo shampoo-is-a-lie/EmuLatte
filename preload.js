@@ -45,6 +45,34 @@ contextBridge.exposeInMainWorld('api', {
     fetchSsSystems:       ()             => ipcRenderer.invoke('fetch-ss-systems'),
     testSsCredentials:    (user, pass)   => ipcRenderer.invoke('test-ss-credentials', user, pass),
 
+    // RetroAchievements
+    testRaCredentials:    (user, key)    => ipcRenderer.invoke('test-ra-credentials', user, key),
+    fetchRaAchievements:  (id)           => ipcRenderer.invoke('fetch-ra-achievements', id),
+    getRaAchievements:    (raGameId)     => ipcRenderer.invoke('get-ra-achievements', raGameId),
+
+    // Art picker
+    sgdbSearchArt: (name, type)      => ipcRenderer.invoke('sgdb-search-art', name, type),
+    sgdbApplyArt:  (id, url, type)   => ipcRenderer.invoke('sgdb-apply-art', id, url, type),
+    deleteGameArt: (id, type)        => ipcRenderer.invoke('delete-game-art', id, type),
+    ssSearchArt:   (id, type)        => ipcRenderer.invoke('ss-search-art', id, type),
+    tgdbSearchArt: (name, type, sys) => ipcRenderer.invoke('tgdb-search-art', name, type, sys),
+    igdbSearchArt: (name, type, sys) => ipcRenderer.invoke('igdb-search-art', name, type, sys),
+
+    // CNGM import
+    importCngmCredentials: () => ipcRenderer.invoke('import-cngm-credentials'),
+
+    // IGDB
+    testIgdbCredentials: (id, secret) => ipcRenderer.invoke('test-igdb-credentials', id, secret),
+    igdbScrapeGame:      (id)         => ipcRenderer.invoke('igdb-scrape-game', id),
+
+    // TheGamesDB
+    testTgdbKey:   (key) => ipcRenderer.invoke('test-tgdb-key', key),
+    tgdbScrapeGame:(id)  => ipcRenderer.invoke('tgdb-scrape-game', id),
+
+    // SteamGridDB
+    testSgdbKey:   (key) => ipcRenderer.invoke('test-sgdb-key', key),
+    sgdbScrapeGame:(id)  => ipcRenderer.invoke('sgdb-scrape-game', id),
+
     // RetroArch detection
     detectRetroArch: () => ipcRenderer.invoke('detect-retroarch'),
 
@@ -52,8 +80,9 @@ contextBridge.exposeInMainWorld('api', {
     getSystemPresets: () => ipcRenderer.invoke('get-system-presets'),
 
     // Cores
-    scanCores: ()         => ipcRenderer.invoke('scan-cores'),
-    getCores:  ()         => ipcRenderer.invoke('get-cores'),
+    scanCores:     ()     => ipcRenderer.invoke('scan-cores'),
+    getCores:      ()     => ipcRenderer.invoke('get-cores'),
+    scanEmulators: ()     => ipcRenderer.invoke('scan-emulators'),
 
     // Playlists
     getPlaylists:           ()           => ipcRenderer.invoke('get-playlists'),
@@ -64,6 +93,13 @@ contextBridge.exposeInMainWorld('api', {
     addGameToPlaylist:      (plId, gId)  => ipcRenderer.invoke('add-game-to-playlist', plId, gId),
     removeGameFromPlaylist: (plId, gId)  => ipcRenderer.invoke('remove-game-from-playlist', plId, gId),
     getGamePlaylists:       (gId)        => ipcRenderer.invoke('get-game-playlists', gId),
+
+    // Trailers
+    checkLocalTrailer: (title)          => ipcRenderer.invoke('check-local-trailer', title),
+    deleteTrailer:     (title)          => ipcRenderer.invoke('delete-trailer', title),
+    searchYoutube:     (title)          => ipcRenderer.invoke('search-youtube', title),
+    downloadTrailer:   (title, videoId) => ipcRenderer.invoke('download-trailer', title, videoId),
+    onDownloadProgress:(cb)             => ipcRenderer.on('download-progress', (_, d) => cb(d)),
 
     // Misc
     getBaseDir:   () => ipcRenderer.invoke('get-basedir'),

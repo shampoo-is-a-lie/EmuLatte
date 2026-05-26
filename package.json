@@ -37,6 +37,13 @@
       "renderer.js",
       "index.html",
       "assets/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "assets/bin/linux",
+        "to": "assets/bin/linux",
+        "filter": ["**/*"]
+      }
     ]
   }
 }

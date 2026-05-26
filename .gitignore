@@ -3,3 +3,4 @@ dist/
 *.AppImage
 *.AppImage.old
 .DS_Store
+assets/bin/
