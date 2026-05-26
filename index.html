@@ -134,7 +134,33 @@
     .system-list-item .sys-name { font-weight: 900; color: var(--text_main); font-size: 13px; }
     .system-list-item .sys-meta { font-size: 11px; color: var(--text_dim); }
     #systems-list { display: flex; flex-direction: column; gap: 8px; max-height: 350px; overflow-y: auto; }
+
+    .modal-hdr { display:flex; align-items:center; justify-content:space-between; flex-shrink:0; gap:12px; margin-bottom:18px; }
+    .modal-hdr .modal-title { border:none; padding:0; margin:0; flex:1; }
+    .modal-hdr-btns { display:flex; gap:8px; align-items:center; flex-shrink:0; }
+    .btn-modal-x { width:30px; height:30px; border-radius:50%; border:1.5px solid var(--border_solid); background:rgba(0,0,0,0.35); color:var(--text_dim); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:12px; flex-shrink:0; font-family:'Raleway',sans-serif; padding:0; text-transform:none; letter-spacing:0; transition:background 0.15s, border-color 0.15s, color 0.15s; }
+    .btn-modal-x:hover { background:#c62828; border-color:#c62828; color:#fff; transform:none; box-shadow:0 0 10px rgba(198,40,40,0.35); }
+    .btn-modal-save-x { height:30px; padding:0 16px; border-radius:20px; border:1.5px solid var(--accent); background:transparent; color:var(--accent); font-size:10px; font-weight:900; letter-spacing:0.5px; cursor:pointer; font-family:'Raleway',sans-serif; white-space:nowrap; transition:background 0.15s, color 0.15s, box-shadow 0.15s; text-transform:uppercase; }
+    .btn-modal-save-x:hover { background:var(--accent); color:var(--bg); transform:none; box-shadow:0 0 12px rgba(212,163,115,0.35); }
+    .seg-ctrl { display:flex; width:100%; border:1px solid var(--border_solid); border-radius:6px; overflow:hidden; margin-top:4px; }
+    .seg-btn { flex:1; background:var(--bg_panel); color:var(--text_sec); border:none; border-right:1px solid var(--border_solid); padding:8px 0; font-size:11px; font-weight:900; cursor:pointer; transition:background 0.15s, color 0.15s; border-radius:0; font-family:'Raleway',sans-serif; letter-spacing:0; text-transform:none; }
+    .seg-btn:last-child { border-right:none; }
+    .seg-btn:hover { background:var(--border_solid); color:var(--text_main); transform:none; box-shadow:none; }
+    .seg-btn.active { background:var(--accent); color:var(--bg); }
+    #settings-search { width:100%; box-sizing:border-box; margin-bottom:4px; }
+    .theme-cat-btn { width:100%; text-align:left; padding:9px 12px; border-radius:6px; border:1px solid transparent; background:transparent; color:var(--text_sec); font-size:11px; font-weight:900; cursor:pointer; font-family:'Raleway',sans-serif; transition:0.15s; text-transform:uppercase; letter-spacing:0.5px; }
+    .theme-cat-btn:hover { border-color:var(--border_solid); background:rgba(0,0,0,0.2); transform:none; box-shadow:none; color:var(--text_main); }
+    .theme-cat-btn.active { background:var(--accent); color:var(--bg); border-color:var(--accent); }
+    .theme-swatch { cursor:pointer; border-radius:8px; border:2px solid transparent; overflow:hidden; transition:border-color 0.15s, transform 0.15s; }
+    .theme-swatch:hover { transform:scale(1.04); border-color:var(--text_main); }
+    .theme-swatch.active { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
   </style>
+  <script>
+    try {
+      const c = JSON.parse(localStorage.getItem('el_theme_cache') || 'null');
+      if (c) { const r = document.documentElement; Object.keys(c).forEach(k => r.style.setProperty(`--${k}`, c[k])); }
+    } catch(e) {}
+  </script>
 </head>
 <body>
 
@@ -309,7 +335,7 @@
             <span id="ach-ring-count" style="font-size:9px; color:var(--text_dim); line-height:1; margin-top:2px;"></span>
           </div>
         </div>
-        <button id="btn-ach-modal-close" style="background:transparent; border:1px solid var(--border_solid); color:var(--text_dim); border-radius:50%; width:30px; height:30px; cursor:pointer; font-size:14px; flex-shrink:0; display:flex; align-items:center; justify-content:center;">✕</button>
+        <button id="btn-ach-modal-close" class="btn-modal-x">✕</button>
       </div>
       <div style="display:flex; gap:6px; padding:14px 28px 0; flex-shrink:0;">
         <button class="ach-filter-btn active" data-filter="all">All</button>
@@ -345,7 +371,13 @@
   <!-- ── MODAL: ADD ROM ─────────────────────────────────────────────────────── -->
   <div id="modal-add-rom" class="modal-overlay">
     <div class="modal-box">
-      <div class="modal-title">Add ROM</div>
+      <div class="modal-hdr">
+        <div class="modal-title">Add ROM</div>
+        <div class="modal-hdr-btns">
+          <button id="btn-add-rom-confirm" class="btn-modal-save-x">Add ROM</button>
+          <button id="btn-add-rom-cancel" class="btn-modal-x">✕</button>
+        </div>
+      </div>
       <div class="form-row">
         <label>ROM File</label>
         <div class="row">
@@ -363,17 +395,18 @@
           <option value="">— Select System —</option>
         </select>
       </div>
-      <div class="row" style="justify-content:flex-end; margin-top:5px;">
-        <button id="btn-add-rom-cancel">Cancel</button>
-        <button id="btn-add-rom-confirm" class="primary">Add ROM</button>
-      </div>
     </div>
   </div>
 
   <!-- ── MODAL: SCAN FOLDER ─────────────────────────────────────────────────── -->
   <div id="modal-scan-folder" class="modal-overlay">
     <div class="modal-box wide tall">
-      <div class="modal-title">Scan ROM Folder</div>
+      <div class="modal-hdr">
+        <div class="modal-title">Scan ROM Folder</div>
+        <div class="modal-hdr-btns">
+          <button id="btn-scan-cancel" class="btn-modal-x">✕</button>
+        </div>
+      </div>
       <div class="form-row">
         <label>System</label>
         <select id="scan-system-select">
@@ -396,7 +429,6 @@
         <div style="font-size:12px; color:var(--text_dim); margin-bottom:8px;"><span id="scan-results-count">0</span> ROMs found — assign a system to each and click Import</div>
         <div id="scan-results-list"></div>
         <div class="row" style="justify-content:flex-end; margin-top:10px;">
-          <button id="btn-scan-cancel">Cancel</button>
           <button id="btn-scan-import" class="primary">Import Selected</button>
         </div>
       </div>
@@ -409,12 +441,12 @@
       <input type="hidden" id="edit-game-id">
 
       <!-- header -->
-      <div style="display:flex; align-items:center; justify-content:space-between; padding:18px 24px 14px; border-bottom:1px solid var(--border_solid); flex-shrink:0;">
-        <div style="font-size:11px; font-weight:900; color:var(--accent); letter-spacing:2px; text-transform:uppercase;">Edit ROM Details</div>
-        <div class="row" style="gap:8px;">
-          <button id="btn-edit-delete" class="danger" style="font-size:11px; padding:6px 14px;">Delete ROM</button>
-          <button id="btn-edit-cancel" style="font-size:11px; padding:6px 14px;">Cancel</button>
-          <button id="btn-edit-save" class="primary" style="font-size:11px; padding:6px 14px;">Save</button>
+      <div class="modal-hdr" style="padding:18px 24px 14px; border-bottom:1px solid var(--border_solid); margin-bottom:0;">
+        <div class="modal-title" style="font-size:11px;">Edit ROM Details</div>
+        <div class="modal-hdr-btns">
+          <button id="btn-edit-delete" class="danger" style="font-size:11px; padding:5px 14px; border-radius:20px;">Delete ROM</button>
+          <button id="btn-edit-save" class="btn-modal-save-x">Save</button>
+          <button id="btn-edit-cancel" class="btn-modal-x">✕</button>
         </div>
       </div>
 
@@ -534,7 +566,12 @@
   <!-- ── MODAL: SYSTEMS MANAGER ─────────────────────────────────────────────── -->
   <div id="modal-systems" class="modal-overlay">
     <div class="modal-box wide tall">
-      <div class="modal-title">System Manager</div>
+      <div class="modal-hdr">
+        <div class="modal-title">System Manager</div>
+        <div class="modal-hdr-btns">
+          <button id="btn-systems-close" class="btn-modal-x">✕</button>
+        </div>
+      </div>
       <div id="systems-list"></div>
       <button id="btn-add-system" class="primary" style="width:100%; margin-top:5px;">+ Add System</button>
     </div>
@@ -543,7 +580,13 @@
   <!-- ── MODAL: EDIT SYSTEM ─────────────────────────────────────────────────── -->
   <div id="modal-edit-system" class="modal-overlay">
     <div class="modal-box">
-      <div class="modal-title" id="edit-system-modal-title">Add System</div>
+      <div class="modal-hdr">
+        <div class="modal-title" id="edit-system-modal-title">Add System</div>
+        <div class="modal-hdr-btns">
+          <button id="btn-edit-system-save" class="btn-modal-save-x">Save</button>
+          <button id="btn-edit-system-cancel" class="btn-modal-x">✕</button>
+        </div>
+      </div>
       <input type="hidden" id="edit-system-id">
       <div class="form-row"><label>Name</label><input type="text" id="edit-system-name" placeholder="e.g. Super Nintendo"></div>
       <div class="form-row"><label>Short Name</label><input type="text" id="edit-system-short" placeholder="e.g. snes"></div>
@@ -577,12 +620,8 @@
           <button id="btn-browse-ss-systems" style="flex-shrink:0; white-space:nowrap;">Browse</button>
         </div>
       </div>
-      <div class="row" style="justify-content:space-between; margin-top:5px;">
+      <div style="margin-top:5px;">
         <button id="btn-edit-system-delete" class="danger" style="display:none;">Delete</button>
-        <div class="row" style="margin-left:auto;">
-          <button id="btn-edit-system-cancel">Cancel</button>
-          <button id="btn-edit-system-save" class="primary">Save</button>
-        </div>
       </div>
     </div>
   </div>
@@ -590,21 +629,32 @@
   <!-- ── MODAL: SETTINGS ────────────────────────────────────────────────────── -->
   <div id="modal-settings" class="modal-overlay">
     <div class="modal-box tall">
-      <div class="modal-title">Settings</div>
-      <div class="tool-card">
-        <div class="tool-card-title">Interface</div>
-        <div class="form-row">
-          <label>UI Scale</label>
-          <select id="settings-zoom">
-            <option value="0.8">80%</option>
-            <option value="0.9">90%</option>
-            <option value="1.0" selected>100%</option>
-            <option value="1.1">110%</option>
-            <option value="1.2">120%</option>
-          </select>
+      <div class="modal-hdr">
+        <div class="modal-title">Settings</div>
+        <div class="modal-hdr-btns">
+          <button id="btn-settings-save" class="btn-modal-save-x">Save</button>
+          <button id="btn-settings-cancel" class="btn-modal-x">✕</button>
         </div>
       </div>
-      <div class="tool-card">
+      <input type="text" id="settings-search" placeholder="Search settings…">
+      <div class="tool-card" data-search="appearance theme color palette ui scale zoom interface">
+        <div class="tool-card-title">Appearance</div>
+        <div class="form-row">
+          <label>Color Theme</label>
+          <button id="btn-theme-switch" style="width:100%;">Choose Theme</button>
+        </div>
+        <div class="form-row">
+          <label>UI Scale</label>
+          <div class="seg-ctrl">
+            <button class="seg-btn zoom-btn" data-val="0.5">50%</button>
+            <button class="seg-btn zoom-btn" data-val="0.75">75%</button>
+            <button class="seg-btn zoom-btn active" data-val="1.0">100%</button>
+            <button class="seg-btn zoom-btn" data-val="1.25">125%</button>
+            <button class="seg-btn zoom-btn" data-val="1.5">150%</button>
+          </div>
+        </div>
+      </div>
+      <div class="tool-card" data-search="screenscraper credentials username password art scraper">
         <div class="tool-card-title">ScreenScraper.fr</div>
         <div class="form-row"><label>Username</label><input type="text" id="settings-ss-user" placeholder="Your ScreenScraper username"></div>
         <div class="form-row"><label>Password</label><input type="password" id="settings-ss-pass" placeholder="Your ScreenScraper password"></div>
@@ -612,7 +662,7 @@
         <div id="settings-ss-status" style="font-size:11px; color:var(--text_dim); margin-top:4px;"></div>
         <div class="hint">Register free at screenscraper.fr — used for metadata &amp; artwork scraping.</div>
       </div>
-      <div class="tool-card">
+      <div class="tool-card" data-search="retroarch detect cores emulator system">
         <div class="tool-card-title">RetroArch</div>
         <div id="settings-retroarch-status" style="font-size:11px; color:var(--text_dim); margin-bottom:10px;"></div>
         <div class="row" style="margin-bottom:8px;">
@@ -622,7 +672,7 @@
         <div id="settings-cores-status" style="font-size:11px; color:var(--text_dim);"></div>
         <div class="hint">Scans ~/.config/retroarch/cores and the Flatpak location for installed cores.</div>
       </div>
-      <div class="tool-card">
+      <div class="tool-card" data-search="retroachievements ra achievements unlock account api key">
         <div class="tool-card-title">RetroAchievements</div>
         <div class="form-row"><label>Username</label><input type="text" id="settings-ra-user" placeholder="Your RetroAchievements username"></div>
         <div class="form-row"><label>API Key</label><input type="password" id="settings-ra-key" placeholder="From retroachievements.org/settings"></div>
@@ -630,7 +680,7 @@
         <div id="settings-ra-status" style="font-size:11px; color:var(--text_dim); margin-top:4px;"></div>
         <div class="hint">Free account at retroachievements.org — API key in your profile settings.</div>
       </div>
-      <div class="tool-card" style="flex-direction:row; align-items:center; justify-content:space-between; gap:12px;">
+      <div class="tool-card" style="flex-direction:row; align-items:center; justify-content:space-between; gap:12px;" data-search="cngm sync import credentials igdb steamgriddb">
         <div>
           <div class="tool-card-title" style="border:none; padding:0; margin:0;">CNGM Sync</div>
           <div class="hint" style="margin:0;">Import IGDB &amp; SteamGridDB credentials from your CNGM installation.</div>
@@ -638,7 +688,7 @@
         <button id="btn-import-cngm-creds" style="flex-shrink:0;">Import from CNGM</button>
       </div>
       <div id="settings-cngm-import-status" style="font-size:11px; color:var(--text_dim); margin-top:-8px; display:none;"></div>
-      <div class="tool-card">
+      <div class="tool-card" data-search="igdb metadata art twitch client api credentials">
         <div class="tool-card-title">IGDB</div>
         <div class="form-row"><label>Client ID</label><input type="text" id="settings-igdb-client-id" placeholder="Twitch / IGDB Client ID"></div>
         <div class="form-row"><label>Client Secret</label><input type="password" id="settings-igdb-client-secret" placeholder="Twitch / IGDB Client Secret"></div>
@@ -646,32 +696,28 @@
         <div id="settings-igdb-status" style="font-size:11px; color:var(--text_dim); margin-top:4px;"></div>
         <div class="hint">Register at api.igdb.com — metadata &amp; artwork scraper.</div>
       </div>
-      <div class="tool-card">
+      <div class="tool-card" data-search="thegamesdb tgdb retro boxart metadata api key">
         <div class="tool-card-title">TheGamesDB</div>
         <div class="form-row"><label>API Key</label><input type="password" id="settings-tgdb-key" placeholder="Your TheGamesDB API key"></div>
         <button id="btn-test-tgdb" style="width:100%;">Test Key</button>
         <div id="settings-tgdb-status" style="font-size:11px; color:var(--text_dim); margin-top:4px;"></div>
         <div class="hint">Free key at thegamesdb.net — metadata &amp; artwork scraper, good for retro consoles.</div>
       </div>
-      <div class="tool-card">
+      <div class="tool-card" data-search="steamgriddb sgdb art covers heroes logos api key">
         <div class="tool-card-title">SteamGridDB</div>
         <div class="form-row"><label>API Key</label><input type="password" id="settings-sgdb-key" placeholder="Your SteamGridDB API key"></div>
         <button id="btn-test-sgdb" style="width:100%;">Test Key</button>
         <div id="settings-sgdb-status" style="font-size:11px; color:var(--text_dim); margin-top:4px;"></div>
         <div class="hint">Free key at steamgriddb.com — artwork only (covers, heroes, logos).</div>
       </div>
-      <div class="tool-card">
+      <div class="tool-card" data-search="emulators scan install assign system">
         <div class="tool-card-title">Emulators</div>
         <button id="btn-add-emulator" style="width:100%;">Add Emulators</button>
         <div class="hint">Scan installed emulators and assign them to systems or create new ones.</div>
       </div>
-      <div class="tool-card">
+      <div class="tool-card" data-search="data folder database config directory open">
         <div class="tool-card-title">Data</div>
         <button id="btn-settings-open-data-dir" style="width:100%;">Open Data Folder</button>
-      </div>
-      <div class="row" style="justify-content:flex-end; margin-top:5px;">
-        <button id="btn-settings-cancel">Cancel</button>
-        <button id="btn-settings-save" class="primary">Save</button>
       </div>
     </div>
   </div>
@@ -679,7 +725,12 @@
   <!-- ── MODAL: ADD EMULATOR ──────────────────────────────────────────────── -->
   <div id="modal-add-emulator" class="modal-overlay">
     <div class="modal-box wide tall">
-      <div class="modal-title">Add Emulator</div>
+      <div class="modal-hdr">
+        <div class="modal-title">Add Emulator</div>
+        <div class="modal-hdr-btns">
+          <button id="btn-add-emulator-cancel" class="btn-modal-x">✕</button>
+        </div>
+      </div>
 
       <!-- Step 1: pick an emulator -->
       <div id="add-emulator-step1">
@@ -724,19 +775,22 @@
         <button id="btn-emulator-back" style="width:100%; margin-top:4px;">← Back</button>
       </div>
 
-      <button id="btn-add-emulator-cancel" style="width:100%; margin-top:10px;">Cancel</button>
     </div>
   </div>
 
   <!-- ── MODAL: SYSTEM PRESET PICKER ──────────────────────────────────────── -->
   <div id="modal-system-presets" class="modal-overlay">
     <div class="modal-box wide tall">
-      <div class="modal-title">Add System — Choose a Preset</div>
+      <div class="modal-hdr">
+        <div class="modal-title">Add System — Choose a Preset</div>
+        <div class="modal-hdr-btns">
+          <button id="btn-preset-cancel" class="btn-modal-x">✕</button>
+        </div>
+      </div>
       <input type="text" id="preset-search" placeholder="Search systems…">
       <div id="preset-list" style="display:flex; flex-direction:column; gap:5px; max-height:420px; overflow-y:auto; margin-top:4px;"></div>
-      <div class="row" style="justify-content:space-between; margin-top:10px;">
+      <div style="margin-top:10px;">
         <button id="btn-preset-custom">Start from Scratch</button>
-        <button id="btn-preset-cancel">Cancel</button>
       </div>
     </div>
   </div>
@@ -744,14 +798,16 @@
   <!-- ── MODAL: CREATE PLAYLIST ────────────────────────────────────────────── -->
   <div id="modal-create-playlist" class="modal-overlay">
     <div class="modal-box" style="width:380px;">
-      <div class="modal-title">New Playlist</div>
+      <div class="modal-hdr">
+        <div class="modal-title">New Playlist</div>
+        <div class="modal-hdr-btns">
+          <button id="btn-create-playlist-confirm" class="btn-modal-save-x">Create</button>
+          <button id="btn-create-playlist-cancel" class="btn-modal-x">✕</button>
+        </div>
+      </div>
       <div class="form-row">
         <label>Name</label>
         <input type="text" id="new-playlist-name" placeholder="e.g. Saturday Morning Games">
-      </div>
-      <div class="row" style="justify-content:flex-end; margin-top:10px;">
-        <button id="btn-create-playlist-cancel">Cancel</button>
-        <button id="btn-create-playlist-confirm" class="primary">Create</button>
       </div>
     </div>
   </div>
@@ -759,18 +815,20 @@
   <!-- ── MODAL: EDIT PLAYLIST ───────────────────────────────────────────────── -->
   <div id="modal-edit-playlist" class="modal-overlay">
     <div class="modal-box" style="width:380px;">
-      <div class="modal-title">Edit Playlist</div>
+      <div class="modal-hdr">
+        <div class="modal-title">Edit Playlist</div>
+        <div class="modal-hdr-btns">
+          <button id="btn-edit-playlist-save" class="btn-modal-save-x">Save</button>
+          <button id="btn-edit-playlist-cancel" class="btn-modal-x">✕</button>
+        </div>
+      </div>
       <input type="hidden" id="edit-playlist-id">
       <div class="form-row">
         <label>Name</label>
         <input type="text" id="edit-playlist-name">
       </div>
-      <div class="row" style="justify-content:space-between; margin-top:10px;">
+      <div style="margin-top:10px;">
         <button id="btn-edit-playlist-delete" class="danger">Delete</button>
-        <div class="row">
-          <button id="btn-edit-playlist-cancel">Cancel</button>
-          <button id="btn-edit-playlist-save" class="primary">Save</button>
-        </div>
       </div>
     </div>
   </div>
@@ -778,32 +836,38 @@
   <!-- ── MODAL: ADD TO PLAYLIST ─────────────────────────────────────────────── -->
   <div id="modal-add-to-playlist" class="modal-overlay">
     <div class="modal-box">
-      <div class="modal-title">Add to Playlist</div>
-      <div id="playlist-picker-list" style="display:flex; flex-direction:column; gap:8px; max-height:350px; overflow-y:auto;"></div>
-      <div class="row" style="justify-content:flex-end; margin-top:10px;">
-        <button id="btn-playlist-picker-close">Close</button>
+      <div class="modal-hdr">
+        <div class="modal-title">Add to Playlist</div>
+        <div class="modal-hdr-btns">
+          <button id="btn-playlist-picker-close" class="btn-modal-x">✕</button>
+        </div>
       </div>
+      <div id="playlist-picker-list" style="display:flex; flex-direction:column; gap:8px; max-height:350px; overflow-y:auto;"></div>
     </div>
   </div>
 
   <!-- ── MODAL: SCREENSCRAPER SYSTEM BROWSER ──────────────────────────────── -->
   <div id="modal-ss-systems" class="modal-overlay" style="z-index:150;">
     <div class="modal-box wide tall">
-      <div class="modal-title">ScreenScraper Systems</div>
+      <div class="modal-hdr">
+        <div class="modal-title">ScreenScraper Systems</div>
+        <div class="modal-hdr-btns">
+          <button id="btn-ss-systems-cancel" class="btn-modal-x">✕</button>
+        </div>
+      </div>
       <input type="text" id="ss-systems-search" placeholder="Search by name or ID…">
       <div id="ss-systems-list" style="display:flex; flex-direction:column; gap:6px; max-height:400px; overflow-y:auto; margin-top:4px;"></div>
-      <div class="row" style="justify-content:flex-end; margin-top:8px;">
-        <button id="btn-ss-systems-cancel">Cancel</button>
-      </div>
     </div>
   </div>
 
   <!-- ── MODAL: ART PICKER (SGDB) ─────────────────────────────────────────── -->
   <div id="modal-art-picker" class="modal-overlay" style="z-index:200;">
     <div class="modal-box" style="width:min(840px,95vw); max-height:88vh; display:flex; flex-direction:column; gap:10px;">
-      <div style="display:flex; align-items:center; justify-content:space-between;">
+      <div class="modal-hdr">
         <div class="modal-title" id="art-picker-title" style="border:none; padding:0; margin:0;">Select Artwork</div>
-        <button id="btn-art-picker-close">Close</button>
+        <div class="modal-hdr-btns">
+          <button id="btn-art-picker-close" class="btn-modal-x">✕</button>
+        </div>
       </div>
       <div style="display:flex; gap:8px;">
         <input type="text" id="art-picker-search" placeholder="Search for a different title…" style="flex:1;">
@@ -817,7 +881,12 @@
   <!-- ── MODAL: SCRAPER PICKER ────────────────────────────────────────────── -->
   <div id="modal-scraper-picker" class="modal-overlay">
     <div class="modal-box" style="width:420px;">
-      <div class="modal-title">Scrape With</div>
+      <div class="modal-hdr">
+        <div class="modal-title">Scrape With</div>
+        <div class="modal-hdr-btns">
+          <button id="btn-scraper-picker-cancel" class="btn-modal-x">✕</button>
+        </div>
+      </div>
       <div style="display:flex; flex-direction:column; gap:10px;">
         <button id="btn-scrape-with-ss"   class="scraper-pick-btn">
           <span class="scraper-pick-name">ScreenScraper.fr</span>
@@ -837,23 +906,41 @@
         </button>
       </div>
       <div id="scraper-picker-status" style="font-size:11px; color:var(--text_dim); min-height:16px;"></div>
-      <div style="display:flex; justify-content:flex-end;">
-        <button id="btn-scraper-picker-cancel">Cancel</button>
-      </div>
     </div>
   </div>
 
   <!-- ── MODAL: TRAILER SEARCH ─────────────────────────────────────────────── -->
   <div id="modal-trailer-search" class="modal-overlay">
     <div class="modal-box" style="width:min(800px,95vw); max-height:80vh; display:flex; flex-direction:column; gap:12px;">
-      <div class="modal-title">Select Trailer to Download</div>
+      <div class="modal-hdr">
+        <div class="modal-title">Select Trailer to Download</div>
+        <div class="modal-hdr-btns">
+          <button id="btn-close-yt-search" class="btn-modal-x">✕</button>
+        </div>
+      </div>
       <div style="display:flex; gap:8px;">
         <input type="text" id="yt-search-input" placeholder="Search YouTube…" style="flex:1;">
         <button id="btn-yt-search" class="primary" style="padding:8px 16px; font-size:11px;">Search</button>
       </div>
       <div id="yt-search-status" style="color:var(--text_dim); font-size:12px; font-weight:bold; min-height:14px;"></div>
       <div id="yt-search-list" style="display:flex; flex-direction:column; gap:10px; overflow-y:auto; flex:1; padding:4px;"></div>
-      <button id="btn-close-yt-search">Cancel</button>
+    </div>
+  </div>
+
+  <!-- ── MODAL: THEMES ─────────────────────────────────────────────────────── -->
+  <div id="modal-themes" class="modal-overlay" style="z-index:200;">
+    <div class="modal-box" style="width:min(820px,95vw); max-height:90vh; display:flex; flex-direction:column; gap:0; padding:0; overflow:hidden;">
+      <div class="modal-hdr" style="padding:20px 24px 16px; border-bottom:1px solid var(--border_solid); margin-bottom:0; flex-shrink:0;">
+        <div class="modal-title" style="border:none; padding:0; margin:0;">Choose Theme</div>
+        <div class="modal-hdr-btns">
+          <button id="btn-theme-back" class="btn-modal-save-x" style="display:none;">← Back</button>
+          <button id="btn-close-themes" class="btn-modal-x">✕</button>
+        </div>
+      </div>
+      <div style="display:flex; flex:1; overflow:hidden;">
+        <div id="theme-cats" style="width:200px; flex-shrink:0; border-right:1px solid var(--border_solid); overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:4px;"></div>
+        <div id="theme-grid" style="flex:1; overflow-y:auto; padding:16px; display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; align-content:start;"></div>
+      </div>
     </div>
   </div>
 
@@ -872,8 +959,13 @@
   <!-- ── MODAL: TRAILER PLAYER ─────────────────────────────────────────────── -->
   <div id="modal-trailer-player" class="modal-overlay" style="z-index:110;">
     <div class="modal-box" style="width:min(900px,95vw); padding:15px; background:#000; border:2px solid var(--accent);">
+      <div class="modal-hdr" style="margin-bottom:12px;">
+        <div class="modal-title" style="border:none; padding:0; margin:0; color:var(--accent);">Trailer</div>
+        <div class="modal-hdr-btns">
+          <button id="btn-close-player" class="btn-modal-x">✕</button>
+        </div>
+      </div>
       <video id="detail-video-player" controls style="width:100%; border-radius:8px;"></video>
-      <button id="btn-close-player" style="margin-top:15px;">Close Player</button>
     </div>
   </div>
 

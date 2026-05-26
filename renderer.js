@@ -30,6 +30,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     await loadCores();
     await loadSystemPresets();
     retroarchVariant = await window.api.getSetting('retroarch_variant') || 'none';
+    const savedTheme = await window.api.getSetting('el_theme') || 'CREMA';
+    applyTheme(savedTheme, false);
     wireUI();
     updateTemplateButtonLabels();
     wireScrapeProgress();
@@ -849,6 +851,151 @@ async function setFilter(filter) {
     startHeroCycle();
 }
 
+// ── THEME SYSTEM ──────────────────────────────────────────────────────────────
+let _activeTheme = 'CREMA';
+
+const EL_THEMES = {
+    "DARK GRAY": {bg:"#141414",bg_panel:"rgba(0,0,0,0.5)",bg_menu:"#222222",accent:"#ffffff",text_main:"#ffffff",text_sec:"#bbbbbb",text_dim:"#777777",border:"rgba(255,255,255,0.1)",border_solid:"#555555"},
+    "CREMA": {bg:"#2C1E16",bg_panel:"rgba(67, 40, 24, 0.6)",bg_menu:"#432818",accent:"#D4A373",text_main:"#FFE6A7",text_sec:"#E6CC98",text_dim:"#A47148",border:"rgba(212, 163, 115, 0.2)",border_solid:"#8B5A2B"},
+    "CYBERPUNK": {bg:"#09090b",bg_panel:"rgba(26, 26, 46, 0.7)",bg_menu:"#1a1a2e",accent:"#f3e600",text_main:"#00ffcc",text_sec:"#e0e0e0",text_dim:"#ff003c",border:"rgba(243, 230, 0, 0.2)",border_solid:"#ff003c"},
+    "VAPOUR OS": {bg:"#171a21",bg_panel:"rgba(27, 40, 56, 0.7)",bg_menu:"#1b2838",accent:"#66c0f4",text_main:"#c7d5e0",text_sec:"#8f98a0",text_dim:"#556b82",border:"rgba(102, 192, 244, 0.2)",border_solid:"#2a475e"},
+    "PSIV BLUE": {bg:"#000022",bg_panel:"rgba(0, 67, 156, 0.4)",bg_menu:"#001144",accent:"#ffffff",text_main:"#ffffff",text_sec:"#aaaaaa",text_dim:"#666666",border:"rgba(0, 112, 204, 0.3)",border_solid:"#00439c"},
+    "GREEN BOX": {bg:"#0e0e0e",bg_panel:"rgba(82, 176, 67, 0.10)",bg_menu:"#111111",accent:"#52b043",text_main:"#ffffff",text_sec:"#a8d8a4",text_dim:"#3d8030",border:"rgba(82, 176, 67, 0.22)",border_solid:"#1a3d1a"},
+    "MOVIESFLIX": {bg:"#141414",bg_panel:"rgba(255, 255, 255, 0.07)",bg_menu:"#000000",accent:"#e50914",text_main:"#ffffff",text_sec:"#b3b3b3",text_dim:"#6d6d6d",border:"rgba(229, 9, 20, 0.30)",border_solid:"#404040"},
+    "SNOW": {bg:"#0a1628",bg_panel:"rgba(32, 68, 110, 0.65)",bg_menu:"#0f2040",accent:"#93d0f0",text_main:"#e8f4ff",text_sec:"#8bbbd8",text_dim:"#4a7898",border:"rgba(147, 208, 240, 0.18)",border_solid:"#1c4060"},
+    "WIN XP": {bg:"#003399",bg_panel:"rgba(236, 233, 216, 0.2)",bg_menu:"#0054E3",accent:"#ffd700",text_main:"#FFFFFF",text_sec:"#ECE9D8",text_dim:"#99B4D1",border:"rgba(236, 233, 216, 0.4)",border_solid:"#4fcc3a"},
+    "PSIII CLASSIC": {bg:"#000000",bg_panel:"rgba(25, 25, 25, 0.7)",bg_menu:"#111111",accent:"#dcdcdc",text_main:"#ffffff",text_sec:"#aaaaaa",text_dim:"#666666",border:"rgba(255, 255, 255, 0.2)",border_solid:"#444444"},
+    "PSIII RED": {bg:"#2b0000",bg_panel:"rgba(40, 0, 0, 0.7)",bg_menu:"#1a0000",accent:"#ff4d4d",text_main:"#ffffff",text_sec:"#ffcccc",text_dim:"#cc6666",border:"rgba(255, 77, 77, 0.2)",border_solid:"#800000"},
+    "PSIII GREEN": {bg:"#001a00",bg_panel:"rgba(0, 30, 0, 0.7)",bg_menu:"#000d00",accent:"#4dff4d",text_main:"#ffffff",text_sec:"#ccffcc",text_dim:"#66cc66",border:"rgba(77, 255, 77, 0.2)",border_solid:"#004d00"},
+    "PSIII BLUE": {bg:"#000a1a",bg_panel:"rgba(0, 15, 30, 0.7)",bg_menu:"#00050d",accent:"#4d94ff",text_main:"#ffffff",text_sec:"#cce0ff",text_dim:"#66a3ff",border:"rgba(77, 148, 255, 0.2)",border_solid:"#003380"},
+    "PSIII PURPLE": {bg:"#1a001a",bg_panel:"rgba(30, 0, 30, 0.7)",bg_menu:"#0d000d",accent:"#d24dff",text_main:"#ffffff",text_sec:"#f0ccff",text_dim:"#c266cc",border:"rgba(210, 77, 255, 0.2)",border_solid:"#800080"},
+    "PSIII GOLD": {bg:"#261a00",bg_panel:"rgba(40, 25, 0, 0.7)",bg_menu:"#130d00",accent:"#ffcc00",text_main:"#ffffff",text_sec:"#ffeecc",text_dim:"#cca300",border:"rgba(255, 204, 0, 0.2)",border_solid:"#997300"},
+    "PSIII SILVER": {bg:"#1a1a1a",bg_panel:"rgba(35, 35, 35, 0.7)",bg_menu:"#0d0d0d",accent:"#cccccc",text_main:"#ffffff",text_sec:"#e6e6e6",text_dim:"#999999",border:"rgba(204, 204, 204, 0.2)",border_solid:"#666666"},
+    "DRACULA": {bg:"#282a36",bg_panel:"rgba(68, 71, 90, 0.7)",bg_menu:"#44475a",accent:"#bd93f9",text_main:"#f8f8f2",text_sec:"#8be9fd",text_dim:"#8290bc",border:"rgba(189, 147, 249, 0.2)",border_solid:"#8290bc"},
+    "GRUVBOX": {bg:"#282828",bg_panel:"rgba(60, 56, 54, 0.8)",bg_menu:"#3c3836",accent:"#fabd2f",text_main:"#ebdbb2",text_sec:"#b8bb26",text_dim:"#a89984",border:"rgba(250, 189, 47, 0.2)",border_solid:"#504945"},
+    "NORD": {bg:"#2e3440",bg_panel:"rgba(59, 66, 82, 0.8)",bg_menu:"#3b4252",accent:"#88c0d0",text_main:"#eceff4",text_sec:"#e5e9f0",text_dim:"#7a8ba0",border:"rgba(136, 192, 208, 0.2)",border_solid:"#5e6f84"},
+    "SOLARIZED DARK": {bg:"#002b36",bg_panel:"rgba(7, 54, 66, 0.8)",bg_menu:"#073642",accent:"#2aa198",text_main:"#839496",text_sec:"#93a1a1",text_dim:"#7a9196",border:"rgba(42, 161, 152, 0.2)",border_solid:"#1a5060"},
+    "CATPPUCCIN MOCHA": {bg:"#1e1e2e",bg_panel:"rgba(30, 30, 46, 0.8)",bg_menu:"#181825",accent:"#cba6f7",text_main:"#cdd6f4",text_sec:"#bac2de",text_dim:"#6c7086",border:"rgba(203, 166, 247, 0.2)",border_solid:"#313244"},
+    "CATPPUCCIN MACCHIATO": {bg:"#24273a",bg_panel:"rgba(36, 39, 58, 0.8)",bg_menu:"#1e2030",accent:"#c6a0f6",text_main:"#cad3f5",text_sec:"#b8c0e0",text_dim:"#6e738d",border:"rgba(198, 160, 246, 0.2)",border_solid:"#363a4f"},
+    "CATPPUCCIN FRAPPÉ": {bg:"#303446",bg_panel:"rgba(48, 52, 70, 0.8)",bg_menu:"#292c3c",accent:"#ca9ee6",text_main:"#c6d0f5",text_sec:"#b5bfe2",text_dim:"#737994",border:"rgba(202, 158, 230, 0.2)",border_solid:"#414559"},
+    "TOKYO NIGHT": {bg:"#1a1b26",bg_panel:"rgba(36, 40, 59, 0.8)",bg_menu:"#16161e",accent:"#7aa2f7",text_main:"#c0caf5",text_sec:"#a9b1d6",text_dim:"#7885ac",border:"rgba(122, 162, 247, 0.2)",border_solid:"#3d4468"},
+    "EVERFOREST": {bg:"#2b3339",bg_panel:"rgba(50, 56, 62, 0.8)",bg_menu:"#2f383e",accent:"#a7c080",text_main:"#d3c6aa",text_sec:"#a7c080",text_dim:"#859289",border:"rgba(167, 192, 128, 0.2)",border_solid:"#4b565c"},
+    "ROSÉ PINE": {bg:"#191724",bg_panel:"rgba(31, 29, 46, 0.8)",bg_menu:"#1f1d2e",accent:"#c4a7e7",text_main:"#e0def4",text_sec:"#9ccfd8",text_dim:"#6e6a86",border:"rgba(196, 167, 231, 0.2)",border_solid:"#26233a"},
+    "GAME BOY DMG": {bg:"#0f380f",bg_panel:"rgba(48, 98, 48, 0.70)",bg_menu:"#1a4a1a",accent:"#9bbc0f",text_main:"#9bbc0f",text_sec:"#8bac0f",text_dim:"#306230",border:"rgba(155, 188, 15, 0.25)",border_solid:"#306230"},
+    "PIP BOY": {bg:"#000000",bg_panel:"rgba(0, 20, 0, 0.7)",bg_menu:"#001100",accent:"#14ff00",text_main:"#14ff00",text_sec:"#0ea000",text_dim:"#0a6000",border:"rgba(20, 255, 0, 0.2)",border_solid:"#0ea000"},
+    "SEVASTOPOL": {bg:"#050d05",bg_panel:"rgba(10, 25, 10, 0.7)",bg_menu:"#081808",accent:"#f5e6b3",text_main:"#f5e6b3",text_sec:"#a39977",text_dim:"#4d594d",border:"rgba(245, 230, 179, 0.1)",border_solid:"#1a331a"},
+    "RIP AND TEAR CLASSIC": {bg:"#110000",bg_panel:"rgba(80, 5, 5, 0.78)",bg_menu:"#1a0000",accent:"#ff0000",text_main:"#f5d020",text_sec:"#d0a000",text_dim:"#7a4400",border:"rgba(255, 0, 0, 0.22)",border_solid:"#5a0000"},
+    "SUPER BROTHERS": {bg:"#5C94FC",bg_panel:"rgba(0, 0, 0, 0.75)",bg_menu:"#000070",accent:"#F8D820",text_main:"#ffffff",text_sec:"#F8D820",text_dim:"#6898F8",border:"rgba(248, 216, 32, 0.30)",border_solid:"#000000"},
+    "GREEN HILL": {bg:"#0044AA",bg_panel:"rgba(0, 60, 0, 0.82)",bg_menu:"#003300",accent:"#F8D020",text_main:"#ffffff",text_sec:"#A8E888",text_dim:"#50A050",border:"rgba(248, 208, 32, 0.30)",border_solid:"#006600"},
+    "NES": {bg:"#18181A",bg_panel:"rgba(40, 38, 42, 0.85)",bg_menu:"#222024",accent:"#C42020",text_main:"#F0F0F0",text_sec:"#C0B8C0",text_dim:"#706870",border:"rgba(196, 32, 32, 0.22)",border_solid:"#3C3A3E"},
+    "SNES": {bg:"#1E1828",bg_panel:"rgba(50, 42, 80, 0.72)",bg_menu:"#160E20",accent:"#8060C8",text_main:"#E8E0F0",text_sec:"#A890C8",text_dim:"#605090",border:"rgba(128, 96, 200, 0.22)",border_solid:"#302050"},
+    "BLOODBORNE": {bg:"#0a0606",bg_panel:"rgba(60, 20, 10, 0.78)",bg_menu:"#150808",accent:"#c0952a",text_main:"#e8d8b0",text_sec:"#b09070",text_dim:"#604830",border:"rgba(192, 149, 42, 0.22)",border_solid:"#4a1818"},
+    "METROID PRIME": {bg:"#050a12",bg_panel:"rgba(255, 120, 20, 0.12)",bg_menu:"#080f1a",accent:"#ff6a00",text_main:"#e0f0ff",text_sec:"#60c8e0",text_dim:"#304858",border:"rgba(255, 106, 0, 0.22)",border_solid:"#1a2a3a"},
+    "SILENT HILL": {bg:"#141210",bg_panel:"rgba(80, 50, 35, 0.72)",bg_menu:"#1a1510",accent:"#c85020",text_main:"#e0d0c0",text_sec:"#a09080",text_dim:"#605040",border:"rgba(200, 80, 32, 0.22)",border_solid:"#4a3020"},
+    "DIABLO": {bg:"#0c0808",bg_panel:"rgba(80, 20, 0, 0.75)",bg_menu:"#140808",accent:"#e84000",text_main:"#f0d898",text_sec:"#c0a060",text_dim:"#705028",border:"rgba(232, 64, 0, 0.22)",border_solid:"#4a1a00"},
+    "HALF-LIFE": {bg:"#141618",bg_panel:"rgba(245, 130, 32, 0.12)",bg_menu:"#1c1e20",accent:"#f58320",text_main:"#f0f0f0",text_sec:"#b0b8c0",text_dim:"#606870",border:"rgba(245, 131, 32, 0.22)",border_solid:"#2a3038"},
+    "SHOVEL KNIGHT": {bg:"#1a1a2e",bg_panel:"rgba(30, 40, 80, 0.75)",bg_menu:"#100c20",accent:"#f8d840",text_main:"#e8f0ff",text_sec:"#88b8f8",text_dim:"#4060a0",border:"rgba(248, 216, 64, 0.28)",border_solid:"#202858"},
+    "EARTHY & ORGANIC": {bg:"#3E4E3A",bg_panel:"rgba(91, 107, 85, 0.7)",bg_menu:"#4F5D48",accent:"#D4B28C",text_main:"#F3EDE4",text_sec:"#D8D3C8",text_dim:"#8E9E88",border:"rgba(212, 178, 140, 0.2)",border_solid:"#6b7d63"},
+    "DOPAMINE BRIGHTS": {bg:"#080810",bg_panel:"rgba(255, 50, 120, 0.12)",bg_menu:"#100820",accent:"#FF2D78",text_main:"#ffffff",text_sec:"#FF80C0",text_dim:"#6030A0",border:"rgba(255, 45, 120, 0.28)",border_solid:"#2A0850"},
+    "RETRO REVIVAL": {bg:"#2A1A10",bg_panel:"rgba(80, 50, 30, 0.70)",bg_menu:"#1E1008",accent:"#E8883A",text_main:"#F8E8C8",text_sec:"#C8A878",text_dim:"#7A5838",border:"rgba(232, 136, 58, 0.22)",border_solid:"#5A3820"},
+    "VAPORWAVE": {bg:"#0d0221",bg_panel:"rgba(80, 10, 100, 0.65)",bg_menu:"#150330",accent:"#ff71ce",text_main:"#f0e0ff",text_sec:"#c080ff",text_dim:"#6030a0",border:"rgba(255, 113, 206, 0.25)",border_solid:"#35005a"},
+    "AURORA": {bg:"#0a1520",bg_panel:"rgba(0, 80, 80, 0.55)",bg_menu:"#081018",accent:"#00e8c8",text_main:"#d0f8f0",text_sec:"#78d8c8",text_dim:"#306858",border:"rgba(0, 232, 200, 0.20)",border_solid:"#0a4040"},
+    "NOIR": {bg:"#0a0a0a",bg_panel:"rgba(45, 45, 45, 0.78)",bg_menu:"#151515",accent:"#d4a030",text_main:"#e8e0d0",text_sec:"#a09888",text_dim:"#606058",border:"rgba(212, 160, 48, 0.20)",border_solid:"#303028"},
+    "BIOLUMINESCENCE": {bg:"#020810",bg_panel:"rgba(0, 120, 120, 0.42)",bg_menu:"#030c18",accent:"#00e8a8",text_main:"#c0f8f0",text_sec:"#60d8c8",text_dim:"#206858",border:"rgba(0, 232, 168, 0.22)",border_solid:"#0a3838"},
+    "BRUTALIST": {bg:"#1a1a1a",bg_panel:"rgba(80, 80, 80, 0.55)",bg_menu:"#222222",accent:"#e03000",text_main:"#f0f0f0",text_sec:"#c0c0c0",text_dim:"#808080",border:"rgba(224, 48, 0, 0.25)",border_solid:"#404040"},
+    "OXOCARBON": {bg:"#161616",bg_panel:"rgba(38, 38, 38, 0.85)",bg_menu:"#262626",accent:"#0f62fe",text_main:"#f4f4f4",text_sec:"#c6c6c6",text_dim:"#8d8d8d",border:"rgba(15, 98, 254, 0.25)",border_solid:"#393939"},
+    "MATERIAL DARK": {bg:"#1a1c1e",bg_panel:"rgba(40, 48, 56, 0.80)",bg_menu:"#212325",accent:"#4fc3f7",text_main:"#e1e2e8",text_sec:"#c1c2cb",text_dim:"#8589a0",border:"rgba(79, 195, 247, 0.18)",border_solid:"#3a3f4a"},
+    "N7": {bg:"#080c14",bg_panel:"rgba(20, 30, 60, 0.78)",bg_menu:"#0c1428",accent:"#cc0000",text_main:"#e8eeff",text_sec:"#7aa0cc",text_dim:"#3d5880",border:"rgba(204, 0, 0, 0.25)",border_solid:"#1a2848"},
+    "TRON LEGACY": {bg:"#000000",bg_panel:"rgba(0, 200, 255, 0.08)",bg_menu:"#000508",accent:"#00c8ff",text_main:"#ffffff",text_sec:"#80d8ff",text_dim:"#204858",border:"rgba(0, 200, 255, 0.28)",border_solid:"#0a1a20"},
+    "DEAD SPACE": {bg:"#020202",bg_panel:"rgba(255, 100, 20, 0.10)",bg_menu:"#050505",accent:"#ff6400",text_main:"#f0f0f0",text_sec:"#ff9060",text_dim:"#602010",border:"rgba(255, 100, 32, 0.25)",border_solid:"#200800"},
+    "COLONY SHIP": {bg:"#10120e",bg_panel:"rgba(50, 60, 40, 0.72)",bg_menu:"#141810",accent:"#c8b040",text_main:"#d8e0c0",text_sec:"#909a70",text_dim:"#485840",border:"rgba(200, 176, 64, 0.22)",border_solid:"#303820"},
+    "NECROMORPH": {bg:"#030808",bg_panel:"rgba(0, 80, 20, 0.60)",bg_menu:"#040a04",accent:"#80ff20",text_main:"#c8ffc0",text_sec:"#70c060",text_dim:"#306020",border:"rgba(128, 255, 32, 0.22)",border_solid:"#0a2808"},
+    "CRIMSON PEAK": {bg:"#120508",bg_panel:"rgba(80, 15, 30, 0.75)",bg_menu:"#1a080c",accent:"#d4904a",text_main:"#f0e0d8",text_sec:"#c0909a",text_dim:"#7a3848",border:"rgba(212, 144, 74, 0.22)",border_solid:"#5a1520"},
+    "LAKESIDE CURSE": {bg:"#0c0a08",bg_panel:"rgba(60, 40, 20, 0.72)",bg_menu:"#141008",accent:"#e09030",text_main:"#f0e8d0",text_sec:"#b09070",text_dim:"#706050",border:"rgba(224, 144, 48, 0.22)",border_solid:"#402808"},
+    "THE BACKROOMS": {bg:"#1a1810",bg_panel:"rgba(220, 200, 100, 0.10)",bg_menu:"#201e14",accent:"#d4c840",text_main:"#f0e8c8",text_sec:"#b0a870",text_dim:"#706840",border:"rgba(212, 200, 64, 0.22)",border_solid:"#3a3820"}
+};
+
+const EL_THEME_CATEGORIES = {
+    "Originals & System": ["DARK GRAY","CREMA","CYBERPUNK","SNOW","MOVIESFLIX","VAPOUR OS","PSIV BLUE","GREEN BOX","WIN XP"],
+    "Gaming Legends": ["GAME BOY DMG","PIP BOY","SEVASTOPOL","RIP AND TEAR CLASSIC","SUPER BROTHERS","GREEN HILL","NES","SNES","BLOODBORNE","METROID PRIME","SILENT HILL","DIABLO","HALF-LIFE","SHOVEL KNIGHT"],
+    "Aesthetics": ["EARTHY & ORGANIC","DOPAMINE BRIGHTS","RETRO REVIVAL","VAPORWAVE","AURORA","NOIR","BIOLUMINESCENCE","BRUTALIST"],
+    "Linux Ricing": ["DRACULA","GRUVBOX","NORD","SOLARIZED DARK","CATPPUCCIN FRAPPÉ","CATPPUCCIN MACCHIATO","CATPPUCCIN MOCHA","TOKYO NIGHT","EVERFOREST","ROSÉ PINE","OXOCARBON","MATERIAL DARK"],
+    "Sci-Fi Universes": ["N7","TRON LEGACY","DEAD SPACE","COLONY SHIP","NECROMORPH"],
+    "Horror Realm": ["CRIMSON PEAK","LAKESIDE CURSE","THE BACKROOMS"],
+    "PSIII Colors": ["PSIII CLASSIC","PSIII RED","PSIII GREEN","PSIII BLUE","PSIII PURPLE","PSIII GOLD","PSIII SILVER"]
+};
+
+function applyTheme(name, save = true) {
+    const t = EL_THEMES[name];
+    if (!t) return;
+    const root = document.documentElement;
+    Object.keys(t).forEach(k => root.style.setProperty(`--${k}`, t[k]));
+    _activeTheme = name;
+    if (save) {
+        window.api.setSetting('el_theme', name);
+        try { localStorage.setItem('el_theme_cache', JSON.stringify(t)); } catch(e) {}
+    }
+    const btn = document.getElementById('btn-theme-switch');
+    if (btn) btn.textContent = name;
+}
+
+function renderThemeCategories() {
+    const cats = document.getElementById('theme-cats');
+    const grid = document.getElementById('theme-grid');
+    const backBtn = document.getElementById('btn-theme-back');
+    if (!cats || !grid) return;
+    backBtn.style.display = 'none';
+    cats.innerHTML = '';
+    grid.innerHTML = '';
+    Object.keys(EL_THEME_CATEGORIES).forEach(cat => {
+        const btn = document.createElement('button');
+        btn.className = 'theme-cat-btn';
+        btn.textContent = cat;
+        btn.addEventListener('click', () => {
+            cats.querySelectorAll('.theme-cat-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderThemesInCategory(cat);
+        });
+        cats.appendChild(btn);
+    });
+    // Show first category by default
+    const firstCat = Object.keys(EL_THEME_CATEGORIES)[0];
+    cats.querySelector('.theme-cat-btn')?.classList.add('active');
+    renderThemesInCategory(firstCat);
+}
+
+function renderThemesInCategory(cat) {
+    const grid = document.getElementById('theme-grid');
+    const backBtn = document.getElementById('btn-theme-back');
+    if (!grid) return;
+    backBtn.style.display = '';
+    grid.innerHTML = '';
+    (EL_THEME_CATEGORIES[cat] || []).forEach(name => {
+        const t = EL_THEMES[name];
+        if (!t) return;
+        const wrap = document.createElement('div');
+        wrap.className = 'theme-swatch' + (name === _activeTheme ? ' active' : '');
+        wrap.title = name;
+        wrap.innerHTML = `
+            <div style="background:${t.bg}; padding:10px 12px; display:flex; flex-direction:column; gap:6px;">
+                <div style="background:${t.bg_menu}; border-radius:4px; padding:6px 8px; border:1px solid ${t.border_solid};">
+                    <div style="font-size:9px; font-weight:900; color:${t.accent}; letter-spacing:1px; text-transform:uppercase;">${escHtml(name)}</div>
+                </div>
+                <div style="display:flex; gap:5px; align-items:center;">
+                    <div style="width:14px; height:14px; border-radius:50%; background:${t.accent};"></div>
+                    <div style="font-size:9px; color:${t.text_sec};">Aa</div>
+                    <div style="font-size:9px; color:${t.text_dim}; margin-left:auto;">Bb</div>
+                </div>
+            </div>`;
+        wrap.addEventListener('click', () => {
+            applyTheme(name);
+            grid.querySelectorAll('.theme-swatch').forEach(s => s.classList.remove('active'));
+            wrap.classList.add('active');
+        });
+        grid.appendChild(wrap);
+    });
+}
+
 // ── UI WIRING ─────────────────────────────────────────────────────────────────
 function wireUI() {
     // Titlebar
@@ -928,7 +1075,9 @@ function wireUI() {
         document.getElementById('settings-tgdb-key').value         = await window.api.getSetting('tgdb_api_key')      || '';
         document.getElementById('settings-sgdb-key').value         = await window.api.getSetting('sgdb_api_key')      || '';
         const z = await window.api.getSetting('zoom') || '1.0';
-        document.getElementById('settings-zoom').value = z;
+        document.querySelectorAll('.zoom-btn').forEach(b => b.classList.toggle('active', b.dataset.val === z));
+        document.getElementById('settings-search').value = '';
+        document.querySelectorAll('#modal-settings .tool-card').forEach(c => c.style.display = '');
         document.getElementById('settings-ss-status').textContent   = '';
         document.getElementById('settings-ra-status').textContent   = '';
         document.getElementById('settings-igdb-status').textContent = '';
@@ -1204,10 +1353,6 @@ function wireUI() {
     // Art picker modal
     document.getElementById('btn-art-picker-close').addEventListener('click', () =>
         document.getElementById('modal-art-picker').classList.remove('active'));
-    document.getElementById('modal-art-picker').addEventListener('click', e => {
-        if (e.target === document.getElementById('modal-art-picker'))
-            document.getElementById('modal-art-picker').classList.remove('active');
-    });
     document.getElementById('btn-art-picker-search').addEventListener('click', async () => {
         const query = document.getElementById('art-picker-search').value.trim();
         if (query) await _artPickerSearch(query);
@@ -1544,10 +1689,6 @@ function wireUI() {
     // Achievements modal
     document.getElementById('btn-ach-modal-close').addEventListener('click', () =>
         document.getElementById('modal-achievements').classList.remove('active'));
-    document.getElementById('modal-achievements').addEventListener('click', e => {
-        if (e.target === document.getElementById('modal-achievements'))
-            document.getElementById('modal-achievements').classList.remove('active');
-    });
     document.querySelectorAll('.ach-filter-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             _achFilter = btn.dataset.filter;
@@ -1558,7 +1699,8 @@ function wireUI() {
 
     document.getElementById('btn-settings-cancel').addEventListener('click', () => closeModal('modal-settings'));
     document.getElementById('btn-settings-save').addEventListener('click', async () => {
-        const z = document.getElementById('settings-zoom').value;
+        const zBtn = document.querySelector('.zoom-btn.active');
+        const z = zBtn ? zBtn.dataset.val : '1.0';
         await window.api.setSetting('zoom', z);
         window.api.setZoom(parseFloat(z));
         await window.api.setSetting('ss_user',             document.getElementById('settings-ss-user').value.trim());
@@ -1578,9 +1720,6 @@ function wireUI() {
 
     // ── MODAL: SCRAPER PICKER ────────────────────────────────────────────────
     document.getElementById('btn-scraper-picker-cancel').addEventListener('click', () => closeModal('modal-scraper-picker'));
-    document.getElementById('modal-scraper-picker').addEventListener('click', e => {
-        if (e.target === document.getElementById('modal-scraper-picker')) closeModal('modal-scraper-picker');
-    });
 
     async function runScraper(scraperFn, scraperLabel) {
         if (!currentGame) return;
@@ -1749,11 +1888,35 @@ function wireUI() {
         closeModal('modal-slideshow');
     });
 
-    // Close modals on backdrop click
-    document.querySelectorAll('.modal-overlay').forEach(overlay => {
-        if (overlay.id === 'modal-slideshow') return;
-        overlay.addEventListener('click', e => {
-            if (e.target === overlay) overlay.classList.remove('active');
+    // Systems close
+    document.getElementById('btn-systems-close').addEventListener('click', () => closeModal('modal-systems'));
+
+    // ── MODAL: THEMES ────────────────────────────────────────────────────────
+    document.getElementById('btn-theme-switch').addEventListener('click', () => {
+        renderThemeCategories();
+        openModal('modal-themes');
+    });
+    document.getElementById('btn-close-themes').addEventListener('click', () => closeModal('modal-themes'));
+    document.getElementById('btn-theme-back').addEventListener('click', () => {
+        closeModal('modal-themes');
+        openModal('modal-settings');
+    });
+
+    // ── ZOOM SEG BUTTONS ─────────────────────────────────────────────────────
+    document.querySelectorAll('.zoom-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.zoom-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            window.api.setZoom(parseFloat(btn.dataset.val));
+        });
+    });
+
+    // ── SETTINGS SEARCH ──────────────────────────────────────────────────────
+    document.getElementById('settings-search').addEventListener('input', e => {
+        const q = e.target.value.trim().toLowerCase();
+        document.querySelectorAll('#modal-settings .tool-card').forEach(card => {
+            const haystack = (card.dataset.search || '') + ' ' + (card.textContent || '');
+            card.style.display = !q || haystack.toLowerCase().includes(q) ? '' : 'none';
         });
     });
 
