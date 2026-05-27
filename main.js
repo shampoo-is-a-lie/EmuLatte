@@ -31,10 +31,21 @@ const ytDlpConfigPath = path.join(binDir, 'yt-dlp.conf');
 
 let db;
 
+function getSavedBounds() {
+    try {
+        const raw = db.prepare("SELECT value FROM settings WHERE key='window_bounds'").get()?.value;
+        if (raw) return JSON.parse(raw);
+    } catch(e) {}
+    return null;
+}
+
 function createWindow() {
+    const saved = getSavedBounds();
     const win = new BrowserWindow({
-        width: 1400,
-        height: 950,
+        width:  saved?.width  || 1400,
+        height: saved?.height || 950,
+        x: saved?.x,
+        y: saved?.y,
         frame: false,
         show: false,
         backgroundColor: '#2C1E16',
@@ -47,6 +58,14 @@ function createWindow() {
     });
     win.setMenu(null);
     win.loadFile('index.html');
+
+    win.on('close', () => {
+        if (!win.isMaximized() && !win.isMinimized()) {
+            const b = win.getBounds();
+            db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('window_bounds',?)").run(JSON.stringify(b));
+        }
+    });
+
     const showWin = () => { if (!win.isVisible()) win.show(); };
     ipcMain.once('renderer-ready', showWin);
     win.once('ready-to-show', () => setTimeout(showWin, 3000));
