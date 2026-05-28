@@ -797,6 +797,13 @@
         <div id="settings-sgdb-status" style="font-size:11px; color:var(--text_dim); margin-top:4px;"></div>
         <div class="hint">Free key at steamgriddb.com — artwork only (covers, heroes, logos).</div>
       </div>
+      <div class="tool-card" data-search="mobygames moby games metadata boxart covers screenshots api key retro">
+        <div class="tool-card-title">MobyGames</div>
+        <div class="form-row"><label>API Key</label><input type="password" id="settings-moby-key" placeholder="Your MobyGames API key"></div>
+        <button id="btn-test-moby" style="width:100%;">Test Key</button>
+        <div id="settings-moby-status" style="font-size:11px; color:var(--text_dim); margin-top:4px;"></div>
+        <div class="hint">Request a key at mobygames.com (approval required) — metadata + boxart. Great retro coverage. 360 req/hr.</div>
+      </div>
       <div class="tool-card" data-search="emulators scan install assign system">
         <div class="tool-card-title">Emulators</div>
         <button id="btn-add-emulator" style="width:100%;">Add Emulators</button>
@@ -1001,6 +1008,10 @@
         <button id="btn-scrape-with-sgdb" class="scraper-pick-btn">
           <span class="scraper-pick-name">SteamGridDB</span>
           <span class="scraper-pick-desc">Artwork only (covers, heroes, logos). Free API key.</span>
+        </button>
+        <button id="btn-scrape-with-moby" class="scraper-pick-btn">
+          <span class="scraper-pick-name">MobyGames</span>
+          <span class="scraper-pick-desc">Metadata + boxart &amp; screenshots. Excellent retro coverage. Free API key.</span>
         </button>
       </div>
       <div id="scraper-picker-status" style="font-size:11px; color:var(--text_dim); min-height:16px;"></div>

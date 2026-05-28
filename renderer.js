@@ -1135,6 +1135,7 @@ function wireUI() {
         document.getElementById('settings-igdb-client-secret').value = await window.api.getSetting('igdb_client_secret') || '';
         document.getElementById('settings-tgdb-key').value         = await window.api.getSetting('tgdb_api_key')      || '';
         document.getElementById('settings-sgdb-key').value         = await window.api.getSetting('sgdb_api_key')      || '';
+        document.getElementById('settings-moby-key').value         = await window.api.getSetting('moby_api_key')      || '';
         const z = await window.api.getSetting('zoom') || '1.0';
         document.querySelectorAll('.zoom-btn').forEach(b => b.classList.toggle('active', b.dataset.val === z));
         document.getElementById('settings-search').value = '';
@@ -1754,6 +1755,17 @@ function wireUI() {
         statusEl.style.color  = result.ok ? 'var(--accent)' : '#ef5350';
     });
 
+    document.getElementById('btn-test-moby').addEventListener('click', async () => {
+        const btn      = document.getElementById('btn-test-moby');
+        const statusEl = document.getElementById('settings-moby-status');
+        const key = document.getElementById('settings-moby-key').value.trim();
+        btn.textContent = 'Testing…'; btn.disabled = true;
+        const result = await window.api.testMobyKey(key);
+        btn.textContent = 'Test Key'; btn.disabled = false;
+        statusEl.textContent = result.ok ? '✓ MobyGames key valid.' : `✗ ${result.error}`;
+        statusEl.style.color  = result.ok ? 'var(--accent)' : '#ef5350';
+    });
+
     // Achievements modal
     document.getElementById('btn-ach-modal-close').addEventListener('click', () =>
         document.getElementById('modal-achievements').classList.remove('active'));
@@ -1779,6 +1791,7 @@ function wireUI() {
         await window.api.setSetting('igdb_client_secret',  document.getElementById('settings-igdb-client-secret').value.trim());
         await window.api.setSetting('tgdb_api_key',        document.getElementById('settings-tgdb-key').value.trim());
         await window.api.setSetting('sgdb_api_key',        document.getElementById('settings-sgdb-key').value.trim());
+        await window.api.setSetting('moby_api_key',        document.getElementById('settings-moby-key').value.trim());
         closeModal('modal-settings');
     });
     document.getElementById('btn-settings-open-data-dir').addEventListener('click', async () => {
@@ -1846,6 +1859,12 @@ function wireUI() {
             return;
         }
         runScraper(id => window.api.sgdbScrapeGame(id), 'SteamGridDB');
+    });
+    document.getElementById('btn-scrape-with-moby').addEventListener('click', async () => {
+        if (_scraperPickerMode === 'art')   { await _pickArt('moby'); return; }
+        if (_scraperPickerMode === 'batch') { closeModal('modal-scraper-picker'); scrapeAllWith(_scrapeAllSystemId, 'moby'); return; }
+        if (_scraperPickerMode === 'meta')  { runScraper(id => window.api.mobyScrapeGameMeta(id), 'MobyGames'); return; }
+        runScraper(id => window.api.mobyScrapeGame(id), 'MobyGames');
     });
 
     // ── MODAL: ADD EMULATOR ──────────────────────────────────────────────────
@@ -2041,7 +2060,7 @@ let _artPickerSystemShort   = '';
 const _artPreviewId   = { cover: 'edit-cover-preview', hero: 'edit-hero-preview', logo: 'edit-logo-preview', screenshot: 'edit-screenshot-preview' };
 const _artPickerCols  = { cover: 3, hero: 2, logo: 3, screenshot: 2 };
 const _artIsContain   = { logo: true, screenshot: false, cover: false, hero: false };
-const _scraperLabels  = { ss: 'ScreenScraper', igdb: 'IGDB', tgdb: 'TheGamesDB', sgdb: 'SteamGridDB' };
+const _scraperLabels  = { ss: 'ScreenScraper', igdb: 'IGDB', tgdb: 'TheGamesDB', sgdb: 'SteamGridDB', moby: 'MobyGames' };
 const _artTypeLabels  = { cover: 'Cover Art', hero: 'Hero Art', logo: 'Logo', screenshot: 'Screenshot' };
 
 function openArtPicker(type) {
@@ -2088,6 +2107,7 @@ async function _artPickerSearch(query, gameId) {
         case 'tgdb': result = await window.api.tgdbSearchArt(query, _artPickerType, _artPickerSystemShort); break;
         case 'igdb': result = await window.api.igdbSearchArt(query, _artPickerType, _artPickerSystemShort); break;
         case 'ss':   result = await window.api.ssSearchArt(capturedId, _artPickerType); break;
+        case 'moby': result = await window.api.mobySearchArt(query, _artPickerType, _artPickerSystemShort); break;
         default:     result = { ok: false, error: 'Unknown scraper.' };
     }
 
@@ -2223,6 +2243,7 @@ async function scrapeAll(systemId) {
 async function scrapeAllWith(systemId, source) {
     const scraperFn = source === 'igdb' ? id => window.api.igdbScrapeGame(id)
                     : source === 'tgdb' ? id => window.api.tgdbScrapeGame(id)
+                    : source === 'moby' ? id => window.api.mobyScrapeGame(id)
                     :                     id => window.api.sgdbScrapeGame(id);
     const label = _scraperLabels[source] || source;
 

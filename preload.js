@@ -76,6 +76,12 @@ contextBridge.exposeInMainWorld('api', {
     testSgdbKey:   (key) => ipcRenderer.invoke('test-sgdb-key', key),
     sgdbScrapeGame:(id)  => ipcRenderer.invoke('sgdb-scrape-game', id),
 
+    // MobyGames
+    testMobyKey:       (key)             => ipcRenderer.invoke('test-moby-key', key),
+    mobyScrapeGame:    (id)              => ipcRenderer.invoke('moby-scrape-game', id),
+    mobyScrapeGameMeta:(id)              => ipcRenderer.invoke('moby-scrape-game', id, true),
+    mobySearchArt:     (name, type, sys) => ipcRenderer.invoke('moby-search-art', name, type, sys),
+
     // RetroArch detection
     detectRetroArch: () => ipcRenderer.invoke('detect-retroarch'),
 

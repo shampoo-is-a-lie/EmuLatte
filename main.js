@@ -374,36 +374,36 @@ async function downloadFile(url, destPath) {
     fs.writeFileSync(destPath, body);
 }
 
-// Maps system short_name → { igdb: platform_id, tgdb: platform_id }
+// Maps system short_name → { igdb: platform_id, tgdb: platform_id, moby: platform_id }
 const PLATFORM_MAP = {
-    nes:    { igdb: 18,  tgdb: 7    }, fds:    { igdb: 51,  tgdb: 4918 },
-    snes:   { igdb: 19,  tgdb: 6    }, n64:    { igdb: 4,   tgdb: 3    },
-    gc:     { igdb: 21,  tgdb: 2    }, wii:    { igdb: 5,   tgdb: 9    },
-    gb:     { igdb: 33,  tgdb: 4    }, gbc:    { igdb: 22,  tgdb: 41   },
-    gba:    { igdb: 24,  tgdb: 5    }, nds:    { igdb: 20,  tgdb: 8    },
-    '3ds':  { igdb: 37,  tgdb: 4911 }, vb:     { igdb: 87,  tgdb: null },
-    sms:    { igdb: 64,  tgdb: 35   }, genesis:{ igdb: 29,  tgdb: 36   },
-    '32x':  { igdb: 30,  tgdb: 33   }, segacd: { igdb: 78,  tgdb: 21   },
-    saturn: { igdb: 32,  tgdb: 17   }, dc:     { igdb: 23,  tgdb: 16   },
-    gg:     { igdb: 35,  tgdb: 20   }, sg1000: { igdb: 84,  tgdb: null },
-    ps1:    { igdb: 7,   tgdb: 10   }, ps2:    { igdb: 8,   tgdb: 11   },
-    psp:    { igdb: 38,  tgdb: 13   }, vita:   { igdb: 46,  tgdb: 39   },
-    a2600:  { igdb: 59,  tgdb: 22   }, a5200:  { igdb: 66,  tgdb: 26   },
-    a7800:  { igdb: 60,  tgdb: 27   }, lynx:   { igdb: 61,  tgdb: 4924 },
-    jaguar: { igdb: 62,  tgdb: 32   }, atarist:{ igdb: 63,  tgdb: 4938 },
-    pce:    { igdb: 86,  tgdb: 34   }, pcecd:  { igdb: 150, tgdb: 4955 },
-    sgfx:   { igdb: 128, tgdb: null }, pcfx:   { igdb: 274, tgdb: 4930 },
-    neogeo: { igdb: 80,  tgdb: 24   }, neocd:  { igdb: 136, tgdb: null },
-    ngp:    { igdb: 119, tgdb: 4922 }, ngpc:   { igdb: 120, tgdb: null },
-    c64:    { igdb: 15,  tgdb: 40   }, amiga:  { igdb: 16,  tgdb: 4911 },
-    cpc:    { igdb: 25,  tgdb: 4914 }, zxs:    { igdb: 26,  tgdb: 4913 },
-    msx:    { igdb: 27,  tgdb: 4929 }, msx2:   { igdb: 53,  tgdb: null },
-    coleco: { igdb: 68,  tgdb: 29   }, intv:   { igdb: 67,  tgdb: 30   },
-    '3do':  { igdb: 50,  tgdb: 50   }, ws:     { igdb: 57,  tgdb: 4925 },
-    wsc:    { igdb: 123, tgdb: 4926 }, vectrex:{ igdb: 70,  tgdb: 4931 },
-    mame:   { igdb: 52,  tgdb: 23   }, fbn:    { igdb: 52,  tgdb: 23   },
-    dos:    { igdb: 13,  tgdb: 1    }, ps3:    { igdb: 9,   tgdb: 12   },
-    switch: { igdb: 130, tgdb: 4971 },
+    nes:    { igdb: 18,  tgdb: 7,    moby: 22  }, fds:    { igdb: 51,  tgdb: 4918, moby: 52  },
+    snes:   { igdb: 19,  tgdb: 6,    moby: 15  }, n64:    { igdb: 4,   tgdb: 3,    moby: 9   },
+    gc:     { igdb: 21,  tgdb: 2,    moby: 14  }, wii:    { igdb: 5,   tgdb: 9,    moby: 82  },
+    gb:     { igdb: 33,  tgdb: 4,    moby: 10  }, gbc:    { igdb: 22,  tgdb: 41,   moby: 11  },
+    gba:    { igdb: 24,  tgdb: 5,    moby: 12  }, nds:    { igdb: 20,  tgdb: 8,    moby: 44  },
+    '3ds':  { igdb: 37,  tgdb: 4911, moby: 101 }, vb:     { igdb: 87,  tgdb: null, moby: 29  },
+    sms:    { igdb: 64,  tgdb: 35,   moby: 26  }, genesis:{ igdb: 29,  tgdb: 36,   moby: 16  },
+    '32x':  { igdb: 30,  tgdb: 33,   moby: 21  }, segacd: { igdb: 78,  tgdb: 21,   moby: 20  },
+    saturn: { igdb: 32,  tgdb: 17,   moby: 23  }, dc:     { igdb: 23,  tgdb: 16,   moby: 8   },
+    gg:     { igdb: 35,  tgdb: 20,   moby: 25  }, sg1000: { igdb: 84,  tgdb: null, moby: 43  },
+    ps1:    { igdb: 7,   tgdb: 10,   moby: 6   }, ps2:    { igdb: 8,   tgdb: 11,   moby: 7   },
+    psp:    { igdb: 38,  tgdb: 13,   moby: 46  }, vita:   { igdb: 46,  tgdb: 39,   moby: 105 },
+    a2600:  { igdb: 59,  tgdb: 22,   moby: 28  }, a5200:  { igdb: 66,  tgdb: 26,   moby: 33  },
+    a7800:  { igdb: 60,  tgdb: 27,   moby: 34  }, lynx:   { igdb: 61,  tgdb: 4924, moby: 18  },
+    jaguar: { igdb: 62,  tgdb: 32,   moby: 17  }, atarist:{ igdb: 63,  tgdb: 4938, moby: 24  },
+    pce:    { igdb: 86,  tgdb: 34,   moby: 40  }, pcecd:  { igdb: 150, tgdb: 4955, moby: 45  },
+    sgfx:   { igdb: 128, tgdb: null, moby: null }, pcfx:  { igdb: 274, tgdb: 4930, moby: 59  },
+    neogeo: { igdb: 80,  tgdb: 24,   moby: 36  }, neocd:  { igdb: 136, tgdb: null, moby: 54  },
+    ngp:    { igdb: 119, tgdb: 4922, moby: 52  }, ngpc:   { igdb: 120, tgdb: null, moby: 53  },
+    c64:    { igdb: 15,  tgdb: 40,   moby: 27  }, amiga:  { igdb: 16,  tgdb: 4911, moby: 19  },
+    cpc:    { igdb: 25,  tgdb: 4914, moby: 60  }, zxs:    { igdb: 26,  tgdb: 4913, moby: 41  },
+    msx:    { igdb: 27,  tgdb: 4929, moby: 57  }, msx2:   { igdb: 53,  tgdb: null, moby: 57  },
+    coleco: { igdb: 68,  tgdb: 29,   moby: 29  }, intv:   { igdb: 67,  tgdb: 30,   moby: 30  },
+    '3do':  { igdb: 50,  tgdb: 50,   moby: 35  }, ws:     { igdb: 57,  tgdb: 4925, moby: 49  },
+    wsc:    { igdb: 123, tgdb: 4926, moby: 50  }, vectrex:{ igdb: 70,  tgdb: 4931, moby: 37  },
+    mame:   { igdb: 52,  tgdb: 23,   moby: 143 }, fbn:    { igdb: 52,  tgdb: 23,   moby: 143 },
+    dos:    { igdb: 13,  tgdb: 1,    moby: 2   }, ps3:    { igdb: 9,   tgdb: 12,   moby: 81  },
+    switch: { igdb: 130, tgdb: 4971, moby: 203 },
 };
 
 function ssApiUrl(endpoint, params) {
@@ -1168,6 +1168,164 @@ ipcMain.handle('sgdb-scrape-game', async (_, gameId) => {
             db.prepare(`UPDATE games SET ${sets} WHERE id=@id`).run({ ...updates, id: gameId });
         }
         return { ok: true, updated: Object.keys(updates) };
+    } catch(e) { return { ok: false, error: e.message }; }
+});
+
+// ── MOBYGAMES ─────────────────────────────────────────────────────────────────
+
+function mobyApiUrl(endpoint, params = {}) {
+    const apiKey = db?.prepare('SELECT value FROM settings WHERE key=?').get('moby_api_key')?.value || '';
+    return `https://api.mobygames.com/v1/${endpoint}?api_key=${encodeURIComponent(apiKey)}&${new URLSearchParams(params).toString()}`;
+}
+
+function cleanRomTitle(raw) {
+    return (raw || '')
+        .replace(/\.[^.]+$/, '')
+        .replace(/\s*\([^)]*\)/g, '')
+        .replace(/\s*\[[^\]]*\]/g, '')
+        .replace(/_/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+ipcMain.handle('test-moby-key', async (_, key) => {
+    if (!key) return { ok: false, error: 'Enter API key first.' };
+    try {
+        const res = await fetch(`https://api.mobygames.com/v1/games?api_key=${encodeURIComponent(key)}&title=Pac-Man&limit=1`);
+        if (res.status === 401) return { ok: false, error: 'Invalid API key.' };
+        if (res.status === 429) return { ok: false, error: 'Rate limit hit — key is valid but try again later.' };
+        if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+        return { ok: true };
+    } catch(e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('moby-scrape-game', async (_, gameId, metaOnly = false) => {
+    if (!db) return { ok: false, error: 'DB not ready' };
+    const apiKey = db.prepare('SELECT value FROM settings WHERE key=?').get('moby_api_key')?.value;
+    if (!apiKey) return { ok: false, error: 'MobyGames API key not set in Settings.' };
+
+    const game = db.prepare(`SELECT g.*, s.short_name AS system_short
+        FROM games g LEFT JOIN systems s ON g.system_id=s.id WHERE g.id=?`).get(gameId);
+    if (!game) return { ok: false, error: 'Game not found.' };
+
+    try {
+        const searchTitle = cleanRomTitle(game.title);
+        const mobyPlatId  = PLATFORM_MAP[game.system_short]?.moby || null;
+        const platParam   = mobyPlatId ? { platform: mobyPlatId } : {};
+        const searchRes   = await fetch(mobyApiUrl('games', { title: searchTitle, limit: 5, ...platParam }));
+        if (searchRes.status === 401) return { ok: false, error: 'Invalid MobyGames API key.' };
+        if (searchRes.status === 429) return { ok: false, error: 'MobyGames rate limit reached (360/hr). Try again later.' };
+        if (!searchRes.ok) return { ok: false, error: `Search failed: HTTP ${searchRes.status}` };
+        const searchData = await searchRes.json();
+        if (!searchData.games?.length) return { ok: false, error: `No MobyGames results for "${searchTitle}"` };
+
+        const mg      = searchData.games[0];
+        const mobyId  = mg.game_id;
+        const updates = {};
+
+        if (mg.description && !game.description)
+            updates.description = mg.description.replace(/<[^>]+>/g, '');
+        if (mg.genres?.length && !game.genre)
+            updates.genre = mg.genres.map(g => g.genre_name).join(', ');
+
+        // Year: earliest release across all platforms
+        const dates = (mg.platforms || [])
+            .map(p => p.first_release_date).filter(Boolean)
+            .map(d => parseInt(d.slice(0, 4))).filter(n => !isNaN(n));
+        if (dates.length && !game.year)
+            updates.year = String(Math.min(...dates));
+
+        if (metaOnly) {
+            if (Object.keys(updates).length) {
+                const sets = Object.keys(updates).map(k => `${k}=@${k}`).join(',');
+                db.prepare(`UPDATE games SET ${sets} WHERE id=@id`).run({ ...updates, id: gameId });
+            }
+            return { ok: true, updated: Object.keys(updates) };
+        }
+
+        // Cover art
+        const coversRes = await fetch(mobyApiUrl(`games/${mobyId}/covers`));
+        if (coversRes.ok) {
+            const coversData = await coversRes.json();
+            let frontUrl = null;
+            // Prefer platform-matched group, fall back to any group
+            for (const pass of [true, false]) {
+                for (const group of coversData.cover_groups || []) {
+                    if (pass && mobyPlatId && group.platform?.platform_id !== mobyPlatId) continue;
+                    const front = (group.covers || []).find(c => c.scan_of === 'Front Cover');
+                    if (front?.image) { frontUrl = front.image; break; }
+                }
+                if (frontUrl) break;
+            }
+            if (frontUrl && !game.cover) {
+                const ext  = path.extname(new URL(frontUrl).pathname) || '.jpg';
+                const dest = path.join(imagesDir, 'covers', `${gameId}${ext}`);
+                await downloadFile(frontUrl, dest);
+                updates.cover = dest;
+            }
+        }
+
+        // Screenshots
+        const ssParams = mobyPlatId ? { platform: mobyPlatId } : {};
+        const ssRes = await fetch(mobyApiUrl(`games/${mobyId}/screenshots`, ssParams));
+        if (ssRes.ok) {
+            const ssData = await ssRes.json();
+            const first  = ssData.screenshots?.[0]?.image;
+            if (first && !game.screenshot) {
+                const ext  = path.extname(new URL(first).pathname) || '.jpg';
+                const dest = path.join(imagesDir, 'screenshots', `${gameId}${ext}`);
+                await downloadFile(first, dest);
+                updates.screenshot = dest;
+            }
+            if (first && !game.hero) {
+                const ext  = path.extname(new URL(first).pathname) || '.jpg';
+                const dest = path.join(imagesDir, 'heroes', `${gameId}${ext}`);
+                await downloadFile(first, dest);
+                updates.hero = dest;
+            }
+        }
+
+        if (Object.keys(updates).length) {
+            const sets = Object.keys(updates).map(k => `${k}=@${k}`).join(',');
+            db.prepare(`UPDATE games SET ${sets} WHERE id=@id`).run({ ...updates, id: gameId });
+        }
+        return { ok: true, updated: Object.keys(updates) };
+    } catch(e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('moby-search-art', async (_, gameName, assetType, systemShortName) => {
+    const apiKey = db?.prepare('SELECT value FROM settings WHERE key=?').get('moby_api_key')?.value;
+    if (!apiKey) return { ok: false, error: 'MobyGames API key not set in Settings.' };
+    if (assetType === 'logo') return { ok: false, error: 'MobyGames does not provide logo/wheel artwork.' };
+    try {
+        const mobyPlatId = systemShortName ? PLATFORM_MAP[systemShortName]?.moby : null;
+        const platParam  = mobyPlatId ? { platform: mobyPlatId } : {};
+        const searchRes  = await fetch(mobyApiUrl('games', { title: gameName, limit: 5, ...platParam }));
+        if (!searchRes.ok) return { ok: false, error: `HTTP ${searchRes.status}` };
+        const searchData = await searchRes.json();
+        if (!searchData.games?.length) return { ok: true, results: [] };
+        const mobyId = searchData.games[0].game_id;
+
+        if (assetType === 'cover') {
+            const res = await fetch(mobyApiUrl(`games/${mobyId}/covers`));
+            if (!res.ok) return { ok: true, results: [] };
+            const data = await res.json();
+            const results = [];
+            for (const group of data.cover_groups || []) {
+                for (const cover of group.covers || []) {
+                    if (cover.image) results.push({ url: cover.image, thumb: cover.image });
+                }
+            }
+            return { ok: true, results: results.slice(0, 20) };
+        } else {
+            const res = await fetch(mobyApiUrl(`games/${mobyId}/screenshots`, mobyPlatId ? { platform: mobyPlatId } : {}));
+            if (!res.ok) return { ok: true, results: [] };
+            const data = await res.json();
+            const results = (data.screenshots || [])
+                .filter(s => s.image)
+                .map(s => ({ url: s.image, thumb: s.image }));
+            return { ok: true, results: results.slice(0, 20) };
+        }
     } catch(e) { return { ok: false, error: e.message }; }
 });
 
