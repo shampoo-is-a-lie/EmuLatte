@@ -625,7 +625,7 @@ ipcMain.handle('scrape-batch', async (event, gameIds) => {
         if (!batchScrapeCancel && done < total) await new Promise(r => setTimeout(r, 1500));
     }
 
-    win?.webContents.send('scrape-progress', { current: done, total, status: 'done', failed, session: lastSession });
+    win?.webContents.send('scrape-progress', { current: done, total, done, status: 'done', failed, session: lastSession });
     return { ok: true, done, failed };
 });
 
