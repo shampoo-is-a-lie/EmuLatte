@@ -1195,6 +1195,16 @@ function wireUI() {
         if (currentGame) openEditGameModal(currentGame);
     });
 
+    // Gamepage remove — same backend as the edit-modal Delete ROM, reachable without opening Edit
+    document.getElementById('btn-gamepage-remove').addEventListener('click', async () => {
+        if (!currentGame) return;
+        if (!confirm(`Remove "${currentGame.title}" from the library? The ROM file will NOT be deleted.`)) return;
+        await window.api.deleteGame(currentGame.id);
+        currentGame = null;
+        switchView('view-gallery');
+        await loadGames();
+    });
+
     // ── TRAILERS ─────────────────────────────────────────────────────────────
     let _trailerTitle  = '';
     let _trailerIgdbId = '';

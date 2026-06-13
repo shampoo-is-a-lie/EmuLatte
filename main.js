@@ -307,6 +307,15 @@ ipcMain.handle('update-game', (_, id, data) => {
 
 ipcMain.handle('delete-game', (_, id) => {
     if (!db) return false;
+    // Clean up the art we manage (never the ROM, never user-picked LOCAL files outside imagesDir)
+    // and the playlist links, since foreign_keys/cascade isn't enabled on this connection.
+    const g = db.prepare('SELECT cover, hero, logo, screenshot FROM games WHERE id=?').get(id);
+    if (g) {
+        [g.cover, g.hero, g.logo, ...(g.screenshot ? g.screenshot.split('|') : [])]
+            .filter(Boolean)
+            .forEach(p => { try { if (p.startsWith(imagesDir)) fs.unlinkSync(p); } catch {} });
+    }
+    db.prepare('DELETE FROM playlist_games WHERE game_id=?').run(id);
     db.prepare('DELETE FROM games WHERE id=?').run(id);
     return true;
 });
