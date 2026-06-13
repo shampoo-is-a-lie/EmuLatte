@@ -406,11 +406,36 @@ const PLATFORM_MAP = {
     switch: { igdb: 130, tgdb: 4971, moby: 203 },
 };
 
+// Dev credentials identify EmuLatte itself; users supply their own account (ssid/sspassword).
+// assets/ss_dev.json is gitignored — must be present before building, like assets/bin.
+let ssDev = { devid: '', devpassword: '', softname: 'EmuLatte' };
+try {
+    ssDev = { ...ssDev, ...JSON.parse(fs.readFileSync(path.join(__dirname, 'assets', 'ss_dev.json'), 'utf8')) };
+} catch {}
+
+function ssBaseParams(ssUser, ssPass) {
+    return {
+        devid: ssDev.devid, devpassword: ssDev.devpassword,
+        softname: ssDev.softname, output: 'json',
+        ssid: ssUser, sspassword: ssPass,
+    };
+}
+
+function ssMediaUrl(url, ssUser, ssPass) {
+    if (url.includes('ssid=')) return url;
+    const creds = new URLSearchParams({
+        devid: ssDev.devid, devpassword: ssDev.devpassword, softname: ssDev.softname,
+        ssid: ssUser, sspassword: ssPass, output: 'image',
+    });
+    return `${url}&${creds.toString()}`;
+}
+
 function ssApiUrl(endpoint, params) {
     return `https://www.screenscraper.fr/api2/${endpoint}?${new URLSearchParams(params).toString()}`;
 }
 
 async function ssApiCall(endpoint, params) {
+    if (!ssDev.devid || !ssDev.devpassword) throw new Error('Dev credentials missing from this build (assets/ss_dev.json)');
     const { status, body } = await httpsGet(ssApiUrl(endpoint, params));
     if (status !== 200) throw new Error(`HTTP ${status}`);
     const text = body.toString('utf8');
@@ -460,9 +485,7 @@ async function scrapeGameById(gameId, ssUser, ssPass, win, metaOnly = false) {
     }
 
     const params = {
-        devid: ssUser, devpassword: ssPass,
-        softname: 'emulatte', output: 'json',
-        ssid: ssUser, sspassword: ssPass,
+        ...ssBaseParams(ssUser, ssPass),
         romtype: 'rom', romnom: romFileName,
     };
     if (crc)                params.crc        = crc;
@@ -510,9 +533,7 @@ async function scrapeGameById(gameId, ssUser, ssPass, win, metaOnly = false) {
             const ext     = media.format ? `.${media.format}` : '.jpg';
             const subdir  = subdirMap[field];
             const dest    = path.join(imagesDir, subdir, `${gameId}_${field}${ext}`);
-            const dlUrl   = media.url.includes('ssid=')
-                ? media.url
-                : `${media.url}&ssid=${encodeURIComponent(ssUser)}&sspassword=${encodeURIComponent(ssPass)}&softname=emulatte&output=image`;
+            const dlUrl   = ssMediaUrl(media.url, ssUser, ssPass);
             try { await downloadFile(dlUrl, dest); updates[field] = dest; } catch {}
         }
     }
@@ -575,10 +596,7 @@ ipcMain.handle('compute-crc32', async (_, filePath) => {
 ipcMain.handle('test-ss-credentials', async (_, ssUser, ssPass) => {
     if (!ssUser || !ssPass) return { ok: false, error: 'Enter username and password first.' };
     try {
-        const result = await ssApiCall('systemesListe.php', {
-            devid: ssUser, devpassword: ssPass, softname: 'emulatte', output: 'json',
-            ssid: ssUser, sspassword: ssPass,
-        });
+        const result = await ssApiCall('systemesListe.php', ssBaseParams(ssUser, ssPass));
         const systems = result.response?.systemes;
         if (!systems) return { ok: false, error: result.response?.msg || 'Invalid credentials.' };
         return { ok: true, username: ssUser, systemCount: systems.length };
@@ -595,10 +613,7 @@ ipcMain.handle('fetch-ss-systems', async () => {
     const ssPass = db.prepare('SELECT value FROM settings WHERE key=?').get('ss_pass')?.value;
     if (!ssUser || !ssPass) return { ok: false, error: 'ScreenScraper credentials not set in Settings.' };
     try {
-        const result = await ssApiCall('systemesListe.php', {
-            devid: ssUser, devpassword: ssPass, softname: 'emulatte', output: 'json',
-            ssid: ssUser, sspassword: ssPass,
-        });
+        const result = await ssApiCall('systemesListe.php', ssBaseParams(ssUser, ssPass));
         const systems = result.response?.systemes || [];
         return { ok: true, systems: systems.map(s => ({ id: s.id, name: s.noms?.nom_eu || s.noms?.nom_us || s.noms?.nom_jp || String(s.id) })).sort((a,b) => a.name.localeCompare(b.name)) };
     } catch(e) {
@@ -828,8 +843,8 @@ ipcMain.handle('ss-search-art', async (_, gameId, assetType) => {
         try { crc = await computeFileCrc32(game.rom_path); romSize = fs.statSync(game.rom_path).size; } catch {}
     }
     const params = {
-        devid: ssUser, devpassword: ssPass, softname: 'emulatte', output: 'json',
-        ssid: ssUser, sspassword: ssPass, romtype: 'rom', romnom: romFileName,
+        ...ssBaseParams(ssUser, ssPass),
+        romtype: 'rom', romnom: romFileName,
     };
     if (crc)               params.crc       = crc;
     if (romSize)           params.romtaille = romSize;
@@ -852,8 +867,7 @@ ipcMain.handle('ss-search-art', async (_, gameId, assetType) => {
     const results = (jeu.medias || [])
         .filter(m => wanted.has(m.type))
         .map(m => {
-            const url = m.url.includes('ssid=') ? m.url
-                : `${m.url}&ssid=${encodeURIComponent(ssUser)}&sspassword=${encodeURIComponent(ssPass)}&softname=emulatte&output=image`;
+            const url = ssMediaUrl(m.url, ssUser, ssPass);
             return { thumb: url, url };
         });
     return { ok: true, results };

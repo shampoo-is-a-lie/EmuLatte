@@ -4,3 +4,4 @@ dist/
 *.AppImage.old
 .DS_Store
 assets/bin/
+assets/ss_dev.json
