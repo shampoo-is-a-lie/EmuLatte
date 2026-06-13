@@ -136,6 +136,25 @@ function updateCategoryHeader(games) {
     document.getElementById('system-hero-btns').style.display = isSystem ? 'flex' : 'none';
 }
 
+// Box-art orientation per system → CSS aspect-ratio for the gallery cover.
+// Default is portrait (2:3). LANDSCAPE = wide US cartridge boxes; SQUARE ≈ 1:1 for
+// arcade/home-computer art (marquees/flyers vary). Starting table — tune the sets to taste.
+const COVER_RATIO_LANDSCAPE = new Set([
+    'nes','fds','snes','n64','sms','genesis','megadrive','32x','gg','sg1000',
+    'a2600','a5200','a7800','lynx','tg16','pcengine','turbografx','colecovision',
+    'coleco','intellivision','jaguar','vectrex',
+]);
+const COVER_RATIO_SQUARE = new Set([
+    'arcade','mame','fbneo','fba','neogeo','neogeocd','c64','amiga','amigacd32',
+    'msx','msx2','atarist','zxspectrum','spectrum','dos','pc98','x68000',
+]);
+function coverRatio(shortName) {
+    const s = (shortName || '').toLowerCase();
+    if (COVER_RATIO_LANDSCAPE.has(s)) return '4 / 3';
+    if (COVER_RATIO_SQUARE.has(s))    return '1 / 1';
+    return '2 / 3';
+}
+
 function renderGallery(games) {
     const grid = document.getElementById('gallery-grid');
     if (!games.length) {
@@ -147,12 +166,13 @@ function renderGallery(games) {
     grid.innerHTML = games.map(g => {
         const hasCover = g.cover && g.cover !== '';
         const sysLabel = g.system_short || g.system_name || '';
+        const ratio    = coverRatio(g.system_short);
         return `<div class="gallery-item" data-id="${g.id}">
             <div class="gallery-cover-wrap">
                 ${hasCover
-                    ? `<img class="gallery-cover" src="${g.cover}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-                       <div class="gallery-cover" style="display:none; align-items:center; justify-content:center; color:var(--text_dim); font-size:11px; font-weight:900; letter-spacing:1px; text-align:center;">${escHtml(g.title)}</div>`
-                    : `<div class="gallery-cover" style="display:flex; align-items:center; justify-content:center; color:var(--text_dim); font-size:11px; font-weight:900; letter-spacing:1px; text-align:center;">${escHtml(g.title)}</div>`
+                    ? `<img class="gallery-cover" style="aspect-ratio:${ratio}" src="${g.cover}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+                       <div class="gallery-cover" style="aspect-ratio:${ratio}; display:none; align-items:center; justify-content:center; color:var(--text_dim); font-size:11px; font-weight:900; letter-spacing:1px; text-align:center;">${escHtml(g.title)}</div>`
+                    : `<div class="gallery-cover" style="aspect-ratio:${ratio}; display:flex; align-items:center; justify-content:center; color:var(--text_dim); font-size:11px; font-weight:900; letter-spacing:1px; text-align:center;">${escHtml(g.title)}</div>`
                 }
                 ${sysLabel ? `<div class="gallery-system-badge">${escHtml(sysLabel)}</div>` : ''}
                 <div class="gallery-flag-btns ${g.fav || g.want ? 'has-active' : ''}">
