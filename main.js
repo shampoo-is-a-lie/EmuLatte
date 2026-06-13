@@ -433,11 +433,26 @@ const PLATFORM_MAP = {
 };
 
 // Dev credentials identify EmuLatte itself; users supply their own account (ssid/sspassword).
-// assets/ss_dev.json is gitignored — must be present before building, like assets/bin.
+// In a shipped build they live XOR-scrambled in assets/ss_dev.dat (no plaintext in the AppImage,
+// the same approach ES-DE uses). assets/ss_dev.json is the plaintext source kept for local dev;
+// both files are gitignored, and predist regenerates the .dat from the .json before packaging.
+// The key below is obfuscation, not encryption — it only defeats `strings`/secret-scanners.
+const SS_DEV_KEY = 'EmuLatte::cafeneurotico::ss-dev::xor::v1';
+function ssDevXor(buf) {
+    const out = Buffer.allocUnsafe(buf.length);
+    for (let i = 0; i < buf.length; i++) out[i] = buf[i] ^ SS_DEV_KEY.charCodeAt(i % SS_DEV_KEY.length);
+    return out;
+}
 let ssDev = { devid: '', devpassword: '', softname: 'EmuLatte' };
 try {
-    ssDev = { ...ssDev, ...JSON.parse(fs.readFileSync(path.join(__dirname, 'assets', 'ss_dev.json'), 'utf8')) };
-} catch {}
+    const dat  = fs.readFileSync(path.join(__dirname, 'assets', 'ss_dev.dat'), 'utf8');
+    const json = ssDevXor(Buffer.from(dat, 'base64')).toString('utf8');
+    ssDev = { ...ssDev, ...JSON.parse(json) };
+} catch {
+    try {
+        ssDev = { ...ssDev, ...JSON.parse(fs.readFileSync(path.join(__dirname, 'assets', 'ss_dev.json'), 'utf8')) };
+    } catch {}
+}
 
 function ssBaseParams(ssUser, ssPass) {
     return {

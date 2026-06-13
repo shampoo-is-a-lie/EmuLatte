@@ -7,6 +7,7 @@
     "postinstall": "electron-builder install-app-deps",
     "start": "electron .",
     "pack": "electron-builder --dir",
+    "predist": "node scripts/scramble-ssdev.js",
     "dist": "electron-builder --linux AppImage",
     "postdist": "D=/home/jose/Games/CNGM; F=EmuLatte.AppImage; [ -f $D/$F ] && mv $D/$F $D/EmuLatte_old.AppImage; cp dist/$F $D/$F && echo \"Deployed $F to $D\""
   },
@@ -36,7 +37,8 @@
       "preload.js",
       "renderer.js",
       "index.html",
-      "assets/**/*"
+      "assets/**/*",
+      "!assets/ss_dev.json"
     ],
     "extraResources": [
       {
