@@ -11,7 +11,6 @@ let slideshowIndex = 0;
 let heroCycleTimer     = null;
 let ssBannerKbInterval = null;
 let heroQueue      = [];
-let scrapeActive         = false;
 let _achAll = [];
 let _achFilter = 'all';
 let ssSystems            = [];
@@ -477,7 +476,7 @@ let toastTimer = null;
 function showLaunchToast(msg, cmd) {
     const toast  = document.getElementById('launch-toast');
     const msgEl  = document.getElementById('launch-toast-msg');
-    const isInfo = !cmd && (msg.startsWith('Done') || msg.startsWith('Scraped'));
+    const isInfo = !cmd && (msg.startsWith('Done') || msg.startsWith('Stopped') || msg.startsWith('Scraped'));
     toast.style.borderColor = isInfo ? 'var(--border_solid)' : '#c62828';
     toast.querySelector('div').style.color = isInfo ? 'var(--accent)' : '#ef5350';
     toast.querySelector('div').textContent = isInfo ? 'SCRAPE' : 'LAUNCH FAILED';
@@ -1224,7 +1223,7 @@ function wireUI() {
 
     // Hero scrape all (system-scoped) — opens source picker
     document.getElementById('btn-hero-scrape-all').addEventListener('click', () => {
-        if (scrapeActive) return;
+        // Intentionally unguarded: picking a source while a scrape runs enqueues into it.
         _scrapeAllSystemId = (currentFilter !== 'all' && currentFilter !== 'favs' && currentFilter !== 'want' && currentFilter !== 'recent')
             ? currentFilter : null;
         _scraperPickerMode = 'batch';
@@ -2352,86 +2351,98 @@ async function scrapeGame(gameId) {
     if (result.session) updateRateInfo(result.session);
 }
 
-async function scrapeAll(systemId) {
-    const games = systemId
-        ? allGames.filter(g => g.system_id === Number(systemId))
-        : allGames;
-    if (!games.length) { showLaunchToast('No ROMs to scrape in this system.', null); return; }
+// ── UNIFIED SCRAPE QUEUE ──────────────────────────────────────────────────────
+// Every "Scrape All" (any system, any source) feeds one renderer-side worker that
+// scrapes a game at a time via the per-game IPC. Queuing more while it runs just
+// appends and grows the count, so concurrent requests share a single pill.
+let scrapeQueue     = [];                                // [{ id, scraperFn, isSS }]
+let scrapeRunning   = false;
+let scrapeCancelled = false;
+let scrapeStats     = { done: 0, failed: 0, total: 0 };  // aggregate for the whole run
 
-    scrapeActive = true;
-    showScrapePanel(true);
-    const result = await window.api.scrapeBatch(games.map(g => g.id));
-    scrapeActive = false;
-
-    if (!result.ok) { showLaunchToast(result.error, null); showScrapePanel(false); return; }
-
-    await loadGames();
-    if (currentGame) {
-        const updated = allGames.find(g => g.id === currentGame.id);
-        if (updated) openGamePage(updated);
+function scraperFnFor(source) {
+    switch (source) {
+        case 'igdb': return id => window.api.igdbScrapeGame(id);
+        case 'tgdb': return id => window.api.tgdbScrapeGame(id);
+        case 'moby': return id => window.api.mobyScrapeGame(id);
+        case 'sgdb': return id => window.api.sgdbScrapeGame(id);
+        default:     return id => window.api.scrapeGame(id);   // 'ss'
     }
 }
 
-async function scrapeAllWith(systemId, source) {
-    const scraperFn = source === 'igdb' ? id => window.api.igdbScrapeGame(id)
-                    : source === 'tgdb' ? id => window.api.tgdbScrapeGame(id)
-                    : source === 'moby' ? id => window.api.mobyScrapeGame(id)
-                    :                     id => window.api.sgdbScrapeGame(id);
-    const label = _scraperLabels[source] || source;
+function updateScrapeCount() {
+    const { done, total } = scrapeStats;
+    const cur = Math.min(done + (scrapeRunning ? 1 : 0), total);
+    document.getElementById('scrape-panel-count').textContent = `${cur} / ${total}`;
+    document.getElementById('scrape-progress-bar').style.width = `${total ? Math.round((done / total) * 100) : 0}%`;
+}
 
+function enqueueScrape(systemId, source) {
     const games = systemId
         ? allGames.filter(g => g.system_id === Number(systemId))
         : allGames;
     if (!games.length) { showLaunchToast('No ROMs to scrape in this system.', null); return; }
 
-    scrapeActive = true;
+    const fn   = scraperFnFor(source);
+    const isSS = !['igdb', 'tgdb', 'moby', 'sgdb'].includes(source);
+    for (const g of games) scrapeQueue.push({ id: g.id, scraperFn: fn, isSS });
+    scrapeStats.total += games.length;
+
+    if (scrapeRunning) updateScrapeCount();   // already running → reflect the bigger total
+    else runScrapeWorker();
+}
+
+async function runScrapeWorker() {
+    scrapeRunning   = true;
+    scrapeCancelled = false;
     showScrapePanel(true);
-    let done = 0, failed = 0;
-    for (const g of games) {
-        if (!scrapeActive) break;
-        document.getElementById('scrape-panel-title').textContent = g.name || g.rom_path?.split('/').pop() || '';
-        document.getElementById('scrape-panel-count').textContent = `${done + 1} / ${games.length}`;
-        document.getElementById('scrape-progress-bar').style.width = `${Math.round((done / games.length) * 100)}%`;
-        const result = await scraperFn(g.id);
-        if (!result?.ok) failed++;
-        done++;
+
+    while (scrapeQueue.length && !scrapeCancelled) {
+        const item = scrapeQueue.shift();
+        const g    = allGames.find(x => x.id === item.id);
+        document.getElementById('scrape-panel-title').textContent = g?.title || g?.rom_path?.split('/').pop() || '';
+        updateScrapeCount();
+
+        const result = await item.scraperFn(item.id);
+        if (!result?.ok) scrapeStats.failed++;
+        else if (result.session) updateRateInfo(result.session);
+        scrapeStats.done++;
+        updateScrapeCount();
+
+        // Courtesy delay between ScreenScraper requests (rate limits)
+        if (item.isSS && scrapeQueue.length && !scrapeCancelled) await new Promise(r => setTimeout(r, 1500));
     }
-    scrapeActive = false;
+
+    const { done, failed } = scrapeStats;
+    const cancelled = scrapeCancelled;
+    scrapeQueue   = [];
+    scrapeStats   = { done: 0, failed: 0, total: 0 };
+    scrapeRunning = false;
     showScrapePanel(false);
+
     await loadGames();
     if (currentGame) {
         const updated = allGames.find(g => g.id === currentGame.id);
         if (updated) openGamePage(updated);
     }
-    const msg = failed
-        ? `Done. ${done - failed} scraped with ${label}, ${failed} failed.`
-        : `Done. ${done} ROM${done !== 1 ? 's' : ''} scraped with ${label}.`;
+
+    const verb = cancelled ? 'Stopped' : 'Done';
+    const msg  = failed
+        ? `${verb}. ${done - failed} scraped, ${failed} failed.`
+        : `${verb}. ${done} ROM${done !== 1 ? 's' : ''} scraped.`;
     showLaunchToast(msg, null);
 }
 
-function wireScrapeProgress() {
-    window.api.onScrapeProgress(data => {
-        if (data.status === 'done') {
-            showScrapePanel(false);
-            scrapeActive = false;
-            const msg = data.failed
-                ? `Done. ${data.done - data.failed} scraped, ${data.failed} failed.`
-                : `Done. ${data.done} ROM${data.done !== 1 ? 's' : ''} scraped.`;
-            showLaunchToast(msg, null);
-            if (data.session) updateRateInfo(data.session);
-            return;
-        }
-        const pct = data.total ? Math.round((data.current / data.total) * 100) : 0;
-        document.getElementById('scrape-progress-bar').style.width = `${pct}%`;
-        document.getElementById('scrape-panel-title').textContent   = data.title || '';
-        document.getElementById('scrape-panel-count').textContent   = `${data.current} / ${data.total}`;
-        if (data.session) updateRateInfo(data.session);
-    });
+// Entry points used by the scraper-picker batch buttons.
+function scrapeAll(systemId)          { enqueueScrape(systemId, 'ss'); }
+function scrapeAllWith(systemId, src) { enqueueScrape(systemId, src); }
 
-    document.getElementById('btn-scrape-cancel').addEventListener('click', async () => {
-        await window.api.cancelScrape();
-        showScrapePanel(false);
-        scrapeActive = false;
+function wireScrapeProgress() {
+    document.getElementById('btn-scrape-cancel').addEventListener('click', () => {
+        if (!scrapeRunning) { showScrapePanel(false); return; }
+        scrapeCancelled = true;
+        scrapeQueue = [];   // drop everything still queued; the in-flight game finishes
+        document.getElementById('scrape-panel-title').textContent = 'Stopping…';
     });
 }
 
