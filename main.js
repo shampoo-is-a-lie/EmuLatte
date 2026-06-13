@@ -1,5 +1,12 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, protocol } = require('electron');
 app.setName('emulatte');
+
+// ssimg:// proxies ScreenScraper thumbnails through the main process so the user's ssid/sspassword
+// never reach the renderer/DOM (only a credential-free base URL is passed). Must be registered
+// before app 'ready'. The handler that adds credentials and fetches is installed in whenReady().
+protocol.registerSchemesAsPrivileged([
+    { scheme: 'ssimg', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+]);
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -82,6 +89,25 @@ if (!gotLock) {
 }
 
 app.whenReady().then(() => {
+    // Serve ScreenScraper thumbnails: the renderer passes only the credential-free base URL as
+    // ?u=<encoded>; we add the user's credentials here (where they already live) and stream the
+    // image back, so the password never appears in the DOM, a GET query string, or the HTTP cache.
+    protocol.handle('ssimg', async (request) => {
+        try {
+            const base = new URL(request.url).searchParams.get('u');
+            if (!base) return new Response('bad request', { status: 400 });
+            const ssUser = db?.prepare('SELECT value FROM settings WHERE key=?').get('ss_user')?.value;
+            const ssPass = db?.prepare('SELECT value FROM settings WHERE key=?').get('ss_pass')?.value;
+            if (!ssUser || !ssPass) return new Response('no credentials', { status: 401 });
+            const res = await fetch(ssMediaUrl(base, ssUser, ssPass));
+            if (!res.ok) return new Response('upstream error', { status: res.status });
+            const buf = Buffer.from(await res.arrayBuffer());
+            return new Response(buf, { status: 200, headers: { 'content-type': res.headers.get('content-type') || 'image/jpeg' } });
+        } catch {
+            return new Response('error', { status: 500 });
+        }
+    });
+
     if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
     ['covers', 'heroes', 'logos', 'screenshots'].forEach(d =>
         fs.mkdirSync(path.join(imagesDir, d), { recursive: true })
@@ -804,8 +830,17 @@ ipcMain.handle('sgdb-apply-art', async (_, gameId, url, assetType) => {
     const ext  = url.split('.').pop().split('?')[0] || 'jpg';
     const dest = path.join(imagesDir, subdir, `${gameId}_${assetType}_${Date.now()}.${ext}`);
     fs.mkdirSync(path.dirname(dest), { recursive: true });
+    // ScreenScraper media arrives as a credential-free base URL; add the user's credentials here
+    // (in the main process) rather than ever exposing them to the renderer. Other sources' URLs
+    // are already complete and pass through untouched.
+    let fetchUrl = url;
+    if (url.includes('screenscraper.fr')) {
+        const ssUser = db.prepare('SELECT value FROM settings WHERE key=?').get('ss_user')?.value;
+        const ssPass = db.prepare('SELECT value FROM settings WHERE key=?').get('ss_pass')?.value;
+        if (ssUser && ssPass) fetchUrl = ssMediaUrl(url, ssUser, ssPass);
+    }
     try {
-        const res = await fetch(url);
+        const res = await fetch(fetchUrl);
         if (!res.ok) return { ok: false };
         fs.writeFileSync(dest, Buffer.from(await res.arrayBuffer()));
         if (assetType === 'screenshot') {
@@ -816,7 +851,10 @@ ipcMain.handle('sgdb-apply-art', async (_, gameId, url, assetType) => {
             db.prepare(`UPDATE games SET ${assetType}=? WHERE id=?`).run(dest, gameId);
         }
         return { ok: true, path: dest };
-    } catch(e) { return { ok: false, error: e.message }; }
+    } catch(e) {
+        // Never echo the URL back — fetch errors can embed it, and SS URLs carry credentials.
+        return { ok: false, error: String(e?.message || e).replace(/https?:\/\/\S+/gi, '[url]') };
+    }
 });
 
 ipcMain.handle('delete-game-art', (_, gameId, assetType) => {
@@ -864,12 +902,11 @@ ipcMain.handle('ss-search-art', async (_, gameId, assetType) => {
         screenshot: ['ss', 'sstitle', 'fanart'],
     };
     const wanted = new Set(typeMap[assetType] || ['box-2D']);
+    // Return the credential-free base URL only. The renderer displays it via the ssimg:// proxy and
+    // passes it back to sgdb-apply-art, both of which add credentials in the main process.
     const results = (jeu.medias || [])
         .filter(m => wanted.has(m.type))
-        .map(m => {
-            const url = ssMediaUrl(m.url, ssUser, ssPass);
-            return { thumb: url, url };
-        });
+        .map(m => ({ thumb: m.url, url: m.url }));
     return { ok: true, results };
 });
 

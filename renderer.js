@@ -2127,7 +2127,12 @@ async function _artPickerSearch(query, gameId) {
         wrap.style.cssText = 'position:relative; border-radius:6px; overflow:hidden; cursor:pointer; border:2px solid transparent; transition:border 0.15s;';
 
         const img = document.createElement('img');
-        img.src = item.thumb;
+        // ScreenScraper thumbs carry no credentials in item.thumb; load them through the ssimg://
+        // proxy so the main process adds the user's account out of view of the DOM. Other sources
+        // return ready-to-load URLs.
+        img.src = _artPickerScraper === 'ss'
+            ? `ssimg://thumb/?u=${encodeURIComponent(item.thumb)}`
+            : item.thumb;
         img.style.cssText = 'width:100%; display:block; border-radius:4px; transition:transform 0.15s; object-fit:'
             + (_artIsContain[_artPickerType] ? 'contain; background:rgba(0,0,0,0.4); padding:8px;' : 'cover;');
 
