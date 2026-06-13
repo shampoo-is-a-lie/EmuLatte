@@ -94,6 +94,25 @@
     }
     select { cursor: pointer; }
     input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 10px var(--border); }
+
+    /* Themed dropdown (replaces native <select> popups, which can't be styled) */
+    .cust-sel { position: relative; width: 100%; }
+    .cust-sel-btn { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      background-color: rgba(0,0,0,0.3); color: var(--text_main); border: 1px solid var(--border_solid);
+      padding: 10px 12px; border-radius: 6px; font-family: 'Raleway', sans-serif; font-size: 13px;
+      cursor: pointer; text-align: left; transition: border-color 0.15s, box-shadow 0.15s; }
+    .cust-sel-btn:hover { border-color: var(--accent); }
+    .cust-sel.open .cust-sel-btn { border-color: var(--accent); box-shadow: 0 0 10px var(--border); }
+    .cust-sel-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cust-sel-arrow { color: var(--text_dim); font-size: 9px; flex-shrink: 0; transition: transform 0.15s, color 0.15s; }
+    .cust-sel.open .cust-sel-arrow { transform: rotate(180deg); color: var(--accent); }
+    .cust-sel-list { position: fixed; z-index: 100000; max-height: 260px; overflow-y: auto;
+      background: var(--bg_menu); border: 1px solid var(--accent); border-radius: 6px; padding: 4px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.6); }
+    .cust-sel-item { padding: 8px 10px; border-radius: 4px; color: var(--text_sec); font-size: 13px;
+      cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cust-sel-item:hover { background: var(--bg_panel); color: var(--text_main); }
+    .cust-sel-item.sel { background: var(--accent); color: var(--bg); font-weight: 700; }
     label { font-size: 11px; font-weight: 900; color: var(--text_dim); letter-spacing: 1px; text-transform: uppercase; display: block; margin-bottom: 4px; }
 
     .filter-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }

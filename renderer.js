@@ -34,6 +34,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     const savedTheme = await window.api.getSetting('el_theme') || 'CREMA';
     applyTheme(savedTheme, false);
     wireUI();
+    enhanceAllSelects();
     updateTemplateButtonLabels();
     wireScrapeProgress();
     window.api.signalReady();
@@ -1056,6 +1057,102 @@ function renderThemesInCategory(cat) {
 }
 
 // ── UI WIRING ─────────────────────────────────────────────────────────────────
+// ── THEMED DROPDOWNS ────────────────────────────────────────────────────────
+// Replace native <select> popups (un-themeable) with a styled widget. The native
+// <select> stays as the source of truth (hidden), so every existing .value read/write
+// keeps working; we just mirror it and intercept programmatic value/option changes.
+let _openCustSel = null;
+
+function installSelectValueShim(sel, onChange) {
+    if (sel.dataset.shim) return;
+    sel.dataset.shim = '1';
+    const vd = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+    const id = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'selectedIndex');
+    Object.defineProperty(sel, 'value',         { configurable: true, get() { return vd.get.call(this); }, set(v) { vd.set.call(this, v); onChange(); } });
+    Object.defineProperty(sel, 'selectedIndex', { configurable: true, get() { return id.get.call(this); }, set(v) { id.set.call(this, v); onChange(); } });
+}
+
+function enhanceSelect(sel) {
+    if (!sel || sel.dataset.enh) return;
+    sel.dataset.enh = '1';
+    sel.style.display = 'none';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'cust-sel';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'cust-sel-btn';
+    btn.innerHTML = '<span class="cust-sel-label"></span><span class="cust-sel-arrow">▾</span>';
+    wrap.appendChild(btn);
+    sel.parentNode.insertBefore(wrap, sel.nextSibling);
+    const labelEl = btn.querySelector('.cust-sel-label');
+
+    const syncLabel = () => { const o = sel.options[sel.selectedIndex]; labelEl.textContent = o ? o.textContent : ''; };
+
+    let listEl = null;
+    const api = { close };
+
+    function close() {
+        if (listEl) { listEl.remove(); listEl = null; }
+        wrap.classList.remove('open');
+        document.removeEventListener('mousedown', onDocDown, true);
+        document.removeEventListener('keydown', onKey, true);
+        window.removeEventListener('resize', close, true);
+        window.removeEventListener('scroll', close, true);
+        if (_openCustSel === api) _openCustSel = null;
+    }
+    function onDocDown(e) { if (!listEl?.contains(e.target) && !wrap.contains(e.target)) close(); }
+    function onKey(e) { if (e.key === 'Escape') close(); }
+
+    function position() {
+        const r = btn.getBoundingClientRect();
+        listEl.style.left  = `${r.left}px`;
+        listEl.style.width = `${r.width}px`;
+        const below  = window.innerHeight - r.bottom;
+        const listH  = Math.min(listEl.scrollHeight, 260);
+        if (below < listH + 8 && r.top > below) {
+            listEl.style.top = ''; listEl.style.bottom = `${window.innerHeight - r.top + 4}px`;
+        } else {
+            listEl.style.bottom = ''; listEl.style.top = `${r.bottom + 4}px`;
+        }
+    }
+
+    function open() {
+        _openCustSel?.close();
+        listEl = document.createElement('div');
+        listEl.className = 'cust-sel-list';
+        Array.from(sel.options).forEach((o, i) => {
+            const item = document.createElement('div');
+            item.className = 'cust-sel-item' + (i === sel.selectedIndex ? ' sel' : '');
+            item.textContent = o.textContent;
+            item.addEventListener('mousedown', e => {
+                e.preventDefault();
+                sel.selectedIndex = i;                                  // shim → syncLabel
+                sel.dispatchEvent(new Event('change', { bubbles: true }));
+                close();
+            });
+            listEl.appendChild(item);
+        });
+        document.body.appendChild(listEl);
+        position();
+        wrap.classList.add('open');
+        document.addEventListener('mousedown', onDocDown, true);
+        document.addEventListener('keydown', onKey, true);
+        window.addEventListener('resize', close, true);
+        window.addEventListener('scroll', close, true);
+        _openCustSel = api;
+        listEl.querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
+    }
+
+    btn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); listEl ? close() : open(); });
+
+    installSelectValueShim(sel, syncLabel);
+    new MutationObserver(syncLabel).observe(sel, { childList: true });
+    syncLabel();
+}
+
+function enhanceAllSelects() { document.querySelectorAll('select').forEach(enhanceSelect); }
+
 function wireUI() {
     // Titlebar
     document.getElementById('btn-min').addEventListener('click', () => window.api.minimize());
