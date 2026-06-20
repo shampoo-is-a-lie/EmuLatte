@@ -1056,6 +1056,97 @@ ipcMain.handle('igdb-search-art', async (_, gameName, assetType, systemShortName
     } catch(e) { return { ok: false, error: e.message }; }
 });
 
+// ── BIOS MANAGER ──────────────────────────────────────────────────────────────
+// EmuLatte never downloads BIOS (copyrighted firmware). It only verifies and installs
+// files the user already owns into RetroArch's system/ folder. Database in assets/bios_db.json.
+let biosDb = {};
+try { biosDb = JSON.parse(fs.readFileSync(path.join(__dirname, 'assets', 'bios_db.json'), 'utf8')); } catch {}
+
+function md5File(p) {
+    try { return crypto.createHash('md5').update(fs.readFileSync(p)).digest('hex'); } catch { return null; }
+}
+
+function getRetroArchSystemDir() {
+    const variant = db?.prepare('SELECT value FROM settings WHERE key=?').get('retroarch_variant')?.value || detectRetroArch();
+    const cfgDir = variant === 'flatpak'
+        ? path.join(os.homedir(), '.var', 'app', 'org.libretro.RetroArch', 'config', 'retroarch')
+        : path.join(os.homedir(), '.config', 'retroarch');
+    try {
+        const m = fs.readFileSync(path.join(cfgDir, 'retroarch.cfg'), 'utf8').match(/^\s*system_directory\s*=\s*"([^"]*)"/m);
+        if (m && m[1] && m[1] !== 'default') {
+            const dir = m[1].replace(/^~(?=[/\\])/, os.homedir()).replace(/^:/, cfgDir);
+            if (fs.existsSync(dir)) return dir;
+        }
+    } catch {}
+    return path.join(cfgDir, 'system');
+}
+
+function walkFiles(dir, depth = 0, acc = []) {
+    if (depth > 4 || acc.length > 8000) return acc;
+    let entries = [];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return acc; }
+    for (const e of entries) {
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) walkFiles(full, depth + 1, acc);
+        else acc.push(full);
+    }
+    return acc;
+}
+
+ipcMain.handle('bios-status', (_, shortName) => {
+    const entry = biosDb[shortName];
+    if (!entry || !entry.files) return { ok: true, files: [], note: '' };
+    const sysDir = getRetroArchSystemDir();
+    const files = entry.files.map(b => {
+        const dest = path.join(sysDir, b.file);
+        let status = 'missing';
+        if (fs.existsSync(dest)) status = (b.md5 && md5File(dest) === b.md5.toLowerCase()) ? 'verified' : 'present';
+        return { file: b.file, required: !!b.required, region: b.region || '', status };
+    });
+    return { ok: true, files, note: entry.note || '', systemDir: sysDir };
+});
+
+ipcMain.handle('bios-add-file', async (event, shortName, biosFile) => {
+    const spec = biosDb[shortName]?.files?.find(b => b.file === biosFile);
+    if (!spec) return { ok: false, error: 'Unknown BIOS file.' };
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const res = await dialog.showOpenDialog(win, { title: `Select ${biosFile}`, properties: ['openFile'] });
+    if (res.canceled || !res.filePaths[0]) return { ok: false, canceled: true };
+    const verified = spec.md5 ? (md5File(res.filePaths[0]) === spec.md5.toLowerCase()) : null;
+    const sysDir = getRetroArchSystemDir();
+    try {
+        fs.mkdirSync(sysDir, { recursive: true });
+        fs.copyFileSync(res.filePaths[0], path.join(sysDir, biosFile));
+    } catch (e) { return { ok: false, error: e.message }; }
+    return { ok: true, verified, md5Known: !!spec.md5 };
+});
+
+ipcMain.handle('bios-scan-folder', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const res = await dialog.showOpenDialog(win, { title: 'Select a folder containing your BIOS files', properties: ['openDirectory'] });
+    if (res.canceled || !res.filePaths[0]) return { ok: false, canceled: true };
+
+    const byMd5 = {}, byName = {};
+    for (const sys of Object.values(biosDb)) {
+        for (const b of (sys.files || [])) {
+            if (b.md5) byMd5[b.md5.toLowerCase()] = b.file;
+            byName[b.file.toLowerCase()] = b.file;
+        }
+    }
+    const sysDir = getRetroArchSystemDir();
+    try { fs.mkdirSync(sysDir, { recursive: true }); } catch (e) { return { ok: false, error: e.message }; }
+
+    const installed = new Set();
+    for (const f of walkFiles(res.filePaths[0])) {
+        let size = 0; try { size = fs.statSync(f).size; } catch { continue; }
+        const byHash = size <= 16 * 1024 * 1024 ? byMd5[md5File(f)] : null;   // hash only small files (skip ROMs)
+        const target = byHash || byName[path.basename(f).toLowerCase()];
+        if (!target) continue;
+        try { fs.copyFileSync(f, path.join(sysDir, target)); installed.add(target); } catch {}
+    }
+    return { ok: true, installed: [...installed], systemDir: sysDir };
+});
+
 // ── CNGM CREDENTIAL IMPORT ────────────────────────────────────────────────────
 ipcMain.handle('import-cngm-credentials', () => {
     const cngmDb = path.join(baseDir, 'GameManagerConfig', 'games.db');

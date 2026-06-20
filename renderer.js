@@ -864,7 +864,43 @@ function openEditSystemModal(sys = null) {
     document.getElementById('edit-system-emulator').value      = sys?.default_emulator || '';
     document.getElementById('edit-system-ssid').value          = sys?.screenscraper_id || '';
     document.getElementById('btn-edit-system-delete').style.display = isNew ? 'none' : '';
+    renderBiosStatus(sys?.short_name || '');
     openModal('modal-edit-system');
+}
+
+async function renderBiosStatus(shortName) {
+    const list = document.getElementById('bios-list');
+    const scanBtn = document.getElementById('btn-bios-scan');
+    const r = await window.api.biosStatus(shortName);
+    if (!r.ok || !r.files.length) {
+        list.innerHTML = '<span style="color:var(--text_dim);">No BIOS files needed for this system.</span>';
+        scanBtn.style.display = 'none';
+        return;
+    }
+    scanBtn.style.display = '';
+    const badge = s => s === 'verified' ? '<span style="color:#66bb6a; font-weight:700;">✓ verified</span>'
+                     : s === 'present'  ? '<span style="color:#ffb74d;">present (unverified)</span>'
+                     :                    '<span style="color:#ef5350;">missing</span>';
+    list.innerHTML =
+        (r.note ? `<div style="color:var(--text_dim); margin-bottom:6px;">${escHtml(r.note)}</div>` : '') +
+        r.files.map(b => `
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:3px 0;">
+                <span><code>${escHtml(b.file)}</code>${b.region ? ` <span style="color:var(--text_dim);">(${escHtml(b.region)})</span>` : ''}${b.required ? ' <span style="color:var(--text_dim);">· required</span>' : ''}</span>
+                <span style="display:flex; gap:10px; align-items:center; white-space:nowrap;">${badge(b.status)}
+                    <button type="button" class="btn-bios-add" data-file="${escHtml(b.file)}" style="font-size:10px; padding:3px 9px;">${b.status === 'missing' ? 'ADD' : 'REPLACE'}</button>
+                </span>
+            </div>`).join('') +
+        `<div style="color:var(--text_dim); font-size:10px; margin-top:6px; word-break:break-all;">→ ${escHtml(r.systemDir)}</div>`;
+
+    list.querySelectorAll('.btn-bios-add').forEach(btn => btn.addEventListener('click', async () => {
+        const res = await window.api.biosAddFile(shortName, btn.dataset.file);
+        if (res.canceled) return;
+        if (!res.ok) { showLaunchToast(res.error || 'Failed to add BIOS.', null, 'BIOS'); return; }
+        showLaunchToast(res.md5Known && res.verified === false
+            ? `Added ${btn.dataset.file} — note: MD5 didn't match a known-good hash.`
+            : `Added ${btn.dataset.file}.`, null, 'BIOS');
+        renderBiosStatus(shortName);
+    }));
 }
 
 // ── SIDE PANEL ────────────────────────────────────────────────────────────────
@@ -1673,6 +1709,18 @@ function wireUI() {
         await loadGames();
         if (currentFilter === String(id)) setFilter('all');
         openSystemsModal();
+    });
+
+    // BIOS: scan a folder and auto-install matches (by MD5, falling back to filename) for any system
+    document.getElementById('btn-bios-scan').addEventListener('click', async () => {
+        const short = document.getElementById('edit-system-short').value.trim();
+        const res = await window.api.biosScanFolder();
+        if (res.canceled) return;
+        if (!res.ok) { showLaunchToast(res.error || 'Scan failed.', null, 'BIOS'); return; }
+        showLaunchToast(res.installed.length
+            ? `Added ${res.installed.length} BIOS file(s): ${res.installed.join(', ')}.`
+            : 'Done. No matching BIOS files found in that folder.', null, 'BIOS');
+        if (short) renderBiosStatus(short);
     });
 
     // ── EDIT SYSTEM: BROWSE CORE ─────────────────────────────────────────────

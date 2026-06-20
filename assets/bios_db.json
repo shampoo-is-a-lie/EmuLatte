@@ -1,0 +1,88 @@
+{
+  "_comment": "BIOS requirements per system for the common RetroArch cores. file = exact name (case-sensitive) RetroArch expects in its system/ folder. md5 = a known-good hash for the 'verified' badge and folder-scan auto-match (null = match by filename only). required = the core won't run without it. Extend freely.",
+  "ps1": {
+    "note": "Beetle PSX needs the BIOS for your game's region; PCSX-ReARMed can run without one.",
+    "files": [
+      { "file": "scph5500.bin", "md5": "8dd7d5296a650fac7319bce665a6a53c", "required": false, "region": "Japan" },
+      { "file": "scph5501.bin", "md5": "490f666e1afb15b7362b406ed1cea246", "required": false, "region": "North America" },
+      { "file": "scph5502.bin", "md5": "32736f17079d0b2b7024407c39bd3050", "required": false, "region": "Europe" }
+    ]
+  },
+  "fds": {
+    "note": "Famicom Disk System BIOS, required by FCEUmm / Nestopia.",
+    "files": [
+      { "file": "disksys.rom", "md5": "ca30b50f880eb660a320674ed365ef7a", "required": true }
+    ]
+  },
+  "segacd": {
+    "note": "Sega CD / Mega-CD needs the BIOS matching your game's region.",
+    "files": [
+      { "file": "bios_CD_U.bin", "md5": "854b9150240a198070150e4566ae1290", "required": false, "region": "North America" },
+      { "file": "bios_CD_E.bin", "md5": "e66fa1dc5820d254611fdcdba0662372", "required": false, "region": "Europe" },
+      { "file": "bios_CD_J.bin", "md5": "278a9397d192149e84e820ac621a8edd", "required": false, "region": "Japan" }
+    ]
+  },
+  "saturn": {
+    "note": "Beetle Saturn needs the region BIOS; mpr-17933 covers US/EU.",
+    "files": [
+      { "file": "sega_101.bin", "md5": "85ec9ca47d8f6807718151cbcca8b964", "required": false, "region": "Japan" },
+      { "file": "mpr-17933.bin", "md5": "3240872c70984b6cbfda1586cab68dbe", "required": false, "region": "North America / Europe" }
+    ]
+  },
+  "dc": {
+    "note": "Sega Dreamcast (Flycast).",
+    "files": [
+      { "file": "dc_boot.bin", "md5": "e10c53c2f8b90bab96ead2d368858623", "required": true },
+      { "file": "dc_flash.bin", "md5": "0a93f7940c455905bea6e392dfde92a4", "required": true }
+    ]
+  },
+  "pcecd": {
+    "note": "PC Engine CD / TurboGrafx-CD (Beetle PCE).",
+    "files": [
+      { "file": "syscard3.pce", "md5": "38179df8f4ac870017db21ebcbf53114", "required": true }
+    ]
+  },
+  "pcfx": {
+    "note": "NEC PC-FX (Beetle PC-FX).",
+    "files": [
+      { "file": "pcfx.rom", "md5": "08e36edbea28a017f79f8d4f7ff9b6d7", "required": true }
+    ]
+  },
+  "3do": {
+    "note": "3DO (Opera). Any one regional BIOS works.",
+    "files": [
+      { "file": "panafz1.bin", "md5": "f47264dd47fe30f73ab3c010015c155b", "required": false, "region": "Panasonic FZ-1" },
+      { "file": "panafz10.bin", "md5": "51f2f43ae2f3508a14d9f56597e2d3ce", "required": false, "region": "Panasonic FZ-10" }
+    ]
+  },
+  "lynx": {
+    "note": "Atari Lynx boot ROM (required by Handy, optional for Beetle Lynx).",
+    "files": [
+      { "file": "lynxboot.img", "md5": "fcd403db69f54290b51035d82f835e7b", "required": false }
+    ]
+  },
+  "neogeo": {
+    "note": "Neo Geo system ROMs as neogeo.zip (FBNeo / MAME). Hash varies by set, so match by filename.",
+    "files": [
+      { "file": "neogeo.zip", "md5": null, "required": true }
+    ]
+  },
+  "gba": {
+    "note": "Game Boy Advance boot ROM — optional, improves accuracy (mGBA / VBA-M).",
+    "files": [
+      { "file": "gba_bios.bin", "md5": "a860e8c0b6d573d191e4ec7db1b1e4f6", "required": false }
+    ]
+  },
+  "gb": {
+    "note": "Game Boy boot ROM — optional (shows the startup logo).",
+    "files": [
+      { "file": "gb_bios.bin", "md5": "32fbbd84168d3482956eb3c5051637f5", "required": false }
+    ]
+  },
+  "gbc": {
+    "note": "Game Boy Color boot ROM — optional.",
+    "files": [
+      { "file": "gbc_bios.bin", "md5": "dbfce9db9deaa2567f6a84fde55f9680", "required": false }
+    ]
+  }
+}
