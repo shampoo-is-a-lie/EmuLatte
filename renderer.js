@@ -356,6 +356,23 @@ function openPlaylistEditModal(pl) {
 }
 
 // ── GAMEPAGE ──────────────────────────────────────────────────────────────────
+// Full-screen image viewer — click backdrop or press Escape to dismiss.
+function openImageLightbox(src) {
+    if (!src) return;
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed; inset:0; z-index:100001; background:rgba(0,0,0,0.85); ' +
+        'display:flex; align-items:center; justify-content:center; padding:40px; cursor:zoom-out; backdrop-filter:blur(4px);';
+    const img = document.createElement('img');
+    img.src = src;
+    img.style.cssText = 'max-width:100%; max-height:100%; object-fit:contain; border-radius:8px; box-shadow:0 20px 60px rgba(0,0,0,0.85);';
+    ov.appendChild(img);
+    const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+    const onKey = e => { if (e.key === 'Escape') close(); };
+    ov.addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(ov);
+}
+
 function openGamePage(game) {
     currentGame = game;
 
@@ -386,7 +403,10 @@ function openGamePage(game) {
     favBtn.classList.toggle('active',  !!game.fav);
     wantBtn.classList.toggle('active', !!game.want);
 
-    document.getElementById('gamepage-cover').src = game.cover || '';
+    const cov = document.getElementById('gamepage-cover');
+    cov.src = game.cover || '';
+    cov.style.aspectRatio = coverRatio(game.system_short);   // match the box shape we set per system
+    cov.style.cursor = game.cover ? 'zoom-in' : 'default';
 
     const stats = [];
     if (game.system_name) stats.push({ label: 'System',    val: game.system_name });
@@ -1372,6 +1392,11 @@ function wireUI() {
     // Gamepage → CafeNeurotico
     document.getElementById('btn-gamepage-cngm').addEventListener('click', e => {
         if (currentGame) pushGameToCngm(currentGame.id, e.currentTarget);
+    });
+
+    // Gamepage cover → click to view full size
+    document.getElementById('gamepage-cover').addEventListener('click', () => {
+        if (currentGame?.cover) openImageLightbox(currentGame.cover);
     });
 
     // ── TRAILERS ─────────────────────────────────────────────────────────────
