@@ -136,23 +136,23 @@ function updateCategoryHeader(games) {
     document.getElementById('system-hero-btns').style.display = isSystem ? 'flex' : 'none';
 }
 
-// Box-art orientation per system → CSS aspect-ratio for the gallery cover.
-// Default is portrait (2:3). LANDSCAPE = wide US cartridge boxes; SQUARE ≈ 1:1 for
-// arcade/home-computer art (marquees/flyers vary). Starting table — tune the sets to taste.
-const COVER_RATIO_LANDSCAPE = new Set([
-    'nes','fds','snes','n64','sms','genesis','megadrive','32x','gg','sg1000',
-    'a2600','a5200','a7800','lynx','tg16','pcengine','turbografx','colecovision',
-    'coleco','intellivision','jaguar','vectrex',
+// Gallery cover proportions, from the real shape of each system's game boxes.
+// PORTRAIT (~5:7) is the default — disc/DVD cases (PS1/PS2/PSP/Saturn/DC/GC/Wii),
+// the DS family, NES, and the Genesis/Mega Drive clamshell. LANDSCAPE (~7:5) is the
+// wide US cartridge box: SNES, N64, and the Atari/Coleco/Intellivision era. SQUARE
+// (1:1) is the Game Boy family + Game Gear. short_name comes from the system preset;
+// edit the sets below to retune any system.
+const COVER_LANDSCAPE = new Set([
+    'snes', 'n64', 'a2600', 'a5200', 'a7800', 'coleco', 'intv', 'vectrex',
 ]);
-const COVER_RATIO_SQUARE = new Set([
-    'arcade','mame','fbneo','fba','neogeo','neogeocd','c64','amiga','amigacd32',
-    'msx','msx2','atarist','zxspectrum','spectrum','dos','pc98','x68000',
+const COVER_SQUARE = new Set([
+    'gb', 'gbc', 'gba', 'gg', 'ngp', 'ngpc', 'ws', 'wsc',
 ]);
 function coverRatio(shortName) {
     const s = (shortName || '').toLowerCase();
-    if (COVER_RATIO_LANDSCAPE.has(s)) return '4 / 3';
-    if (COVER_RATIO_SQUARE.has(s))    return '1 / 1';
-    return '2 / 3';
+    if (COVER_LANDSCAPE.has(s)) return '7 / 5';   // wide cardboard cartridge boxes
+    if (COVER_SQUARE.has(s))    return '1 / 1';   // square handheld boxes
+    return '5 / 7';                               // portrait: NES, Genesis, discs, DS…
 }
 
 function renderGallery(games) {
