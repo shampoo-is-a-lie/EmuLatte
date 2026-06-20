@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('api', {
     setGameFlag:     (id, f, v) => ipcRenderer.invoke('set-game-flag', id, f, v),
     updateLastPlayed:(id)       => ipcRenderer.invoke('update-last-played', id),
     launchGame:      (id)       => ipcRenderer.invoke('launch-game', id),
+    addToCngm:       (id)       => ipcRenderer.invoke('add-to-cngm', id),
 
     // Settings
     getSetting: (k)    => ipcRenderer.invoke('get-setting', k),

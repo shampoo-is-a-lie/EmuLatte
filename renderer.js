@@ -473,18 +473,30 @@ async function launchGame(id) {
 }
 
 let toastTimer = null;
-function showLaunchToast(msg, cmd) {
+function showLaunchToast(msg, cmd, label) {
     const toast  = document.getElementById('launch-toast');
     const msgEl  = document.getElementById('launch-toast-msg');
-    const isInfo = !cmd && (msg.startsWith('Done') || msg.startsWith('Stopped') || msg.startsWith('Scraped'));
+    const isInfo = !cmd && /^(Done|Stopped|Scraped|Added|Updated)/.test(msg);
     toast.style.borderColor = isInfo ? 'var(--border_solid)' : '#c62828';
     toast.querySelector('div').style.color = isInfo ? 'var(--accent)' : '#ef5350';
-    toast.querySelector('div').textContent = isInfo ? 'SCRAPE' : 'LAUNCH FAILED';
+    toast.querySelector('div').textContent = label || (isInfo ? 'SCRAPE' : 'LAUNCH FAILED');
     msgEl.textContent = cmd ? `${msg}\n\nCommand: ${cmd}` : msg;
     toast.style.display = 'block';
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { toast.style.display = 'none'; }, 7000);
     toast.onclick = () => { toast.style.display = 'none'; clearTimeout(toastTimer); };
+}
+
+async function pushGameToCngm(gameId, btn) {
+    if (!gameId) return;
+    const orig = btn?.textContent;
+    if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
+    const r = await window.api.addToCngm(gameId);
+    if (btn) { btn.disabled = false; btn.textContent = orig; }
+    showLaunchToast(
+        r.ok ? (r.updated ? 'Updated in CafeNeurotico.' : 'Added to CafeNeurotico (Emulation category).')
+             : (r.error || 'Failed to add to CafeNeurotico.'),
+        null, 'CAFENEUROTICO');
 }
 
 // ── RETROACHIEVEMENTS ────────────────────────────────────────────────────────
@@ -1321,6 +1333,11 @@ function wireUI() {
         await loadGames();
     });
 
+    // Gamepage → CafeNeurotico
+    document.getElementById('btn-gamepage-cngm').addEventListener('click', e => {
+        if (currentGame) pushGameToCngm(currentGame.id, e.currentTarget);
+    });
+
     // ── TRAILERS ─────────────────────────────────────────────────────────────
     let _trailerTitle  = '';
     let _trailerIgdbId = '';
@@ -1590,6 +1607,11 @@ function wireUI() {
         closeModal('modal-edit-game');
         switchView('view-gallery');
         await loadGames();
+    });
+
+    document.getElementById('btn-edit-cngm').addEventListener('click', e => {
+        const id = Number(document.getElementById('edit-game-id').value);
+        if (id) pushGameToCngm(id, e.currentTarget);
     });
 
     // ── MODAL: SYSTEMS ───────────────────────────────────────────────────────

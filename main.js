@@ -344,15 +344,9 @@ ipcMain.handle('set-setting', (_, key, value) => {
 });
 
 // ── LAUNCH ────────────────────────────────────────────────────────────────────
-ipcMain.handle('launch-game', (_, gameId) => {
-    if (!db) return { ok: false, error: 'DB not ready' };
-    const game = db.prepare(`
-        SELECT g.*, s.launch_template, s.default_core, s.default_emulator
-        FROM games g LEFT JOIN systems s ON g.system_id = s.id
-        WHERE g.id=?
-    `).get(gameId);
-    if (!game) return { ok: false, error: 'Game not found' };
-
+// Build the shell launch command for a game row (joined with its system fields).
+// Shared by launch-game and add-to-cngm so EmuLatte and CafeNeurotico run it identically.
+function buildLaunchCommand(game) {
     let cmd = game.launch_override;
     if (!cmd && game.launch_template && game.rom_path) {
         const core = game.core_override || game.default_core || '';
@@ -361,11 +355,85 @@ ipcMain.handle('launch-game', (_, gameId) => {
             .replace('{core}',     core                  ? `"${core}"`                  : '')
             .replace('{emulator}', game.default_emulator ? `"${game.default_emulator}"` : '');
     }
-    if (!cmd || !cmd.trim()) return { ok: false, error: 'No launch command configured — set a Launch Template in System Manager or a Launch Override on this ROM.' };
+    return (cmd && cmd.trim()) ? cmd.trim() : '';
+}
+
+const gameWithSystem = (gameId) => db.prepare(`
+    SELECT g.*, s.launch_template, s.default_core, s.default_emulator
+    FROM games g LEFT JOIN systems s ON g.system_id = s.id
+    WHERE g.id=?
+`).get(gameId);
+
+ipcMain.handle('launch-game', (_, gameId) => {
+    if (!db) return { ok: false, error: 'DB not ready' };
+    const game = gameWithSystem(gameId);
+    if (!game) return { ok: false, error: 'Game not found' };
+
+    const cmd = buildLaunchCommand(game);
+    if (!cmd) return { ok: false, error: 'No launch command configured — set a Launch Template in System Manager or a Launch Override on this ROM.' };
 
     db.prepare('UPDATE games SET last_played=? WHERE id=?').run(Date.now(), gameId);
     spawn('bash', ['-c', cmd], { detached: true, stdio: 'ignore' }).unref();
     return { ok: true };
+});
+
+// Push a game into CafeNeurotico's library under the Emulation category. CNGM shares the
+// GameManagerConfig folder, buckets by the Store column, stores art as relative
+// GameManagerConfig/images/<file> paths, and shell-execs LaunchCommand — so we copy the art
+// across and write a row whose LaunchCommand is EmuLatte's own RetroArch command.
+function copyArtToCngm(srcAbs, cngmImagesDir, gameId, type) {
+    if (!srcAbs || !fs.existsSync(srcAbs)) return '';
+    const ext = path.extname(srcAbs) || '.jpg';
+    const fn  = `emulatte_${gameId}_${type}${ext}`;
+    try { fs.copyFileSync(srcAbs, path.join(cngmImagesDir, fn)); }
+    catch { return ''; }
+    return `GameManagerConfig/images/${fn}`;
+}
+
+ipcMain.handle('add-to-cngm', (_, gameId) => {
+    if (!db) return { ok: false, error: 'DB not ready' };
+    const game = gameWithSystem(gameId);
+    if (!game) return { ok: false, error: 'Game not found' };
+
+    const cmd = buildLaunchCommand(game);
+    if (!cmd) return { ok: false, error: 'No launch command for this game — set a Launch Template/core first.' };
+
+    const cngmDir = path.join(baseDir, 'GameManagerConfig');
+    const cngmDb  = path.join(cngmDir, 'games.db');
+    if (!fs.existsSync(cngmDb)) return { ok: false, error: 'CafeNeurotico database not found in the shared GameManagerConfig folder.' };
+    const cngmImages = path.join(cngmDir, 'images');
+    fs.mkdirSync(cngmImages, { recursive: true });
+
+    let cdb;
+    try {
+        cdb = new Database(cngmDb, { timeout: 4000 });
+        const cover = copyArtToCngm(game.cover, cngmImages, gameId, 'cover');
+        const hero  = copyArtToCngm(game.hero,  cngmImages, gameId, 'hero');
+        const logo  = copyArtToCngm(game.logo,  cngmImages, gameId, 'logo');
+        const shots = (game.screenshot || '').split('|').filter(Boolean)
+            .map((s, i) => copyArtToCngm(s, cngmImages, gameId, `ss${i}`)).filter(Boolean).join('|');
+
+        // Dedupe on the launch command (unique per rom+core): update in place if present.
+        const existing = cdb.prepare('SELECT id FROM games WHERE LaunchCommand=?').get(cmd);
+        if (existing) {
+            cdb.prepare(`UPDATE games SET Game=?, Store='Emulation', GENRE=?, DEV=?, PUB=?, RELEASED=?,
+                Description=?, CoverArt=?, HeroArt=?, Logo=?, Screenshot=?, Installed=1 WHERE id=?`)
+               .run(game.title, game.genre || '', game.developer || '', game.publisher || '', game.year || '',
+                    game.description || '', cover, hero, logo, shots, existing.id);
+            cdb.close();
+            return { ok: true, updated: true };
+        }
+        cdb.prepare(`INSERT INTO games (Store, Game, GENRE, DEV, PUB, RELEASED, Description,
+            CoverArt, HeroArt, Logo, Screenshot, LaunchCommand, Installed)
+            VALUES ('Emulation', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`)
+           .run(game.title, game.genre || '', game.developer || '', game.publisher || '', game.year || '',
+                game.description || '', cover, hero, logo, shots, cmd);
+        cdb.close();
+        return { ok: true };
+    } catch (e) {
+        try { cdb?.close(); } catch {}
+        return { ok: false, error: e.message };
+    }
 });
 
 // ── SCREENSCRAPER HELPERS ─────────────────────────────────────────────────────
