@@ -480,6 +480,7 @@ function switchView(viewId) {
         if (currentView !== 'view-gamepage') _bgView = currentView;
         gp.classList.add('active');
         backdrop.classList.add('active');
+        document.body.classList.add('gamepage-open');   // shows the floating Play button (a layer outside the scrolling panel)
         currentView = 'view-gamepage';
         document.getElementById('gamepage-back-bar').style.display = 'none';
         return;
@@ -487,6 +488,7 @@ function switchView(viewId) {
 
     gp.classList.remove('active');
     backdrop.classList.remove('active');
+    document.body.classList.remove('gamepage-open');
     document.querySelectorAll('.view').forEach(v => { if (v !== gp) v.classList.remove('active'); });
     document.getElementById(viewId)?.classList.add('active');
     currentView = viewId;

@@ -143,6 +143,14 @@
       border: 1px solid var(--border_solid); font-size: 14px; line-height: 1; cursor: pointer; display: none; }
     #view-gamepage.active #gamepage-overlay-close { display: flex; align-items: center; justify-content: center; }
     #gamepage-overlay-close:hover { background: var(--accent); color: var(--bg); }
+    /* Float the Play button at the panel's bottom-right, always visible (like CafeNeurotico).
+       The panel's transform makes position:fixed resolve relative to the panel, so it pins to
+       the corner and never scrolls with the content. */
+    /* Floating Play button — lives OUTSIDE the scrolling panel (a fixed layer above it) so it
+       stays put while the gamepage scrolls. Positioned to the panel's bottom-right via viewport math. */
+    #btn-gamepage-launch { display: none; position: fixed; z-index: 9003; margin: 0;
+      right: calc((100vw - min(1100px, 94vw)) / 2 + 28px); bottom: calc(5vh + 28px); }
+    body.gamepage-open #btn-gamepage-launch { display: inline-flex; align-items: center; }
     @keyframes gp-fade { from { opacity: 0; } to { opacity: 1; } }
     @keyframes gp-pop { from { opacity: 0; transform: translate(-50%, -47%) scale(0.97); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
 
@@ -392,6 +400,8 @@
 
       <!-- GAMEPAGE VIEW -->
       <div id="gamepage-backdrop"></div>
+      <!-- Floating Play button: a fixed layer OUTSIDE the scrolling panel, so it never scrolls -->
+      <button id="btn-gamepage-launch" class="primary" style="font-size:20px; padding:15px 40px; border-radius:50px; box-shadow:0 10px 20px rgba(0,0,0,0.5); letter-spacing:2px;">▶ PLAY</button>
 
       <div id="view-gamepage" class="view">
         <button id="gamepage-overlay-close" title="Close (Esc)">✕</button>
@@ -416,7 +426,6 @@
               <button id="btn-gamepage-scrape" class="btn-hero" title="Scrape metadata &amp; artwork from ScreenScraper.fr">SCRAPE</button>
               <button id="btn-gamepage-trailer" class="btn-hero" style="display:none;">WATCH TRAILER</button>
               <button id="btn-gamepage-edit" class="btn-hero">EDIT DETAILS</button>
-              <button id="btn-gamepage-launch" class="primary" style="font-size:20px; padding:15px 40px; border-radius:50px; box-shadow:0 10px 20px rgba(0,0,0,0.5); letter-spacing:2px;">▶ PLAY</button>
             </div>
           </div>
         </div>
