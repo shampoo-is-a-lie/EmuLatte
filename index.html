@@ -123,6 +123,29 @@
     .view { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: auto; display: none; padding: 20px; box-sizing: border-box; }
     .view.active { display: block; }
 
+    /* Game page as a floating overlay over a blurred gallery (experimental) */
+    #gamepage-backdrop { position: fixed; inset: 0; z-index: 9000; display: none;
+      background: rgba(0,0,0,0.4); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+    #gamepage-backdrop.active { display: block; animation: gp-fade 0.18s ease; }
+    /* Fixed → centered to the whole window and over the rail/side-panel (kept below the
+       z-index:9999 titlebar so the window controls stay crisp and clickable). */
+    #view-gamepage.active { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: min(1100px, 94%); height: 90%; padding: 20px 30px 30px;
+      background: var(--bg); border: 1px solid var(--border_solid); border-radius: 16px;
+      box-shadow: 0 30px 90px rgba(0,0,0,0.75); z-index: 9001; animation: gp-pop 0.18s ease; }
+    /* Keep the scrollbar clear of the rounded corners so it doesn't bleed past them */
+    #view-gamepage.active::-webkit-scrollbar { width: 10px; }
+    #view-gamepage.active::-webkit-scrollbar-track { background: transparent; margin: 18px 0; }
+    #view-gamepage.active::-webkit-scrollbar-thumb { background: var(--border_solid); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+    #view-gamepage.active::-webkit-scrollbar-thumb:hover { background: var(--text_dim); }
+    #gamepage-overlay-close { position: absolute; top: 14px; right: 16px; z-index: 60;
+      width: 34px; height: 34px; border-radius: 50%; background: rgba(0,0,0,0.55); color: #fff;
+      border: 1px solid var(--border_solid); font-size: 14px; line-height: 1; cursor: pointer; display: none; }
+    #view-gamepage.active #gamepage-overlay-close { display: flex; align-items: center; justify-content: center; }
+    #gamepage-overlay-close:hover { background: var(--accent); color: var(--bg); }
+    @keyframes gp-fade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes gp-pop { from { opacity: 0; transform: translate(-50%, -47%) scale(0.97); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+
     table { width: 100%; border-collapse: separate; border-spacing: 0 5px; text-align: left; }
     th { padding: 12px; font-weight: 900; position: sticky; top: 0; background: var(--bg_menu); color: var(--accent); letter-spacing: 1px; z-index: 10; border-bottom: 2px solid var(--border_solid); text-transform: uppercase; }
     td { padding: 12px; background: var(--bg_panel); border-bottom: 1px solid var(--border); color: var(--text_sec); }
@@ -368,7 +391,10 @@
       </div>
 
       <!-- GAMEPAGE VIEW -->
+      <div id="gamepage-backdrop"></div>
+
       <div id="view-gamepage" class="view">
+        <button id="gamepage-overlay-close" title="Close (Esc)">✕</button>
         <div style="height:44px;"></div>
 
         <div id="gamepage-hero" style="position:relative; height:350px; background-size:cover; background-position:center; border-radius:12px; margin-bottom:25px; overflow:hidden; display:flex; flex-direction:column; justify-content:flex-end; padding:30px; box-shadow:0 10px 30px rgba(0,0,0,0.5); border:1px solid var(--border); background-color:var(--bg_menu);">

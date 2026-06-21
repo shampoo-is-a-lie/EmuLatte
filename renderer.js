@@ -360,6 +360,7 @@ function openPlaylistEditModal(pl) {
 function openImageLightbox(src) {
     if (!src) return;
     const ov = document.createElement('div');
+    ov.id = 'img-lightbox';
     ov.style.cssText = 'position:fixed; inset:0; z-index:100001; background:rgba(0,0,0,0.85); ' +
         'display:flex; align-items:center; justify-content:center; padding:40px; cursor:zoom-out; backdrop-filter:blur(4px);';
     const img = document.createElement('img');
@@ -468,23 +469,37 @@ function openGamePage(game) {
     switchView('view-gamepage');
 }
 
+let _bgView = 'view-gallery';
 function switchView(viewId) {
-    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    const gp = document.getElementById('view-gamepage');
+    const backdrop = document.getElementById('gamepage-backdrop');
+
+    if (viewId === 'view-gamepage') {
+        // Float the game page over the current view (gallery/list) with a blurred backdrop —
+        // the background view stays active underneath rather than being swapped out.
+        if (currentView !== 'view-gamepage') _bgView = currentView;
+        gp.classList.add('active');
+        backdrop.classList.add('active');
+        currentView = 'view-gamepage';
+        document.getElementById('gamepage-back-bar').style.display = 'none';
+        return;
+    }
+
+    gp.classList.remove('active');
+    backdrop.classList.remove('active');
+    document.querySelectorAll('.view').forEach(v => { if (v !== gp) v.classList.remove('active'); });
     document.getElementById(viewId)?.classList.add('active');
     currentView = viewId;
-
-    const backBar = document.getElementById('gamepage-back-bar');
-    backBar.style.display = viewId === 'view-gamepage' ? 'block' : 'none';
-
+    document.getElementById('gamepage-back-bar').style.display = 'none';
     document.getElementById('btn-view-gallery')?.classList.toggle('active', viewId === 'view-gallery');
     document.getElementById('btn-view-list')?.classList.toggle('active', viewId === 'view-list');
 
-    if (viewId !== 'view-gamepage') {
-        currentGame = null;
-        clearInterval(ssBannerKbInterval);
-        startHeroCycle();
-    }
+    currentGame = null;
+    clearInterval(ssBannerKbInterval);
+    startHeroCycle();
 }
+
+function closeGamePage() { switchView(_bgView || 'view-gallery'); renderCurrentView(); }
 
 // ── LAUNCH ────────────────────────────────────────────────────────────────────
 async function launchGame(id) {
@@ -1343,6 +1358,13 @@ function wireUI() {
     document.getElementById('btn-gamepage-back').addEventListener('click', () => {
         switchView('view-gallery');
         renderGallery(getFilteredGames());
+    });
+
+    // Close the floating game page: backdrop click, the ✕ button, or Escape
+    document.getElementById('gamepage-backdrop').addEventListener('click', closeGamePage);
+    document.getElementById('gamepage-overlay-close').addEventListener('click', closeGamePage);
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && currentView === 'view-gamepage' && !document.getElementById('img-lightbox')) closeGamePage();
     });
 
     // Gamepage launch
