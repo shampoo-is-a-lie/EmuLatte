@@ -122,7 +122,7 @@
   {
     "name": "Sega CD / Mega CD",
     "short_name": "segacd",
-    "extensions": "iso, bin, cue, img, chd, zip",
+    "extensions": "iso, bin, cue, img, chd, zip, m3u",
     "screenscraper_id": 20,
     "default_core": "genesis_plus_gx_libretro.so",
     "launch_template": "retroarch -L {core} {rom}"
@@ -130,7 +130,7 @@
   {
     "name": "Sega Saturn",
     "short_name": "saturn",
-    "extensions": "iso, bin, cue, img, chd, mds, zip",
+    "extensions": "iso, bin, cue, img, chd, mds, zip, m3u",
     "screenscraper_id": 22,
     "default_core": "mednafen_saturn_libretro.so",
     "launch_template": "retroarch -L {core} {rom}"
@@ -138,7 +138,7 @@
   {
     "name": "Sega Dreamcast",
     "short_name": "dc",
-    "extensions": "cdi, gdi, chd, iso, zip",
+    "extensions": "cdi, gdi, chd, iso, zip, m3u",
     "screenscraper_id": 23,
     "default_core": "flycast_libretro.so",
     "launch_template": "retroarch -L {core} {rom}"
@@ -162,7 +162,7 @@
   {
     "name": "Sony PlayStation",
     "short_name": "ps1",
-    "extensions": "bin, cue, iso, img, chd, pbp, ecm, mds, zip",
+    "extensions": "bin, cue, iso, img, chd, pbp, ecm, mds, zip, m3u",
     "screenscraper_id": 57,
     "default_core": "pcsx_rearmed_libretro.so",
     "launch_template": "retroarch -L {core} {rom}"
@@ -170,7 +170,7 @@
   {
     "name": "Sony PlayStation 2",
     "short_name": "ps2",
-    "extensions": "iso, bin, img, mdf, chd, zip",
+    "extensions": "iso, bin, img, mdf, chd, zip, m3u",
     "screenscraper_id": 58,
     "default_core": "pcsx2_libretro.so",
     "launch_template": "retroarch -L {core} {rom}"
@@ -250,7 +250,7 @@
   {
     "name": "PC Engine CD / TurboGrafx-CD",
     "short_name": "pcecd",
-    "extensions": "cue, ccd, iso, img, chd, zip",
+    "extensions": "cue, ccd, iso, img, chd, zip, m3u",
     "screenscraper_id": 114,
     "default_core": "mednafen_pce_fast_libretro.so",
     "launch_template": "retroarch -L {core} {rom}"
@@ -266,7 +266,7 @@
   {
     "name": "PC-FX",
     "short_name": "pcfx",
-    "extensions": "pcfx, img, iso, zip",
+    "extensions": "pcfx, img, iso, zip, m3u",
     "screenscraper_id": 72,
     "default_core": "mednafen_pcfx_libretro.so",
     "launch_template": "retroarch -L {core} {rom}"
@@ -282,7 +282,7 @@
   {
     "name": "Neo Geo CD",
     "short_name": "neocd",
-    "extensions": "cue, iso, chd, zip",
+    "extensions": "cue, iso, chd, zip, m3u",
     "screenscraper_id": 70,
     "default_core": "neocd_libretro.so",
     "launch_template": "retroarch -L {core} {rom}"
@@ -370,7 +370,7 @@
   {
     "name": "3DO",
     "short_name": "3do",
-    "extensions": "iso, bin, cue, chd, zip",
+    "extensions": "iso, bin, cue, chd, zip, m3u",
     "screenscraper_id": 29,
     "default_core": "opera_libretro.so",
     "launch_template": "retroarch -L {core} {rom}"

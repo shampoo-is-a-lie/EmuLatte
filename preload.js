@@ -32,6 +32,7 @@ contextBridge.exposeInMainWorld('api', {
     selectFile:      (filters) => ipcRenderer.invoke('select-file', filters),
     selectDirectory: ()        => ipcRenderer.invoke('select-directory'),
     scanRomFolder:   (p, exts) => ipcRenderer.invoke('scan-rom-folder', p, exts),
+    createM3u:       (payload) => ipcRenderer.invoke('create-m3u', payload),
 
     // Image management
     selectLocalImage: (id, type) => ipcRenderer.invoke('select-local-image', id, type),

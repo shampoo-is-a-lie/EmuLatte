@@ -20,6 +20,7 @@ let allSystemPresets     = [];
 let currentPlaylistGames = [];
 let retroarchVariant     = 'none';
 let _activePanelSection  = null; // 'systems' | 'playlists' | 'search' | null
+let _scanEntries         = []; // structured results of the last folder scan
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {
@@ -137,16 +138,16 @@ function updateCategoryHeader(games) {
 }
 
 // Gallery cover proportions, from the real shape of each system's game boxes.
-// PORTRAIT (~5:7) is the default — disc/DVD cases (PS1/PS2/PSP/Saturn/DC/GC/Wii),
+// PORTRAIT (~5:7) is the default — disc/DVD cases (PS1/PS2/PSP/Saturn/GC/Wii),
 // the DS family, NES, and the Genesis/Mega Drive clamshell. LANDSCAPE (~7:5) is the
 // wide US cartridge box: SNES, N64, and the Atari/Coleco/Intellivision era. SQUARE
-// (1:1) is the Game Boy family + Game Gear. short_name comes from the system preset;
-// edit the sets below to retune any system.
+// (1:1) is the Game Boy family + Game Gear, plus the Dreamcast (CD jewel-case art).
+// short_name comes from the system preset; edit the sets below to retune any system.
 const COVER_LANDSCAPE = new Set([
     'snes', 'n64', 'a2600', 'a5200', 'a7800', 'coleco', 'intv', 'vectrex',
 ]);
 const COVER_SQUARE = new Set([
-    'gb', 'gbc', 'gba', 'gg', 'ngp', 'ngpc', 'ws', 'wsc',
+    'gb', 'gbc', 'gba', 'gg', 'ngp', 'ngpc', 'ws', 'wsc', 'dc',
 ]);
 function coverRatio(shortName) {
     const s = (shortName || '').toLowerCase();
@@ -397,12 +398,8 @@ function openGamePage(game) {
         sysBadge.style.display = 'none';
     }
 
-    const favBtn  = document.getElementById('btn-gamepage-fav');
-    const wantBtn = document.getElementById('btn-gamepage-want');
-    favBtn.textContent  = game.fav  ? '★ FAVED'       : '+ FAV';
-    wantBtn.textContent = game.want ? '♥ WANT TO PLAY' : 'WANT TO PLAY';
-    favBtn.classList.toggle('active',  !!game.fav);
-    wantBtn.classList.toggle('active', !!game.want);
+    document.getElementById('btn-gamepage-fav').classList.toggle('active',  !!game.fav);
+    document.getElementById('btn-gamepage-want').classList.toggle('active', !!game.want);
 
     const cov = document.getElementById('gamepage-cover');
     cov.src = game.cover || '';
@@ -431,7 +428,7 @@ function openGamePage(game) {
     const capturedTitle = game.title;
     window.api.checkLocalTrailer(capturedTitle).then(localUrl => {
         if (localUrl && currentGame?.title === capturedTitle) {
-            trailerBtn.style.display = 'block';
+            trailerBtn.style.display = 'flex';
             trailerBtn.onclick = () => {
                 document.getElementById('modal-trailer-player').classList.add('active');
                 const vid = document.getElementById('detail-video-player');
@@ -506,7 +503,51 @@ function closeGamePage() { switchView(_bgView || 'view-gallery'); renderCurrentV
 // ── LAUNCH ────────────────────────────────────────────────────────────────────
 async function launchGame(id) {
     const result = await window.api.launchGame(id);
-    if (!result.ok) showLaunchToast(result.error || 'No launch command configured', result.cmd);
+    if (!result.ok) { showLaunchToast(result.error || 'No launch command configured', result.cmd); return; }
+    const game = allGames.find(g => g.id === id);
+    if (game) showNowPlaying(game);
+}
+
+// ── Now Playing popup (mirrors CafeNeurotico) ─────────────────────────────────
+let _npTimer = null;
+function showNowPlaying(game) {
+    const modal    = document.getElementById('modal-now-playing');
+    const artBg    = document.getElementById('np-art-bg');
+    const logoImg  = document.getElementById('np-logo-img');
+    const coverImg = document.getElementById('np-cover-img');
+    const artWrap  = document.getElementById('np-art');
+    const titleEl  = document.getElementById('np-title');
+    if (!modal) return;
+
+    titleEl.textContent = game.title || '';
+
+    const logo  = game.logo  || null;
+    const cover = game.cover || null;
+    const hero  = game.hero  || null;
+
+    logoImg.style.display  = 'none';
+    coverImg.style.display = 'none';
+    artBg.style.backgroundImage = '';
+
+    if (logo) {
+        artWrap.style.display = 'flex';
+        logoImg.src = logo; logoImg.style.display = '';
+        if (cover || hero) artBg.style.backgroundImage = `url("${cover || hero}")`;
+    } else if (cover) {
+        artWrap.style.display = 'flex';
+        coverImg.src = cover; coverImg.style.display = '';
+        artBg.style.backgroundImage = `url("${cover}")`;
+    } else {
+        artWrap.style.display = 'none';
+    }
+
+    modal.classList.add('active');
+    clearTimeout(_npTimer);
+    _npTimer = setTimeout(closeNowPlaying, 5000);
+}
+function closeNowPlaying() {
+    clearTimeout(_npTimer);
+    document.getElementById('modal-now-playing')?.classList.remove('active');
 }
 
 let toastTimer = null;
@@ -526,10 +567,9 @@ function showLaunchToast(msg, cmd, label) {
 
 async function pushGameToCngm(gameId, btn) {
     if (!gameId) return;
-    const orig = btn?.textContent;
-    if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
+    if (btn) { btn.disabled = true; btn.classList.add('working'); }
     const r = await window.api.addToCngm(gameId);
-    if (btn) { btn.disabled = false; btn.textContent = orig; }
+    if (btn) { btn.disabled = false; btn.classList.remove('working'); }
     showLaunchToast(
         r.ok ? (r.updated ? 'Updated in CafeNeurotico.' : 'Added to CafeNeurotico (Emulation category).')
              : (r.error || 'Failed to add to CafeNeurotico.'),
@@ -711,6 +751,37 @@ function openModal(id) {
 function closeModal(id) {
     document.getElementById(id)?.classList.remove('active');
 }
+
+// ── Themed confirm / alert dialogs (replaces the native window.confirm) ───────
+function _openDialog(body, okLabel, isDanger, showCancel, title) {
+    const dlg    = document.getElementById('modal-dialog');
+    const titleE = document.getElementById('modal-dialog-title');
+    const bodyE  = document.getElementById('modal-dialog-body');
+    const okE    = document.getElementById('modal-dialog-ok');
+    const cancel = document.getElementById('modal-dialog-cancel');
+    return new Promise(resolve => {
+        titleE.textContent   = title || '';
+        titleE.style.display = title ? 'block' : 'none';
+        bodyE.textContent    = body;
+        okE.textContent      = okLabel;
+        okE.className        = isDanger ? '' : 'primary';
+        okE.style.cssText    = isDanger
+            ? 'flex:1; background:rgba(198,40,40,0.15); border:1px solid #c62828; color:#ef5350;'
+            : 'flex:1;';
+        cancel.style.display = showCancel ? '' : 'none';
+        dlg.classList.add('active');
+        const done = r => {
+            dlg.classList.remove('active');
+            okE.onclick = cancel.onclick = dlg.onclick = null;
+            resolve(r);
+        };
+        okE.onclick     = () => done(true);
+        cancel.onclick  = () => done(false);
+        dlg.onclick     = e => { if (e.target === dlg) done(false); };
+    });
+}
+function showAlert(body, title)                                          { return _openDialog(body, 'OK', false, false, title); }
+function showConfirm(body, okLabel = 'Confirm', isDanger = false, title) { return _openDialog(body, okLabel, isDanger, true, title); }
 
 function openAddRomModal(presetSystemId = null) {
     document.getElementById('add-rom-path').value  = '';
@@ -1374,19 +1445,23 @@ function wireUI() {
         if (currentGame) launchGame(currentGame.id);
     });
 
+    // Now Playing popup — dismiss on backdrop click or close button
+    document.getElementById('modal-now-playing').addEventListener('click', e => {
+        if (e.target === document.getElementById('modal-now-playing')) closeNowPlaying();
+    });
+    document.getElementById('np-close-btn').addEventListener('click', closeNowPlaying);
+
     // Gamepage fav / want
     document.getElementById('btn-gamepage-fav').addEventListener('click', async () => {
         if (!currentGame) return;
         currentGame.fav = currentGame.fav ? 0 : 1;
         await window.api.setGameFlag(currentGame.id, 'fav', currentGame.fav);
-        document.getElementById('btn-gamepage-fav').textContent  = currentGame.fav  ? '★ FAVED' : '+ FAV';
         document.getElementById('btn-gamepage-fav').classList.toggle('active', !!currentGame.fav);
     });
     document.getElementById('btn-gamepage-want').addEventListener('click', async () => {
         if (!currentGame) return;
         currentGame.want = currentGame.want ? 0 : 1;
         await window.api.setGameFlag(currentGame.id, 'want', currentGame.want);
-        document.getElementById('btn-gamepage-want').textContent = currentGame.want ? '♥ WANT TO PLAY' : 'WANT TO PLAY';
         document.getElementById('btn-gamepage-want').classList.toggle('active', !!currentGame.want);
     });
 
@@ -1406,7 +1481,7 @@ function wireUI() {
     // Gamepage remove — same backend as the edit-modal Delete ROM, reachable without opening Edit
     document.getElementById('btn-gamepage-remove').addEventListener('click', async () => {
         if (!currentGame) return;
-        if (!confirm(`Remove "${currentGame.title}" from the library? The ROM file will NOT be deleted.`)) return;
+        if (!await showConfirm(`Remove "${currentGame.title}" from the library?\nThe ROM file will NOT be deleted.`, 'Remove', true, 'Remove Game')) return;
         await window.api.deleteGame(currentGame.id);
         currentGame = null;
         switchView('view-gallery');
@@ -1530,7 +1605,7 @@ function wireUI() {
         const romPath  = document.getElementById('add-rom-path').value.trim();
         const title    = document.getElementById('add-rom-title').value.trim();
         const systemId = document.getElementById('add-rom-system').value;
-        if (!romPath || !title) { alert('ROM path and title are required.'); return; }
+        if (!romPath || !title) { showAlert('ROM path and title are required.', 'Add ROM'); return; }
         await window.api.addGame({ system_id: systemId || null, title, rom_path: romPath });
         closeModal('modal-add-rom');
         await loadGames();
@@ -1549,25 +1624,27 @@ function wireUI() {
     document.getElementById('btn-scan-run').addEventListener('click', async () => {
         const folder = document.getElementById('scan-folder-path').value.trim();
         const exts   = document.getElementById('scan-extensions').value.trim();
-        if (!folder) { alert('Please select a folder first.'); return; }
-        const files = await window.api.scanRomFolder(folder, exts);
+        if (!folder) { showAlert('Please select a folder first.', 'Scan Folder'); return; }
+        _scanEntries = await window.api.scanRomFolder(folder, exts);
         const resultsWrap = document.getElementById('scan-results-wrap');
         const resultsList = document.getElementById('scan-results-list');
-        document.getElementById('scan-results-count').textContent = files.length;
+        document.getElementById('scan-results-count').textContent = _scanEntries.length;
         const sysOpts = `<option value="">— Skip —</option>` +
             allSystems.map(s => `<option value="${s.id}">${escHtml(s.name)}</option>`).join('');
         const presetId = document.getElementById('scan-system-select').value;
-        resultsList.innerHTML = files.map((f, i) => {
-            const base = f.split('/').pop().replace(/\.[^.]+$/, '');
+        resultsList.innerHTML = _scanEntries.map((e, i) => {
+            const badge = e.kind === 'multidisc'
+                ? `<span class="disc-badge" title="${e.discCount} discs — imported as one game via a generated .m3u playlist">${e.discCount} DISCS</span>`
+                : (e.kind === 'playlist' ? `<span class="disc-badge" title="Multi-disc playlist">M3U</span>` : '');
             return `<div class="scan-result-item">
-                <span class="rom-name" title="${escHtml(f)}">${escHtml(base)}</span>
-                <select class="scan-item-system" data-path="${escHtml(f)}" data-title="${escHtml(base)}">
+                <span class="rom-name" title="${escHtml(e.path)}">${escHtml(e.title)}${badge}</span>
+                <select class="scan-item-system" data-idx="${i}">
                     ${sysOpts.replace(`value="${presetId}"`, `value="${presetId}" selected`)}
                 </select>
             </div>`;
         }).join('') || `<div style="text-align:center; padding:20px; color:var(--text_dim);">No ROMs found with those extensions.</div>`;
-        resultsWrap.style.display = files.length ? 'block' : 'none';
-        if (!files.length) alert('No ROMs found with those extensions.');
+        resultsWrap.style.display = _scanEntries.length ? 'block' : 'none';
+        if (!_scanEntries.length) showAlert('No ROMs found with those extensions.', 'Scan Folder');
     });
     document.getElementById('btn-scan-cancel').addEventListener('click', () => {
         closeModal('modal-scan-folder');
@@ -1579,16 +1656,21 @@ function wireUI() {
         let count = 0;
         for (const sel of items) {
             if (!sel.value) continue;
-            const title = sel.dataset.title;
-            const romPath = sel.dataset.path;
-            await window.api.addGame({ system_id: sel.value, title, rom_path: romPath });
+            const entry = _scanEntries[Number(sel.dataset.idx)];
+            if (!entry) continue;
+            let romPath = entry.path;
+            if (entry.kind === 'multidisc') {
+                const r = await window.api.createM3u({ title: entry.title, discs: entry.discs });
+                if (r?.ok) romPath = r.path;   // fall back to disc 1 if the .m3u can't be written
+            }
+            await window.api.addGame({ system_id: sel.value, title: entry.title, rom_path: romPath });
             count++;
         }
         closeModal('modal-scan-folder');
         document.getElementById('scan-results-wrap').style.display = 'none';
         document.getElementById('scan-folder-path').value = '';
         await loadGames();
-        if (count) alert(`${count} ROM${count !== 1 ? 's' : ''} imported.`);
+        if (count) showAlert(`${count} ROM${count !== 1 ? 's' : ''} imported.`, 'Scan Folder');
     });
 
     // ── MODAL: EDIT GAME ─────────────────────────────────────────────────────
@@ -1678,7 +1760,7 @@ function wireUI() {
             core_override:   document.getElementById('edit-core-override').value || null,
             ra_game_id:      parseInt(document.getElementById('edit-ra-game-id').value) || null,
         };
-        if (!data.title) { alert('Title is required.'); return; }
+        if (!data.title) { showAlert('Title is required.', 'Edit Game'); return; }
         await window.api.updateGame(id, data);
         closeModal('modal-edit-game');
         await loadGames();
@@ -1687,7 +1769,7 @@ function wireUI() {
     });
     document.getElementById('btn-edit-delete').addEventListener('click', async () => {
         const id = Number(document.getElementById('edit-game-id').value);
-        if (!confirm('Delete this ROM from the library? The file will NOT be deleted.')) return;
+        if (!await showConfirm('Delete this ROM from the library?\nThe file will NOT be deleted.', 'Delete', true, 'Delete Game')) return;
         await window.api.deleteGame(id);
         closeModal('modal-edit-game');
         switchView('view-gallery');
@@ -1739,7 +1821,7 @@ function wireUI() {
             default_emulator: document.getElementById('edit-system-emulator').value.trim(),
             screenscraper_id: document.getElementById('edit-system-ssid').value || null,
         };
-        if (!data.name) { alert('System name is required.'); return; }
+        if (!data.name) { showAlert('System name is required.', 'Edit System'); return; }
         if (id) await window.api.updateSystem(Number(id), data);
         else    await window.api.addSystem(data);
         closeModal('modal-edit-system');
@@ -1751,7 +1833,7 @@ function wireUI() {
         const id = Number(document.getElementById('edit-system-id').value);
         const sys = allSystems.find(s => s.id === id);
         const count = allGames.filter(g => g.system_id === id).length;
-        if (!confirm(`Delete system "${sys?.name}"? This will also delete all ${count} ROM(s) in this system.`)) return;
+        if (!await showConfirm(`Delete system "${sys?.name}"?\nThis will also delete all ${count} ROM(s) in this system.`, 'Delete', true, 'Delete System')) return;
         await window.api.deleteSystem(id);
         closeModal('modal-edit-system');
         await loadSystems();
@@ -1849,7 +1931,7 @@ function wireUI() {
     document.getElementById('btn-edit-playlist-delete').addEventListener('click', async () => {
         const id = Number(document.getElementById('edit-playlist-id').value);
         const pl = allPlaylists.find(p => p.id === id);
-        if (!confirm(`Delete playlist "${pl?.name}"?`)) return;
+        if (!await showConfirm(`Delete playlist "${pl?.name}"?`, 'Delete', true, 'Delete Playlist')) return;
         await window.api.deletePlaylist(id);
         closeModal('modal-edit-playlist');
         if (currentFilter === `playlist:${id}`) setFilter('all');
@@ -1897,7 +1979,7 @@ function wireUI() {
         const result = await window.api.fetchSsSystems();
         btn.textContent = 'Browse';
         btn.disabled = false;
-        if (!result.ok) { alert(result.error || 'Failed to fetch ScreenScraper systems.'); return; }
+        if (!result.ok) { showAlert(result.error || 'Failed to fetch ScreenScraper systems.', 'ScreenScraper'); return; }
         ssSystems = result.systems;
         document.getElementById('ss-systems-search').value = '';
         renderSsSystemsList('');
@@ -2439,7 +2521,7 @@ function openTrailerProgress(title, videoId) {
                 const btn = document.getElementById('btn-gamepage-trailer');
                 window.api.checkLocalTrailer(title).then(url => {
                     if (!url) return;
-                    btn.style.display = 'block';
+                    btn.style.display = 'flex';
                     btn.onclick = () => {
                         document.getElementById('modal-trailer-player').classList.add('active');
                         const vid = document.getElementById('detail-video-player');
@@ -2457,9 +2539,9 @@ function openTrailerProgress(title, videoId) {
 
 async function scrapeGame(gameId) {
     const btn = document.getElementById('btn-gamepage-scrape');
-    if (btn) btn.textContent = 'SCRAPING…';
+    if (btn) btn.classList.add('working');
     const result = await window.api.scrapeGame(gameId);
-    if (btn) btn.textContent = 'SCRAPE';
+    if (btn) btn.classList.remove('working');
     if (!result.ok) {
         showLaunchToast(result.error || 'Scrape failed', null);
         return;

@@ -1674,25 +1674,121 @@ ipcMain.handle('select-directory', async () => {
     return canceled ? null : filePaths[0];
 });
 
+// ── Disc-image aware scanning ─────────────────────────────────────────────────
+// Disc games arrive as an "index" file (.cue/.gdi/.ccd/.mds) that points at data
+// "sidecar" tracks (.bin/.img/.sub/.raw), or as a self-contained image
+// (.chd/.iso/.pbp/.cso/...). A .m3u playlist groups the discs of one game so
+// RetroArch can swap them mid-play. We offer the index/playlist/image to import —
+// never a bare sidecar — and collapse multi-disc sets into one entry.
+const DISC_PLAYLIST_EXTS = new Set(['m3u']);
+const DISC_INDEX_EXTS    = new Set(['cue', 'gdi', 'ccd', 'mds', 'toc']);
+const DISC_SIDECAR_EXTS  = new Set(['bin', 'img', 'sub', 'raw', 'ecm']);
+const DISC_FORMAT_EXTS   = new Set([
+    ...DISC_PLAYLIST_EXTS, ...DISC_INDEX_EXTS, ...DISC_SIDECAR_EXTS,
+    'chd', 'iso', 'cdi', 'pbp', 'cso', 'nrg', 'mdf'
+]);
+const extOf = f => path.extname(f).replace(/^\./, '').toLowerCase();
+const stripExt = f => path.basename(f).replace(/\.[^.]+$/, '');
+// A (Disc 1), [CD2], Disk 3, Side A… token used to recognise & strip multi-disc names.
+const DISC_TOKEN_RE = /[\s._-]*[\(\[]?\s*(?:disc|disk|cd)\s*([0-9]+)\s*(?:of\s*[0-9]+)?\s*[\)\]]?/i;
+const discNumberOf  = base => { const m = base.match(DISC_TOKEN_RE); return m ? parseInt(m[1], 10) : null; };
+const discGameKey   = base => base.replace(DISC_TOKEN_RE, ' ').replace(/\s{2,}/g, ' ').trim().toLowerCase();
+const discCleanTitle = base => base.replace(DISC_TOKEN_RE, ' ').replace(/\s{2,}/g, ' ').replace(/[\s._-]+$/, '').trim();
+
+// Absolute paths of the files an index/playlist file points at.
+function discReferencedFiles(indexFile) {
+    const dir = path.dirname(indexFile);
+    const ext = extOf(indexFile);
+    const abs = r => path.resolve(path.isAbsolute(r) ? r : path.join(dir, r));
+    if (ext === 'ccd') { const b = stripExt(indexFile); return [abs(`${b}.img`), abs(`${b}.sub`)]; }
+    if (ext === 'mds') { return [abs(`${stripExt(indexFile)}.mdf`)]; }
+    let text = '';
+    try { text = fs.readFileSync(indexFile, 'utf8'); } catch { return []; }
+    const refs = [];
+    for (const raw of text.split(/\r?\n/)) {
+        const l = raw.trim();
+        if (!l || l.startsWith('#')) continue;
+        const q = l.match(/"([^"]+)"/);
+        if (q) { refs.push(q[1]); continue; }
+        if (ext === 'cue') { const m = l.match(/^FILE\s+(\S+)\s+\w+/i); if (m) refs.push(m[1]); }
+        else if (ext === 'gdi') { const m = l.match(/(\S+\.(?:bin|raw|iso))\b/i); if (m) refs.push(m[1]); }
+        else if (ext === 'm3u' || ext === 'toc') { refs.push(l); }
+    }
+    return refs.map(abs);
+}
+
 ipcMain.handle('scan-rom-folder', (_, folderPath, extensions) => {
     const exts = new Set(
         (extensions || '').split(',')
             .map(e => e.trim().toLowerCase().replace(/^\./, ''))
             .filter(Boolean)
     );
-    const results = [];
-    function walk(dir) {
+    const matched = [];
+    (function walk(dir) {
         let entries;
         try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
         for (const e of entries) {
             const full = path.join(dir, e.name);
             if (e.isDirectory()) { walk(full); continue; }
-            const ext = path.extname(e.name).replace(/^\./, '').toLowerCase();
-            if (exts.size === 0 || exts.has(ext)) results.push(full);
+            const ext = extOf(e.name);
+            if (exts.size === 0 || exts.has(ext)) matched.push(full);
         }
+    })(folderPath);
+
+    const single = p => ({ kind: 'single', path: p, title: stripExt(p) });
+    const discAware = [...exts].some(e => DISC_FORMAT_EXTS.has(e));
+    if (!discAware) return matched.map(single);
+
+    // 1. Suppress every track/disc referenced from inside an index or playlist.
+    const referenced = new Set();
+    for (const f of matched) {
+        if (DISC_INDEX_EXTS.has(extOf(f)) || DISC_PLAYLIST_EXTS.has(extOf(f)))
+            for (const r of discReferencedFiles(f)) referenced.add(r);
     }
-    walk(folderPath);
-    return results;
+    // 2. Launchable candidates: not referenced elsewhere, and never a bare sidecar.
+    const candidates = matched.filter(f =>
+        !referenced.has(path.resolve(f)) && !DISC_SIDECAR_EXTS.has(extOf(f)));
+
+    // 3. Group multi-disc sets (by game name + format); a lone disc stays single.
+    const entries = [];
+    const groups  = new Map();
+    const loose   = [];
+    for (const f of candidates) {
+        if (DISC_PLAYLIST_EXTS.has(extOf(f))) { entries.push({ kind: 'playlist', path: f, title: stripExt(f) }); continue; }
+        const disc = discNumberOf(stripExt(f));
+        if (disc == null) { loose.push(f); continue; }
+        const key = `${discGameKey(stripExt(f))}::${extOf(f)}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push({ path: f, disc });
+    }
+    for (const discs of groups.values()) {
+        if (discs.length < 2) { loose.push(discs[0].path); continue; }
+        discs.sort((a, b) => a.disc - b.disc);
+        entries.push({
+            kind: 'multidisc',
+            path: discs[0].path,
+            discs: discs.map(d => d.path),
+            discCount: discs.length,
+            title: discCleanTitle(stripExt(discs[0].path))
+        });
+    }
+    for (const f of loose) entries.push(single(f));
+    entries.sort((a, b) => a.title.localeCompare(b.title));
+    return entries;
+});
+
+// Write a .m3u playlist (one disc path per line, absolute) into EmuLatte's own data
+// dir so it works even when the ROM folder is read-only (e.g. an external SSD).
+ipcMain.handle('create-m3u', (_, { title, discs }) => {
+    try {
+        const dir = path.join(configDir, 'playlists');
+        fs.mkdirSync(dir, { recursive: true });
+        const safe = (String(title || 'game').replace(/[^\w\-]+/g, '_').replace(/^_+|_+$/g, '')) || 'game';
+        let file = path.join(dir, `${safe}.m3u`);
+        for (let n = 2; fs.existsSync(file); n++) file = path.join(dir, `${safe}_${n}.m3u`);
+        fs.writeFileSync(file, (discs || []).join('\n') + '\n', 'utf8');
+        return { ok: true, path: file };
+    } catch (e) { return { ok: false, error: e.message }; }
 });
 
 // ── IMAGE MANAGEMENT ──────────────────────────────────────────────────────────
