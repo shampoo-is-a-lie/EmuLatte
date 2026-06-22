@@ -179,6 +179,9 @@ app.whenReady().then(() => {
         try { db.prepare(`ALTER TABLE games ADD COLUMN core_override TEXT`).run(); } catch {}
         try { db.prepare(`ALTER TABLE games ADD COLUMN ra_game_id INTEGER`).run(); } catch {}
         try { db.prepare(`ALTER TABLE games ADD COLUMN igdb_trailer TEXT`).run(); } catch {}
+        // Richer core metadata parsed from RetroArch .info files (for compatibility + descriptions).
+        for (const col of ['display_name', 'supported_extensions', 'db_names', 'description'])
+            try { db.prepare(`ALTER TABLE cores ADD COLUMN ${col} TEXT`).run(); } catch {}
         db.prepare(`CREATE TABLE IF NOT EXISTS ra_achievements (
             ra_game_id  INTEGER NOT NULL,
             ach_id      TEXT    NOT NULL,
@@ -779,32 +782,53 @@ ipcMain.handle('get-system-presets', () => {
 });
 
 // ── CORES ─────────────────────────────────────────────────────────────────────
+// Pull a "key = value" / 'key = "value"' field out of a RetroArch .info file.
+function infoField(txt, key) {
+    const q = txt.match(new RegExp(`^${key}\\s*=\\s*"([^"]*)"`, 'm'));
+    if (q) return q[1].trim();
+    const u = txt.match(new RegExp(`^${key}\\s*=\\s*(.+?)\\s*$`, 'm'));
+    return u ? u[1].trim() : '';
+}
+
 ipcMain.handle('scan-cores', () => {
     if (!db) return { ok: false, error: 'DB not ready' };
     const coreDirs = [
         path.join(os.homedir(), '.config', 'retroarch', 'cores'),
         path.join(os.homedir(), '.var', 'app', 'org.libretro.RetroArch', 'config', 'retroarch', 'cores'),
     ];
-    const insert = db.prepare('INSERT OR REPLACE INTO cores (path, name, system_names) VALUES (?, ?, ?)');
-    const insertAll = db.transaction(items => { for (const c of items) insert.run(c.path, c.name, c.systemNames); });
+    // RetroArch keeps the .info files in a sibling `info/` dir, NOT next to the .so. Look there first
+    // (then next to the .so as a fallback) — otherwise no core metadata is found at all.
+    const insert = db.prepare(`INSERT OR REPLACE INTO cores
+        (path, name, system_names, display_name, supported_extensions, db_names, description)
+        VALUES (@path, @name, @system_names, @display_name, @supported_extensions, @db_names, @description)`);
+    const insertAll = db.transaction(items => { for (const c of items) insert.run(c); });
     const found = [];
     for (const dir of coreDirs) {
         if (!fs.existsSync(dir)) continue;
+        const infoDir = path.join(path.dirname(dir), 'info');
         let files;
         try { files = fs.readdirSync(dir); } catch { continue; }
         for (const file of files.filter(f => f.endsWith('_libretro.so'))) {
             const corePath = path.join(dir, file);
-            const infoPath = corePath.replace('.so', '.info');
-            let name = file.replace('_libretro.so', '').replace(/_/g, ' ');
-            let systemNames = '';
-            if (fs.existsSync(infoPath)) {
-                const txt = fs.readFileSync(infoPath, 'utf8');
-                const nm  = txt.match(/^corename\s*=\s*"?(.+?)"?\s*$/m);
-                const sm  = txt.match(/^systemname\s*=\s*"?(.+?)"?\s*$/m);
-                if (nm) name = nm[1].trim();
-                if (sm) systemNames = sm[1].trim();
+            const base     = file.replace(/\.so$/, '.info');
+            const infoPath = [path.join(infoDir, base), path.join(dir, base)].find(p => fs.existsSync(p));
+            const rec = {
+                path: corePath,
+                name: file.replace('_libretro.so', '').replace(/_/g, ' '),
+                system_names: '', display_name: '', supported_extensions: '', db_names: '', description: '',
+            };
+            if (infoPath) {
+                try {
+                    const txt = fs.readFileSync(infoPath, 'utf8');
+                    rec.display_name         = infoField(txt, 'display_name');
+                    rec.system_names         = infoField(txt, 'systemname');
+                    rec.db_names             = infoField(txt, 'database');
+                    rec.supported_extensions = infoField(txt, 'supported_extensions');
+                    rec.description          = infoField(txt, 'description');
+                    rec.name = rec.display_name || infoField(txt, 'corename') || rec.name;
+                } catch {}
             }
-            found.push({ path: corePath, name, systemNames });
+            found.push(rec);
         }
     }
     insertAll(found);
@@ -1801,6 +1825,95 @@ ipcMain.handle('create-m3u', (_, { title, discs }) => {
         fs.writeFileSync(file, (discs || []).join('\n') + '\n', 'utf8');
         return { ok: true, path: file };
     } catch (e) { return { ok: false, error: e.message }; }
+});
+
+// ── REPAIR DISC REFERENCES ────────────────────────────────────────────────────
+// Disc index files (.cue/.gdi/.toc) name their track files (.bin/.raw/.iso). When a ROM set is
+// lowercased on disk but the text inside the index isn't, case-sensitive Linux can't find the
+// tracks ("Could not open track file"). This rewrites each reference to the file that actually
+// exists (case-insensitive match), backing up the original as <file>.bak.
+const DISC_INDEX_RE = /\.(cue|gdi|toc|m3u)$/i;
+
+function repairDiscFile(indexPath, seen = new Set()) {
+    const res = { file: indexPath, fixed: [], unresolved: [] };
+    if (seen.has(indexPath)) return res;
+    seen.add(indexPath);
+    const ext = path.extname(indexPath).toLowerCase().replace('.', '');
+    const dir = path.dirname(indexPath);
+    let text;
+    try { text = fs.readFileSync(indexPath, 'utf8'); } catch { res.error = 'cannot read'; return res; }
+    let entries = [];
+    try { entries = fs.readdirSync(dir); } catch {}
+    const byLower = new Map(entries.map(f => [f.toLowerCase(), f]));
+    // resolve a referenced filename to the real on-disk name; null = already correct, undefined = missing
+    const resolve = ref => {
+        const base = ref.replace(/^.*[/\\]/, '');
+        if (fs.existsSync(path.join(dir, base))) return null;
+        const actual = byLower.get(base.toLowerCase());
+        if (actual && actual !== base) return actual;
+        res.unresolved.push(base);
+        return undefined;
+    };
+
+    let out = text;
+    if (ext === 'm3u') {
+        // disc paths — recurse into each referenced index so its own track refs get fixed
+        for (const raw of text.split(/\r?\n/)) {
+            const l = raw.trim();
+            if (!l || l.startsWith('#')) continue;
+            const disc = path.isAbsolute(l) ? l : path.join(dir, l);
+            if (DISC_INDEX_RE.test(disc) && fs.existsSync(disc)) {
+                const sub = repairDiscFile(disc, seen);
+                res.fixed.push(...sub.fixed); res.unresolved.push(...sub.unresolved);
+            }
+        }
+    } else if (ext === 'cue' || ext === 'toc') {
+        out = text.replace(/^(\s*FILE\s+)"([^"]+)"/gim, (m, pre, name) => {
+            const a = resolve(name);
+            if (a) { res.fixed.push([name, a]); return `${pre}"${a}"`; }
+            return m;
+        });
+    } else if (ext === 'gdi') {
+        out = text.replace(/"?([^\s"]+\.(?:bin|raw|iso))"?/gi, (m, name) => {
+            const a = resolve(name);
+            if (a) { res.fixed.push([name, a]); return m.includes('"') ? `"${a}"` : a; }
+            return m;
+        });
+    }
+    if (res.fixed.length && out !== text) {
+        try {
+            const bak = indexPath + '.bak';
+            if (!fs.existsSync(bak)) fs.copyFileSync(indexPath, bak);
+            fs.writeFileSync(indexPath, out, 'utf8');
+        } catch (e) { res.error = e.message; }
+    }
+    return res;
+}
+
+function summarizeRepairs(results) {
+    let filesFixed = 0, refsFixed = 0;
+    const unresolved = [];
+    for (const r of results) {
+        if (r.fixed?.length) { filesFixed++; refsFixed += r.fixed.length; }
+        for (const u of (r.unresolved || [])) unresolved.push(u);
+    }
+    return { ok: true, discFiles: results.length, filesFixed, refsFixed, unresolved: [...new Set(unresolved)].slice(0, 12) };
+}
+
+ipcMain.handle('repair-disc-refs-game', (_, gameId) => {
+    if (!db) return { ok: false, error: 'DB not ready' };
+    const g = db.prepare('SELECT rom_path FROM games WHERE id=?').get(gameId);
+    if (!g?.rom_path) return { ok: false, error: 'This game has no ROM path.' };
+    if (!DISC_INDEX_RE.test(g.rom_path)) return { ok: true, notDisc: true, discFiles: 0, filesFixed: 0, refsFixed: 0, unresolved: [] };
+    return summarizeRepairs([repairDiscFile(g.rom_path)]);
+});
+
+ipcMain.handle('repair-disc-refs-system', (_, systemId) => {
+    if (!db) return { ok: false, error: 'DB not ready' };
+    const games = db.prepare('SELECT rom_path FROM games WHERE system_id=?').all(systemId);
+    const disc = games.filter(g => g.rom_path && DISC_INDEX_RE.test(g.rom_path));
+    if (!disc.length) return { ok: true, notDisc: true, discFiles: 0, filesFixed: 0, refsFixed: 0, unresolved: [] };
+    return summarizeRepairs(disc.map(g => repairDiscFile(g.rom_path)));
 });
 
 // ── IMAGE MANAGEMENT ──────────────────────────────────────────────────────────

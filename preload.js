@@ -33,6 +33,8 @@ contextBridge.exposeInMainWorld('api', {
     selectDirectory: ()        => ipcRenderer.invoke('select-directory'),
     scanRomFolder:   (p, exts) => ipcRenderer.invoke('scan-rom-folder', p, exts),
     createM3u:       (payload) => ipcRenderer.invoke('create-m3u', payload),
+    repairDiscRefsGame:   (id) => ipcRenderer.invoke('repair-disc-refs-game', id),
+    repairDiscRefsSystem: (id) => ipcRenderer.invoke('repair-disc-refs-system', id),
 
     // Image management
     selectLocalImage: (id, type) => ipcRenderer.invoke('select-local-image', id, type),

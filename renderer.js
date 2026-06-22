@@ -189,6 +189,86 @@ const hasSpecialCover = shortName => {
     return COVER_LANDSCAPE.has(s) || COVER_SQUARE.has(s) || isJewel(s) || isOrientAdaptive(s) || isNaturalRatio(s);
 };
 
+// Screenshot viewer display profile, by the system's real screen tech:
+//   dmg = original Game Boy (4-shade green dot-matrix LCD, recolored)
+//   lcd = handhelds (flat LCD, pixel grid, no scanlines/curvature/bloom)
+//   crt = everything else (TV consoles + arcade — scanlines, bloom, curvature)
+const DMG_SYSTEMS = new Set(['gb']);
+const LCD_SYSTEMS = new Set(['gbc', 'gba', 'gg', 'lynx', 'ngp', 'ngpc', 'ws', 'wsc', 'nds', '3ds', 'psp', 'vita', 'vb']);
+const displayType = shortName => {
+    const s = (shortName || '').toLowerCase();
+    if (DMG_SYSTEMS.has(s)) return 'dmg';
+    if (LCD_SYSTEMS.has(s)) return 'lcd';
+    return 'crt';
+};
+
+// ── CORE ↔ SYSTEM COMPATIBILITY ───────────────────────────────────────────────
+// Disc/container/homebrew extensions are shared across many systems, so they don't prove
+// compatibility alone — for those we match on the core's .info system/database names instead.
+const GENERIC_CORE_EXT = new Set(['zip','7z','chd','iso','bin','cue','m3u','img','ccd','toc','mds','mdf','raw','sub','pbp','cso','ecm','exe','elf','dol']);
+// Manufacturer/filler words dropped before comparing names ("game" is kept so Game Boy ≠ Virtual Boy).
+const NAME_NOISE = new Set(['the','sony','sega','nintendo','nec','snk','atari','bandai','commodore','amstrad','sinclair','microsoft','coleco','mattel','entertainment','system','computer','console','home','video']);
+// Tokens that mark a DIFFERENT, game-incompatible model within a family (PS1≠PS2≠PSP, Genesis≠Sega CD).
+// Single digit only, so generation numbers (PS"2") count but intrinsic ones (TurboGrafx-"16") don't.
+const isModelToken = t => /^\d$/.test(t) || ['portable','advance','cd','32x','supergrafx'].includes(t);
+const nameTokens = s => String(s || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+// Does a core's system/database name refer to this EmuLatte system? Token-set containment, rejected
+// when either side carries a model token the other lacks (so a PS1 core ≠ the PS2 system, etc.).
+function nameRelates(sysName, coreName) {
+    const sys  = nameTokens(sysName).filter(t => !NAME_NOISE.has(t));
+    const core = nameTokens(coreName).filter(t => !NAME_NOISE.has(t));
+    if (!sys.length || !core.length) return false;
+    const sysSet = new Set(sys), coreSet = new Set(core);
+    if (!(sys.every(t => coreSet.has(t)) || core.every(t => sysSet.has(t)))) return false;
+    if (core.some(t => !sysSet.has(t) && isModelToken(t))) return false;
+    if (sys.some(t => !coreSet.has(t) && isModelToken(t))) return false;
+    return true;
+}
+const systemById = id => allSystems.find(s => s.id === Number(id));
+const coreByPath = p => allCores.find(c => c.path === p);
+
+function coreMatchesSystem(core, system) {
+    if (!system) return false;
+    const sysExts  = (system.extensions || '').split(',').map(e => e.trim().toLowerCase().replace(/^\./, '')).filter(Boolean);
+    const coreExts = (core.supported_extensions || '').split('|').map(e => e.trim().toLowerCase()).filter(Boolean);
+    // 1) a distinctive (non-generic) shared extension → compatible (cartridge systems)
+    if (coreExts.some(e => !GENERIC_CORE_EXT.has(e) && sysExts.includes(e))) return true;
+    // 2) the core's system/database name(s) refer to this system (disc systems w/ shared extensions)
+    const coreNames = [core.system_names, ...String(core.db_names || '').split('|')].filter(Boolean);
+    if (coreNames.some(n => nameRelates(system.name, n))) return true;
+    // 3) no metadata at all → fall back to any extension overlap
+    if (!core.supported_extensions && !core.system_names && !core.db_names)
+        return coreExts.some(e => sysExts.includes(e));
+    return false;
+}
+const coresForSystem = system => allCores.filter(c => coreMatchesSystem(c, system));
+
+// Show the selected core's description under its chooser.
+function updateCoreDesc(selId, descId) {
+    const sel = document.getElementById(selId), desc = document.getElementById(descId);
+    if (!sel || !desc) return;
+    const d = coreByPath(sel.value)?.description || '';
+    desc.textContent = d;
+    desc.style.display = d ? 'block' : 'none';
+}
+
+// ── Repair disc references (cue/gdi track filenames vs the real files on disk) ──
+function discRepairMessage(r) {
+    if (!r || !r.ok)   return `✗ ${r?.error || 'Repair failed.'}`;
+    if (r.notDisc || !r.discFiles) return 'No disc images (.cue/.gdi/.m3u) here to repair.';
+    let msg = r.refsFixed
+        ? `✓ Fixed ${r.refsFixed} track reference${r.refsFixed !== 1 ? 's' : ''} across ${r.filesFixed} of ${r.discFiles} disc file${r.discFiles !== 1 ? 's' : ''}. Originals backed up as .bak.`
+        : `✓ Checked ${r.discFiles} disc file${r.discFiles !== 1 ? 's' : ''} — all references already match the files on disk, nothing to change.`;
+    if (r.unresolved?.length) msg += `\n⚠ Could not find on disk: ${r.unresolved.join(', ')}`;
+    return msg;
+}
+async function runDiscRepair(btn, out, call) {
+    btn.disabled = true; out.textContent = 'Repairing…';
+    try { out.textContent = discRepairMessage(await call()); }
+    catch (e) { out.textContent = `✗ ${e.message}`; }
+    finally { btn.disabled = false; }
+}
+
 function renderGallery(games) {
     const grid = document.getElementById('gallery-grid');
     if (!games.length) {
@@ -777,6 +857,8 @@ function _renderAchGrid() {
 function openSlideshow(urls, startIndex = 0) {
     slideshowUrls  = urls;
     slideshowIndex = startIndex;
+    const screen = document.querySelector('#modal-slideshow .crt-screen');   // pick the per-system display profile
+    if (screen) screen.className = `crt-screen ${displayType(currentGame?.system_short)}`;
     showSlide();
     document.getElementById('modal-slideshow').classList.add('active');
 }
@@ -784,6 +866,8 @@ function openSlideshow(urls, startIndex = 0) {
 function showSlide() {
     const img = document.getElementById('slideshow-img');
     img.src = slideshowUrls[slideshowIndex] || '';
+    const bloom = document.getElementById('slideshow-img-bloom');   // CRT bloom layer mirrors the shot
+    if (bloom) bloom.src = img.src;
     const multi = slideshowUrls.length > 1;
     document.getElementById('slide-prev').style.display    = multi ? 'flex' : 'none';
     document.getElementById('slide-next').style.display    = multi ? 'flex' : 'none';
@@ -838,11 +922,30 @@ function openAddRomModal(presetSystemId = null) {
     openModal('modal-add-rom');
 }
 
-function populateCoreOverrideSelect(game) {
-    const sel = document.getElementById('edit-core-override');
+function populateCoreOverrideSelect(game, showAll = false) {
+    const sel  = document.getElementById('edit-core-override');
+    const list = showAll ? allCores.slice() : coresForSystem(systemById(game.system_id));
+    // keep the current override visible even if it wouldn't pass the compatibility filter
+    if (game.core_override && !list.some(c => c.path === game.core_override)) {
+        const cur = coreByPath(game.core_override);
+        if (cur) list.unshift(cur);
+    }
     sel.innerHTML = `<option value="">— Use system default —</option>` +
-        allCores.map(c => `<option value="${escHtml(c.path)}">${escHtml(c.name)}</option>`).join('');
+        list.map(c => `<option value="${escHtml(c.path)}">${escHtml(c.name)}</option>`).join('');
     sel.value = game.core_override || '';
+    updateCoreDesc('edit-core-override', 'edit-core-override-desc');
+}
+
+// System-wide default core chooser (Edit System modal). currentValue is a stored core path.
+function populateSystemCoreSelect(system, currentValue, showAll = false) {
+    const sel  = document.getElementById('edit-system-core');
+    const list = showAll ? allCores.slice() : coresForSystem(system);
+    if (currentValue && !list.some(c => c.path === currentValue))
+        list.unshift(coreByPath(currentValue) || { path: currentValue, name: currentValue.split('/').pop() });
+    sel.innerHTML = `<option value="">— No default core —</option>` +
+        list.map(c => `<option value="${escHtml(c.path)}">${escHtml(c.name)}</option>`).join('');
+    sel.value = currentValue || '';
+    updateCoreDesc('edit-system-core', 'edit-system-core-desc');
 }
 
 function openEditGameModal(game) {
@@ -871,6 +974,7 @@ function openEditGameModal(game) {
     setPreview('edit-screenshot-preview', game.screenshot ? game.screenshot.split('|')[0] : '');
 
     populateCoreOverrideSelect(game);
+    document.getElementById('repair-disc-game-result').style.display = 'none';
     openModal('modal-edit-game');
     setTimeout(() => {
         const updateCmdPreview = () => {
@@ -959,7 +1063,10 @@ function applySystemPreset(preset) {
     document.getElementById('edit-system-short').value          = preset.short_name || '';
     document.getElementById('edit-system-extensions').value     = preset.extensions || '';
     document.getElementById('edit-system-template').value       = applyRetroArchTemplate(preset.launch_template || '');
-    document.getElementById('edit-system-core').value           = resolveCorePath(preset.default_core);
+    document.getElementById('edit-system-core-all').checked      = false;
+    let presetCore = resolveCorePath(preset.default_core);                          // the preset's core if installed…
+    if (!presetCore) { const c = coresForSystem(preset)[0]; if (c) presetCore = c.path; }   // …else auto-pick a compatible one
+    populateSystemCoreSelect(preset, presetCore);
     document.getElementById('edit-system-emulator').value       = '';
     document.getElementById('edit-system-ssid').value           = preset.screenscraper_id ?? '';
     document.getElementById('btn-edit-system-delete').style.display = 'none';
@@ -980,7 +1087,7 @@ function renderPresetList(query) {
             (p.short_name || '').toLowerCase().includes(q))
         : allSystemPresets;
     list.innerHTML = filtered.map((p, i) => {
-        const hasCore = !!resolveCorePath(p.default_core);
+        const hasCore = coresForSystem(p).length > 0;
         return `<div class="preset-item" data-index="${allSystemPresets.indexOf(p)}"
             style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; border-radius:6px; background:rgba(0,0,0,0.2); border:1px solid var(--border); cursor:pointer; transition:background 0.15s, border-color 0.15s; gap:10px;">
             <div style="min-width:0;">
@@ -1015,11 +1122,16 @@ function openEditSystemModal(sys = null) {
     document.getElementById('edit-system-short').value         = sys?.short_name || '';
     document.getElementById('edit-system-extensions').value    = sys?.extensions || '';
     document.getElementById('edit-system-template').value      = sys?.launch_template || '';
-    document.getElementById('edit-system-core').value          = sys?.default_core || '';
+    document.getElementById('edit-system-core-all').checked     = false;
+    const storedCore = sys?.default_core || '';                    // resolve a bare filename to its installed path
+    const resolvedCore = coreByPath(storedCore) ? storedCore : (resolveCorePath(storedCore.split('/').pop()) || storedCore);
+    populateSystemCoreSelect(sys || {}, resolvedCore);
     document.getElementById('edit-system-emulator').value      = sys?.default_emulator || '';
     document.getElementById('edit-system-ssid').value          = sys?.screenscraper_id || '';
     document.getElementById('btn-edit-system-delete').style.display = isNew ? 'none' : '';
     renderBiosStatus(sys?.short_name || '');
+    document.getElementById('repair-disc-system-result').style.display = 'none';
+    closeModal('modal-systems');                 // avoid stacking two backdrop-filter overlays
     openModal('modal-edit-system');
 }
 
@@ -1331,9 +1443,12 @@ function enhanceSelect(sel) {
             item.textContent = o.textContent;
             item.addEventListener('mousedown', e => {
                 e.preventDefault();
-                sel.selectedIndex = i;                                  // shim → syncLabel
-                sel.dispatchEvent(new Event('change', { bubbles: true }));
-                close();
+                try {
+                    sel.selectedIndex = i;                              // shim → syncLabel
+                    sel.dispatchEvent(new Event('change', { bubbles: true }));
+                } finally {
+                    close();                                            // always tear down the portaled list + listeners
+                }
             });
             listEl.appendChild(item);
         });
@@ -1903,13 +2018,48 @@ function wireUI() {
         if (short) renderBiosStatus(short);
     });
 
-    // ── EDIT SYSTEM: BROWSE CORE ─────────────────────────────────────────────
+    // ── EDIT SYSTEM: BROWSE CORE (custom .so path) ───────────────────────────
     document.getElementById('btn-edit-system-core-browse').addEventListener('click', async () => {
         const p = await window.api.selectFile([
             { name: 'RetroArch Cores', extensions: ['so'] },
             { name: 'All Files', extensions: ['*'] },
         ]);
-        if (p) document.getElementById('edit-system-core').value = p;
+        if (!p) return;
+        const sel = document.getElementById('edit-system-core');
+        if (![...sel.options].some(o => o.value === p))   // add the custom path as an option
+            sel.insertAdjacentHTML('beforeend', `<option value="${escHtml(p)}">${escHtml(p.split('/').pop())}</option>`);
+        sel.value = p;
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    // ── CORE CHOOSERS: descriptions + "show all" toggles ─────────────────────
+    document.getElementById('edit-core-override').addEventListener('change',
+        () => updateCoreDesc('edit-core-override', 'edit-core-override-desc'));
+    document.getElementById('edit-system-core').addEventListener('change',
+        () => updateCoreDesc('edit-system-core', 'edit-system-core-desc'));
+    document.getElementById('edit-core-override-all').addEventListener('change', e => {
+        const g = allGames.find(x => x.id === Number(document.getElementById('edit-game-id').value));
+        if (g) populateCoreOverrideSelect({ ...g, core_override: document.getElementById('edit-core-override').value }, e.target.checked);
+    });
+    document.getElementById('edit-system-core-all').addEventListener('change', e => {
+        const sysId = Number(document.getElementById('edit-system-id').value);
+        const sys = systemById(sysId) || { extensions: document.getElementById('edit-system-extensions').value, name: document.getElementById('edit-system-name').value };
+        populateSystemCoreSelect(sys, document.getElementById('edit-system-core').value, e.target.checked);
+    });
+
+    // ── REPAIR DISC REFERENCES ───────────────────────────────────────────────
+    document.getElementById('btn-repair-disc-system').addEventListener('click', async () => {
+        const id  = Number(document.getElementById('edit-system-id').value);
+        const out = document.getElementById('repair-disc-system-result');
+        out.style.display = 'block';
+        if (!id) { out.textContent = 'Save the system first, then reopen it to repair its games.'; return; }
+        await runDiscRepair(document.getElementById('btn-repair-disc-system'), out, () => window.api.repairDiscRefsSystem(id));
+    });
+    document.getElementById('btn-repair-disc-game').addEventListener('click', async () => {
+        const id  = Number(document.getElementById('edit-game-id').value);
+        const out = document.getElementById('repair-disc-game-result');
+        out.style.display = 'block';
+        await runDiscRepair(document.getElementById('btn-repair-disc-game'), out, () => window.api.repairDiscRefsGame(id));
     });
 
     // ── GAMEPAGE: + PLAYLIST ─────────────────────────────────────────────────
@@ -2347,7 +2497,7 @@ function wireUI() {
 
     // ── MODAL: SLIDESHOW ─────────────────────────────────────────────────────
     document.getElementById('modal-slideshow').addEventListener('click', e => {
-        if (!e.target.closest('.slideshow-img') && !e.target.closest('.slide-nav') && !e.target.closest('#slide-close')) closeModal('modal-slideshow');
+        if (!e.target.closest('.crt-screen') && !e.target.closest('.slide-nav') && !e.target.closest('#slide-close')) closeModal('modal-slideshow');
     });
     document.getElementById('slide-prev').addEventListener('click', e => {
         e.stopPropagation();
