@@ -137,13 +137,10 @@ function updateCategoryHeader(games) {
     document.getElementById('system-hero-btns').style.display = isSystem ? 'flex' : 'none';
 }
 
-// Gallery cover proportions, from the real shape of each system's game boxes.
-// PORTRAIT (~5:7) is the default — disc/DVD cases (PS1/PS2/PSP/Saturn/GC/Wii),
-// the DS family, NES, and the Genesis/Mega Drive clamshell. LANDSCAPE (~7:5) is the
-// wide US cartridge box: SNES, N64, and the Atari/Coleco/Intellivision era. SQUARE
-// (1:1) is the Game Boy family + Game Gear. (Jewel-case disc systems like Dreamcast default to
-// portrait here and only switch to the jewel frame when their art is actually square — see below.)
-// short_name comes from the system preset; edit the sets below to retune any system.
+// Systems whose game boxes are NOT standard portrait — wide US cartridge boxes (LANDSCAPE: SNES,
+// N64, Atari/Coleco/Intellivision) and squarish handheld boxes (SQUARE: Game Boy family + Game
+// Gear). These (plus jewel/orient/natural systems) get the gallery's "special" uniform-slot
+// treatment so the full cover shows uncropped. short_name comes from the system preset.
 const COVER_LANDSCAPE = new Set([
     'snes', 'n64', 'a2600', 'a5200', 'a7800', 'coleco', 'intv', 'vectrex',
 ]);
@@ -177,35 +174,13 @@ function applyJewelCase(img, container) {
     else img.addEventListener('load', decide, { once: true });
 }
 
-// Systems whose cover ORIENTATION depends on region (the art itself decides), with no case frame:
-// SNES — US boxes are landscape, JP (Super Famicom) boxes are portrait. Add more here as needed.
+// Systems whose cover ORIENTATION depends on region: SNES (US landscape / JP portrait) and
+// PC Engine HuCard (squarish ~0.85). They have no standard box shape, so in the gallery they get
+// the contained "special" slot (which shows any shape uncropped); the game page shows full art too.
 const ORIENT_ADAPTIVE = new Set(['snes']);
 const isOrientAdaptive = shortName => ORIENT_ADAPTIVE.has((shortName || '').toLowerCase());
-// Snap the cover box to the loaded art's orientation, per game (landscape vs portrait).
-function applyArtOrientation(img) {
-    if (!img) return;
-    const decide = () => {
-        if (!img.naturalWidth || !img.naturalHeight) return;
-        img.style.aspectRatio = (img.naturalWidth / img.naturalHeight >= 1) ? '7 / 5' : '5 / 7';
-    };
-    if (!img.getAttribute('src')) return;
-    if (img.complete && img.naturalWidth) decide();
-    else img.addEventListener('load', decide, { once: true });
-}
-
-// Systems with no standard box shape (e.g. PC Engine / TurboGrafx-16 HuCard cases ~0.85): show the
-// cover at its OWN proportions so the whole art fits the gallery uncropped, instead of forcing a ratio.
 const NATURAL_RATIO = new Set(['pce']);
 const isNaturalRatio = shortName => NATURAL_RATIO.has((shortName || '').toLowerCase());
-function applyNaturalRatio(img) {
-    if (!img) return;
-    const decide = () => {
-        if (img.naturalWidth && img.naturalHeight) img.style.aspectRatio = `${img.naturalWidth} / ${img.naturalHeight}`;
-    };
-    if (!img.getAttribute('src')) return;
-    if (img.complete && img.naturalWidth) decide();
-    else img.addEventListener('load', decide, { once: true });
-}
 // A gallery card needs the "special" uniform-slot treatment (contained art + blurred backdrop)
 // whenever its cover isn't the standard portrait shape — any landscape/square/jewel/orientation/
 // natural system. Standard portrait covers just fill the slot.
@@ -213,12 +188,6 @@ const hasSpecialCover = shortName => {
     const s = (shortName || '').toLowerCase();
     return COVER_LANDSCAPE.has(s) || COVER_SQUARE.has(s) || isJewel(s) || isOrientAdaptive(s) || isNaturalRatio(s);
 };
-function coverRatio(shortName) {
-    const s = (shortName || '').toLowerCase();
-    if (COVER_LANDSCAPE.has(s)) return '7 / 5';   // wide cardboard cartridge boxes
-    if (COVER_SQUARE.has(s))    return '1 / 1';   // square handheld boxes
-    return '5 / 7';                               // portrait: NES, Genesis, discs, DS…
-}
 
 function renderGallery(games) {
     const grid = document.getElementById('gallery-grid');
@@ -475,13 +444,14 @@ function openGamePage(game) {
 
     const cov = document.getElementById('gamepage-cover');
     cov.src = game.cover || '';
-    cov.style.aspectRatio = coverRatio(game.system_short);   // match the box shape we set per system
     cov.style.cursor = game.cover ? 'zoom-in' : 'default';
+    // Default: show the FULL cover at its natural ratio across the column width — no crop,
+    // whatever the shape (e.g. tall 3DO boxes). The jewel case (square art) overrides this via CSS.
+    cov.style.aspectRatio = 'auto';
+    cov.style.objectFit   = 'contain';
     const coverFrame = document.getElementById('gamepage-cover-frame');
     coverFrame.classList.remove('jewel');
-    if (isJewel(game.system_short)) applyJewelCase(cov, coverFrame);          // square art → jewel case, portrait → flat
-    else if (isOrientAdaptive(game.system_short)) applyArtOrientation(cov);   // SNES: US landscape vs JP portrait
-    else if (isNaturalRatio(game.system_short)) applyNaturalRatio(cov);       // PC Engine: keep the art's own proportion
+    if (isJewel(game.system_short)) applyJewelCase(cov, coverFrame);   // square art → jewel case; tall/portrait art stays full
 
     const stats = [];
     if (game.system_name) stats.push({ label: 'System',    val: game.system_name });
