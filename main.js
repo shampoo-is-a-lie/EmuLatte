@@ -539,13 +539,24 @@ function ssBaseParams(ssUser, ssPass) {
     };
 }
 
+const SS_CRED_KEYS = ['devid', 'devpassword', 'softname', 'ssid', 'sspassword', 'output'];
+// Drop any credential/API params already baked into a ScreenScraper media URL. SS now returns
+// media URLs with the request's creds embedded, so we strip them to (a) keep the password out of
+// the renderer/DOM and (b) avoid duplicate params when we add our own.
+function ssStripCreds(url) {
+    const [base, qs = ''] = url.split('?');
+    const keep = new URLSearchParams();
+    for (const [k, v] of new URLSearchParams(qs)) if (!SS_CRED_KEYS.includes(k)) keep.set(k, v);
+    const s = keep.toString();
+    return s ? `${base}?${s}` : base;
+}
 function ssMediaUrl(url, ssUser, ssPass) {
-    if (url.includes('ssid=')) return url;
+    const clean = ssStripCreds(url);
     const creds = new URLSearchParams({
         devid: ssDev.devid, devpassword: ssDev.devpassword, softname: ssDev.softname,
         ssid: ssUser, sspassword: ssPass, output: 'image',
     });
-    return `${url}&${creds.toString()}`;
+    return `${clean}${clean.includes('?') ? '&' : '?'}${creds.toString()}`;
 }
 
 function ssApiUrl(endpoint, params) {
@@ -994,11 +1005,12 @@ ipcMain.handle('ss-search-art', async (_, gameId, assetType) => {
         screenshot: ['ss', 'sstitle', 'fanart'],
     };
     const wanted = new Set(typeMap[assetType] || ['box-2D']);
-    // Return the credential-free base URL only. The renderer displays it via the ssimg:// proxy and
-    // passes it back to sgdb-apply-art, both of which add credentials in the main process.
+    // Return the credential-free base URL only (SS now embeds creds in m.url — strip them). The
+    // renderer displays it via the ssimg:// proxy and passes it back to sgdb-apply-art, both of
+    // which add credentials in the main process.
     const results = (jeu.medias || [])
         .filter(m => wanted.has(m.type))
-        .map(m => ({ thumb: m.url, url: m.url }));
+        .map(m => ({ thumb: ssStripCreds(m.url), url: ssStripCreds(m.url) }));
     return { ok: true, results };
 });
 

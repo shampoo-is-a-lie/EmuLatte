@@ -141,14 +141,71 @@ function updateCategoryHeader(games) {
 // PORTRAIT (~5:7) is the default — disc/DVD cases (PS1/PS2/PSP/Saturn/GC/Wii),
 // the DS family, NES, and the Genesis/Mega Drive clamshell. LANDSCAPE (~7:5) is the
 // wide US cartridge box: SNES, N64, and the Atari/Coleco/Intellivision era. SQUARE
-// (1:1) is the Game Boy family + Game Gear, plus the Dreamcast (CD jewel-case art).
+// (1:1) is the Game Boy family + Game Gear. (Jewel-case disc systems like Dreamcast default to
+// portrait here and only switch to the jewel frame when their art is actually square — see below.)
 // short_name comes from the system preset; edit the sets below to retune any system.
 const COVER_LANDSCAPE = new Set([
     'snes', 'n64', 'a2600', 'a5200', 'a7800', 'coleco', 'intv', 'vectrex',
 ]);
 const COVER_SQUARE = new Set([
-    'gb', 'gbc', 'gba', 'gg', 'ngp', 'ngpc', 'ws', 'wsc', 'dc',
+    'gb', 'gbc', 'gba', 'gg', 'ngp', 'ngpc', 'ws', 'wsc',
 ]);
+// CD-era systems eligible for the faux jewel case. This is only a GATE: within these systems
+// the cover's own shape decides the frame — square-ish art (JP CD jewel case) gets the jewel
+// frame, portrait art (US/PAL tall cover, e.g. half the Saturn library) stays a flat cover.
+// DVD/UMD/cartridge systems are excluded outright.
+const JEWEL_CASE = new Set([
+    'ps1', 'saturn', 'segacd', 'dc', 'pcecd', 'pcfx', 'neocd', '3do',
+]);
+const isJewel = shortName => JEWEL_CASE.has((shortName || '').toLowerCase());
+// Art counts as a square jewel-case insert within this aspect-ratio band; outside it stays flat.
+// Upper 1.20 catches US PlayStation covers (squarish, ~1.165); portrait Saturn/PS1 scans
+// (~0.65–0.71) fall below the floor and stay flat.
+const JEWEL_AR_MIN = 0.88, JEWEL_AR_MAX = 1.20;
+// For a jewel-eligible game, toggle the jewel frame on `container` once the cover has loaded,
+// based on the art's real proportions. Handles already-cached images and load failures.
+function applyJewelCase(img, container) {
+    if (!img || !container) return;
+    const decide = () => {
+        if (!img.naturalWidth || !img.naturalHeight) return;
+        const ar = img.naturalWidth / img.naturalHeight;
+        container.classList.toggle('jewel', ar >= JEWEL_AR_MIN && ar <= JEWEL_AR_MAX);
+    };
+    container.classList.remove('jewel');
+    if (!img.getAttribute('src')) return;
+    if (img.complete && img.naturalWidth) decide();
+    else img.addEventListener('load', decide, { once: true });
+}
+
+// Systems whose cover ORIENTATION depends on region (the art itself decides), with no case frame:
+// SNES — US boxes are landscape, JP (Super Famicom) boxes are portrait. Add more here as needed.
+const ORIENT_ADAPTIVE = new Set(['snes']);
+const isOrientAdaptive = shortName => ORIENT_ADAPTIVE.has((shortName || '').toLowerCase());
+// Snap the cover box to the loaded art's orientation, per game (landscape vs portrait).
+function applyArtOrientation(img) {
+    if (!img) return;
+    const decide = () => {
+        if (!img.naturalWidth || !img.naturalHeight) return;
+        img.style.aspectRatio = (img.naturalWidth / img.naturalHeight >= 1) ? '7 / 5' : '5 / 7';
+    };
+    if (!img.getAttribute('src')) return;
+    if (img.complete && img.naturalWidth) decide();
+    else img.addEventListener('load', decide, { once: true });
+}
+
+// Systems with no standard box shape (e.g. PC Engine / TurboGrafx-16 HuCard cases ~0.85): show the
+// cover at its OWN proportions so the whole art fits the gallery uncropped, instead of forcing a ratio.
+const NATURAL_RATIO = new Set(['pce']);
+const isNaturalRatio = shortName => NATURAL_RATIO.has((shortName || '').toLowerCase());
+function applyNaturalRatio(img) {
+    if (!img) return;
+    const decide = () => {
+        if (img.naturalWidth && img.naturalHeight) img.style.aspectRatio = `${img.naturalWidth} / ${img.naturalHeight}`;
+    };
+    if (!img.getAttribute('src')) return;
+    if (img.complete && img.naturalWidth) decide();
+    else img.addEventListener('load', decide, { once: true });
+}
 function coverRatio(shortName) {
     const s = (shortName || '').toLowerCase();
     if (COVER_LANDSCAPE.has(s)) return '7 / 5';   // wide cardboard cartridge boxes
@@ -187,9 +244,15 @@ function renderGallery(games) {
     }).join('');
 
     grid.querySelectorAll('.gallery-item').forEach(el => {
+        const game = allGames.find(g => g.id === Number(el.dataset.id));
+        if (game && isJewel(game.system_short))
+            applyJewelCase(el.querySelector('img.gallery-cover'), el.querySelector('.gallery-cover-wrap'));
+        else if (game && isOrientAdaptive(game.system_short))
+            applyArtOrientation(el.querySelector('img.gallery-cover'));
+        else if (game && isNaturalRatio(game.system_short))
+            applyNaturalRatio(el.querySelector('img.gallery-cover'));
         el.addEventListener('click', e => {
             if (e.target.closest('.btn-gallery-fav, .btn-gallery-want, .btn-play-gallery')) return;
-            const game = allGames.find(g => g.id === Number(el.dataset.id));
             if (game) openGamePage(game);
         });
     });
@@ -405,6 +468,11 @@ function openGamePage(game) {
     cov.src = game.cover || '';
     cov.style.aspectRatio = coverRatio(game.system_short);   // match the box shape we set per system
     cov.style.cursor = game.cover ? 'zoom-in' : 'default';
+    const coverFrame = document.getElementById('gamepage-cover-frame');
+    coverFrame.classList.remove('jewel');
+    if (isJewel(game.system_short)) applyJewelCase(cov, coverFrame);          // square art → jewel case, portrait → flat
+    else if (isOrientAdaptive(game.system_short)) applyArtOrientation(cov);   // SNES: US landscape vs JP portrait
+    else if (isNaturalRatio(game.system_short)) applyNaturalRatio(cov);       // PC Engine: keep the art's own proportion
 
     const stats = [];
     if (game.system_name) stats.push({ label: 'System',    val: game.system_name });
@@ -1253,11 +1321,13 @@ function enhanceSelect(sel) {
         document.removeEventListener('mousedown', onDocDown, true);
         document.removeEventListener('keydown', onKey, true);
         window.removeEventListener('resize', close, true);
-        window.removeEventListener('scroll', close, true);
+        window.removeEventListener('scroll', onScroll, true);
         if (_openCustSel === api) _openCustSel = null;
     }
     function onDocDown(e) { if (!listEl?.contains(e.target) && !wrap.contains(e.target)) close(); }
     function onKey(e) { if (e.key === 'Escape') close(); }
+    // Dismiss when the page/modal behind the list scrolls, but NOT when scrolling the list itself.
+    function onScroll(e) { if (!listEl?.contains(e.target)) close(); }
 
     function position() {
         const r = btn.getBoundingClientRect();
@@ -1294,7 +1364,7 @@ function enhanceSelect(sel) {
         document.addEventListener('mousedown', onDocDown, true);
         document.addEventListener('keydown', onKey, true);
         window.addEventListener('resize', close, true);
-        window.addEventListener('scroll', close, true);
+        window.addEventListener('scroll', onScroll, true);
         _openCustSel = api;
         listEl.querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
     }
