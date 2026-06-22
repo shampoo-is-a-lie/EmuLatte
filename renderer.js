@@ -206,6 +206,13 @@ function applyNaturalRatio(img) {
     if (img.complete && img.naturalWidth) decide();
     else img.addEventListener('load', decide, { once: true });
 }
+// A gallery card needs the "special" uniform-slot treatment (contained art + blurred backdrop)
+// whenever its cover isn't the standard portrait shape — any landscape/square/jewel/orientation/
+// natural system. Standard portrait covers just fill the slot.
+const hasSpecialCover = shortName => {
+    const s = (shortName || '').toLowerCase();
+    return COVER_LANDSCAPE.has(s) || COVER_SQUARE.has(s) || isJewel(s) || isOrientAdaptive(s) || isNaturalRatio(s);
+};
 function coverRatio(shortName) {
     const s = (shortName || '').toLowerCase();
     if (COVER_LANDSCAPE.has(s)) return '7 / 5';   // wide cardboard cartridge boxes
@@ -224,14 +231,18 @@ function renderGallery(games) {
     grid.innerHTML = games.map(g => {
         const hasCover = g.cover && g.cover !== '';
         const sysLabel = g.system_short || g.system_name || '';
-        const ratio    = coverRatio(g.system_short);
+        const special  = hasSpecialCover(g.system_short);
+        const fbStyle  = 'align-items:center; justify-content:center; color:var(--text_dim); font-size:11px; font-weight:900; letter-spacing:1px; text-align:center;';
         return `<div class="gallery-item" data-id="${g.id}">
-            <div class="gallery-cover-wrap">
-                ${hasCover
-                    ? `<img class="gallery-cover" style="aspect-ratio:${ratio}" src="${g.cover}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-                       <div class="gallery-cover" style="aspect-ratio:${ratio}; display:none; align-items:center; justify-content:center; color:var(--text_dim); font-size:11px; font-weight:900; letter-spacing:1px; text-align:center;">${escHtml(g.title)}</div>`
-                    : `<div class="gallery-cover" style="aspect-ratio:${ratio}; display:flex; align-items:center; justify-content:center; color:var(--text_dim); font-size:11px; font-weight:900; letter-spacing:1px; text-align:center;">${escHtml(g.title)}</div>`
-                }
+            <div class="gallery-cover-wrap${special ? ' special' : ''}">
+                ${special && hasCover ? `<div class="gcover-bg" style="background-image:url('${g.cover}')"></div>` : ''}
+                <div class="cover-frame">
+                    ${hasCover
+                        ? `<img class="gallery-cover" src="${g.cover}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+                           <div class="gallery-cover gallery-cover-fallback" style="display:none; ${fbStyle}">${escHtml(g.title)}</div>`
+                        : `<div class="gallery-cover gallery-cover-fallback" style="display:flex; ${fbStyle}">${escHtml(g.title)}</div>`
+                    }
+                </div>
                 ${sysLabel ? `<div class="gallery-system-badge">${escHtml(sysLabel)}</div>` : ''}
                 <div class="gallery-flag-btns ${g.fav || g.want ? 'has-active' : ''}">
                     <button class="btn-gallery-fav  ${g.fav  ? 'active' : ''}" data-id="${g.id}" data-field="fav"  title="Favourite">★</button>
@@ -245,12 +256,10 @@ function renderGallery(games) {
 
     grid.querySelectorAll('.gallery-item').forEach(el => {
         const game = allGames.find(g => g.id === Number(el.dataset.id));
+        // In the uniform slot, contained art already shows landscape/square/natural covers at their
+        // true shape — only the jewel case still needs measuring (square art → case, else flat).
         if (game && isJewel(game.system_short))
-            applyJewelCase(el.querySelector('img.gallery-cover'), el.querySelector('.gallery-cover-wrap'));
-        else if (game && isOrientAdaptive(game.system_short))
-            applyArtOrientation(el.querySelector('img.gallery-cover'));
-        else if (game && isNaturalRatio(game.system_short))
-            applyNaturalRatio(el.querySelector('img.gallery-cover'));
+            applyJewelCase(el.querySelector('img.gallery-cover'), el.querySelector('.cover-frame'));
         el.addEventListener('click', e => {
             if (e.target.closest('.btn-gallery-fav, .btn-gallery-want, .btn-play-gallery')) return;
             if (game) openGamePage(game);
