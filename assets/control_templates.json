@@ -1,0 +1,21 @@
+[
+  {
+    "id": "psx-dualshock",
+    "name": "PlayStation — DualShock (analog)",
+    "desc": "Enables the DualShock so the analog sticks work in games that support them.",
+    "systems": ["ps1", "psx", "playstation"],
+    "lines": ["input_libretro_device_p1 = \"517\""]
+  },
+  {
+    "id": "nintendo-layout",
+    "name": "Nintendo face-button layout",
+    "desc": "Swaps A/B and X/Y to match Nintendo's physical button positions on Xbox-style pads.",
+    "systems": ["snes", "nes", "fds", "gb", "gbc", "gba"],
+    "lines": [
+      "input_player1_btn_a = \"0\"",
+      "input_player1_btn_b = \"8\"",
+      "input_player1_btn_x = \"1\"",
+      "input_player1_btn_y = \"9\""
+    ]
+  }
+]

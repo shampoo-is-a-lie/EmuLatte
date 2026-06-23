@@ -489,11 +489,27 @@ function sessionNoSavePath() {
     try { fs.writeFileSync(f, 'config_save_on_exit = "false"\n'); } catch {}
     return f;
 }
+// The shader that should be active for a game: per-game/system override wins, else the owned base config.
+function effectiveShader(game) {
+    if (game) for (const [scope, refId] of [['game', game.id], ['system', game.system_id]]) {
+        if (refId == null) continue;
+        try {
+            const d = JSON.parse(db?.prepare('SELECT data FROM ra_overrides WHERE scope=? AND ref_id=?').get(scope, refId || 0)?.data || '{}');
+            if (d.enabled && d.shaderEnable) return { enable: d.shaderEnable === 'true', shader: d.shader || '' };
+        } catch {}
+    }
+    const base = parseRaCfg(ownedRaCfgPath());
+    return { enable: base.video_shader_enable === 'true', shader: base.video_shader || '' };
+}
+// --set-shader force-applies the preset every launch (overrides auto-presets), so the chosen
+// shader actually shows up even though gameplay never saves the config back.
+function shaderArg(game) { const s = effectiveShader(game); return (s.enable && s.shader) ? ` --set-shader "${s.shader}"` : ''; }
+
 // RetroArch flags for a normal launch: run on EmuLatte's owned config + per-scope overrides, no save-back.
 function retroarchConfigArgs(game) {
     const files = game ? raOverrideFiles(game) : [];
     files.push(sessionNoSavePath());
-    return ` --config "${ensureOwnedRaCfg()}" --appendconfig "${files.join(',')}"`;
+    return ` --config "${ensureOwnedRaCfg()}" --appendconfig "${files.join(',')}"${shaderArg(game)}`;
 }
 
 function baseLaunchCommand(game) {   // the command WITHOUT EmuLatte's --appendconfig overrides
@@ -668,7 +684,7 @@ ipcMain.handle('launch-game-ex', (_, gameId, opts = {}) => {
             try { fs.writeFileSync(fp, 'config_save_on_exit = "false"\nsavestate_auto_load = "false"\n'); files.push(fp); } catch {}
         }
         files.push(sessionNoSavePath());
-        cmd += ` --config "${ensureOwnedRaCfg()}" --appendconfig "${files.join(',')}"`;
+        cmd += ` --config "${ensureOwnedRaCfg()}" --appendconfig "${files.join(',')}"${shaderArg(game)}`;
         if (opts.slot != null && opts.slot !== 'auto') cmd += ` --entryslot ${Number(opts.slot)}`;
     }
     db.prepare('UPDATE games SET last_played=? WHERE id=?').run(Date.now(), gameId);
@@ -717,6 +733,171 @@ ipcMain.handle('launch-retroarch-config', () => {
     return { ok: true };
 });
 
+// ── CORE OPTIONS ──────────────────────────────────────────────────────────────
+// Where RetroArch reads/writes per-core options. Pin it explicitly in the owned config
+// so EmuLatte and RetroArch agree on the file.
+function coreOptionsFile() {
+    let p = parseRaCfg(ownedRaCfgPath()).core_options_path;
+    if (!p) { p = path.join(path.dirname(ownedRaCfgPath()), 'retroarch-core-options.cfg'); writeRaCfgKeys(ensureOwnedRaCfg(), { core_options_path: p }); }
+    return p.replace(/^~(?=[/\\])/, os.homedir());
+}
+ipcMain.handle('ra-core-options-get', () => {
+    const f = coreOptionsFile();
+    const map = parseRaCfg(f);
+    return { path: f, options: Object.entries(map).map(([k, v]) => ({ k, v })).sort((a, b) => a.k.localeCompare(b.k)) };
+});
+ipcMain.handle('ra-core-options-set', (_, updates) => { writeRaCfgKeys(coreOptionsFile(), updates || {}); return { ok: true }; });
+
+// ── SHADER BROWSER (folder-by-folder, like RetroArch's preset browser) ────────
+ipcMain.handle('ra-browse-shaders', (_, rel = '') => {
+    const root = readRaCfgKey('video_shader_dir') || path.join(getRetroArchCfgDir(), 'shaders');
+    const cur = path.resolve(path.join(root, rel));
+    if (!cur.startsWith(path.resolve(root))) return { root, rel: '', dirs: [], presets: [], hasParent: false };
+    let entries = []; try { entries = fs.readdirSync(cur, { withFileTypes: true }); } catch {}
+    const dirs = [], presets = [];
+    for (const e of entries) {
+        if (e.isDirectory()) dirs.push(e.name);
+        else { const m = e.name.match(/\.(slangp|glslp|cgp)$/i); if (m) presets.push({ name: e.name.replace(/\.(slangp|glslp|cgp)$/i, ''), file: path.join(cur, e.name), type: m[1].toLowerCase() }); }
+    }
+    dirs.sort((a, b) => a.localeCompare(b));
+    presets.sort((a, b) => a.name.localeCompare(b.name));
+    return { root, rel, dirs, presets, hasParent: !!rel };
+});
+
+// Download a URL to a file, following GitHub redirects, reporting progress.
+function httpsDownload(url, dest, onProgress) {
+    return new Promise((resolve, reject) => {
+        const file = fs.createWriteStream(dest);
+        const get = (u, redirects = 0) => {
+            https.get(u, { headers: { 'User-Agent': 'EmuLatte' } }, res => {
+                if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location && redirects < 6) {
+                    res.resume(); return get(res.headers.location, redirects + 1);
+                }
+                if (res.statusCode !== 200) { res.resume(); return reject(new Error('HTTP ' + res.statusCode)); }
+                const total = parseInt(res.headers['content-length'] || '0', 10); let got = 0;
+                res.on('data', c => { got += c.length; onProgress && onProgress(got, total); });
+                res.pipe(file);
+                file.on('finish', () => file.close(() => resolve()));
+            }).on('error', err => { try { fs.unlinkSync(dest); } catch {} reject(err); });
+        };
+        get(url);
+    });
+}
+const shaderDir = () => readRaCfgKey('video_shader_dir') || path.join(getRetroArchCfgDir(), 'shaders');
+
+// Download libretro's official slang-shaders into <shaders>/shaders_slang (same layout RetroArch's updater uses).
+ipcMain.handle('download-shader-pack', async (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const dest = path.join(os.tmpdir(), 'emulatte-slang-shaders.zip');
+    try {
+        await httpsDownload('https://github.com/libretro/slang-shaders/archive/refs/heads/master.zip', dest,
+            (got, total) => win?.webContents.send('shader-pack-progress', { got, total }));
+        win?.webContents.send('shader-pack-progress', { extracting: true });
+        const zip = new AdmZip(dest);
+        const target = path.join(shaderDir(), 'shaders_slang');
+        fs.mkdirSync(target, { recursive: true });
+        let n = 0;
+        for (const entry of zip.getEntries()) {
+            if (entry.isDirectory) continue;
+            const rel = entry.entryName.replace(/^slang-shaders-[^/]+\//, '');   // strip the top "slang-shaders-master/" folder
+            if (!rel) continue;
+            const out = path.join(target, rel);
+            fs.mkdirSync(path.dirname(out), { recursive: true });
+            fs.writeFileSync(out, entry.getData()); n++;
+        }
+        try { fs.unlinkSync(dest); } catch {}
+        return { ok: true, files: n, dir: target };
+    } catch (err) { return { ok: false, error: err.message }; }
+});
+
+// Copy EmuLatte's bundled curated presets into the shader root (their relative refs resolve against the pack).
+ipcMain.handle('install-bundled-presets', () => {
+    const root = shaderDir(); fs.mkdirSync(root, { recursive: true });
+    const src = path.join(__dirname, 'assets', 'shaders');
+    let names = [];
+    for (const f of safeReaddir(src)) if (/\.(slangp|glslp|cgp)$/i.test(f)) { try { fs.copyFileSync(path.join(src, f), path.join(root, f)); names.push(f.replace(/\.[^.]+$/, '')); } catch {} }
+    return { ok: true, names };
+});
+
+// ── INPUT REMAPS (.rmp files) ─────────────────────────────────────────────────
+const remapsDir = () => readRaCfgKey('input_remapping_directory') || path.join(getRetroArchCfgDir(), 'config', 'remaps');
+ipcMain.handle('ra-list-remaps', () => {
+    const root = remapsDir(); const out = [];
+    (function walk(d, depth) {
+        if (depth > 3) return;
+        let es = []; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+        for (const e of es) {
+            const full = path.join(d, e.name);
+            if (e.isDirectory()) { walk(full, depth + 1); continue; }
+            if (!/\.rmp(\.disabled)?$/i.test(e.name)) continue;
+            out.push({ path: full, name: e.name.replace(/\.rmp(\.disabled)?$/i, ''), core: path.basename(path.dirname(full)), enabled: !/\.disabled$/i.test(e.name) });
+        }
+    })(root, 0);
+    return out.sort((a, b) => (a.core + a.name).localeCompare(b.core + b.name));
+});
+ipcMain.handle('ra-remap-toggle', (_, file, enable) => {
+    try {
+        const target = enable ? file.replace(/\.disabled$/i, '') : (/\.disabled$/i.test(file) ? file : file + '.disabled');
+        if (target !== file) fs.renameSync(file, target);
+        return { ok: true, path: target };
+    } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle('ra-remap-delete', (_, file) => {
+    try {
+        const dir = path.resolve(remapsDir());
+        if (!path.resolve(file).startsWith(dir)) return { ok: false, error: 'Refusing to delete outside the remaps folder.' };
+        fs.unlinkSync(file); return { ok: true };
+    } catch (e) { return { ok: false, error: e.message }; }
+});
+
+// The RetroArch remap folder for a core = its short "corename" (from the .info file).
+function coreRemapFolder(coreSoPath) {
+    if (!coreSoPath) return '';
+    const base = path.basename(coreSoPath).replace(/\.so$/i, '');
+    const infoDir = readRaCfgKey('libretro_info_path') || path.join(getRetroArchCfgDir(), 'info');
+    try {
+        const name = infoField(fs.readFileSync(path.join(infoDir, base + '.info'), 'utf8'), 'corename');
+        if (name) return name;
+    } catch {}
+    return base.replace(/_libretro$/i, '');   // fallback
+}
+const controlTemplates = () => { try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'assets', 'control_templates.json'), 'utf8')); } catch { return []; } };
+
+// Templates + which of the user's systems each applies to (with resolved remap folder + installed state).
+ipcMain.handle('get-control-templates', () => {
+    if (!db) return [];
+    const systems = db.prepare('SELECT id, name, short_name, default_core FROM systems').all();
+    const root = remapsDir();
+    return controlTemplates().map(t => {
+        const wants = new Set(t.systems.map(s => s.toLowerCase()));
+        const targets = systems.filter(s => wants.has((s.short_name || '').toLowerCase()))
+            .map(s => {
+                const folder = coreRemapFolder(s.default_core);
+                const rmp = path.join(root, folder, folder + '.rmp');
+                return { systemId: s.id, systemName: s.name, folder, installed: fs.existsSync(rmp) };
+            }).filter(t2 => t2.folder);
+        return { id: t.id, name: t.name, desc: t.desc, targets };
+    }).filter(t => t.targets.length);
+});
+
+ipcMain.handle('install-control-template', (_, templateId, systemId) => {
+    if (!db) return { ok: false, error: 'DB not ready' };
+    const t = controlTemplates().find(x => x.id === templateId);
+    const sys = db.prepare('SELECT default_core FROM systems WHERE id=?').get(systemId);
+    if (!t || !sys) return { ok: false, error: 'Not found' };
+    const folder = coreRemapFolder(sys.default_core);
+    if (!folder) return { ok: false, error: 'Could not resolve the core for this system.' };
+    const updates = {};
+    for (const line of t.lines) { const m = line.match(/^\s*([A-Za-z0-9_+-]+)\s*=\s*"?(.*?)"?\s*$/); if (m) updates[m[1]] = m[2]; }
+    try {
+        const dir = path.join(remapsDir(), folder);
+        fs.mkdirSync(dir, { recursive: true });
+        writeRaCfgKeys(path.join(dir, folder + '.rmp'), updates);
+        return { ok: true, folder };
+    } catch (e) { return { ok: false, error: e.message }; }
+});
+
+// ── BACKUP / RESTORE ──────────────────────────────────────────────────────────
 // ── BACKUP / RESTORE ──────────────────────────────────────────────────────────
 const savefileDir = () => readRaCfgKey('savefile_directory') || path.join(getRetroArchCfgDir(), 'saves');
 const dateStamp   = () => new Date().toISOString().slice(0, 10);

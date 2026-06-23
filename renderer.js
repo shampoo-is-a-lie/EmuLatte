@@ -317,7 +317,7 @@ async function refreshRaConfigInfo() {
 }
 
 // ── RETROARCH SETTINGS (full menu over EmuLatte's owned config) ───────────────
-let _raCfg = {}, _raChanges = {}, _raAllRendered = false;
+let _raCfg = {}, _raChanges = {}, _raCoreChanges = {}, _raAllRendered = false;
 const RA_ASPECTS = [['0','4:3'],['1','16:9'],['2','16:10'],['3','16:15'],['4','21:9'],['5','1:1'],['6','2:1'],['7','3:2'],['11','5:4'],['19','Square pixel'],['20','Config'],['22','Core provided'],['23','Custom']];
 const RA_VIDEO_SPEC = [
     {k:'video_driver', l:'Video driver', t:'select', o:['gl','glcore','vulkan','sdl2','d3d11','vga']},
@@ -537,9 +537,102 @@ function renderRaAll() {
     });
     c.appendChild(frag); _raAllRendered = true;
 }
+let _raShaderRel = '';
+function setShaderCurrent(file) {
+    _raChanges.video_shader = file; _raCfg.video_shader = file;
+    document.getElementById('ra-shader-current').textContent = file ? file.split('/').pop() : '(none)';
+    document.querySelectorAll('#ra-shader-browser .ra-shader-item').forEach(el => el.classList.toggle('sel', el.dataset.file === file && !!file));
+}
+const SHADER_TAG = { slangp: 'SLANG', glslp: 'GLSL', cgp: 'CG' };
+async function browseShaders(rel = '') {
+    _raShaderRel = rel;
+    let res = { dirs: [], presets: [] }; try { res = await window.api.raBrowseShaders(rel); } catch {}
+    const crumbs = document.getElementById('ra-shader-crumbs');
+    const parts = rel ? rel.split('/').filter(Boolean) : [];
+    let acc = ''; let html = `<a data-rel="">shaders</a>`;
+    parts.forEach(p => { acc = acc ? acc + '/' + p : p; html += ` <span>/</span> <a data-rel="${escHtml(acc)}">${escHtml(p)}</a>`; });
+    crumbs.innerHTML = html;
+    crumbs.querySelectorAll('a').forEach(a => a.onclick = () => browseShaders(a.dataset.rel));
+    const b = document.getElementById('ra-shader-browser'); b.innerHTML = '';
+    res.dirs.forEach(d => {
+        const el = document.createElement('div'); el.className = 'ra-shader-item folder';
+        el.innerHTML = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><span>${escHtml(d)}</span>`;
+        el.onclick = () => browseShaders(rel ? rel + '/' + d : d);
+        b.appendChild(el);
+    });
+    res.presets.forEach(p => {
+        const el = document.createElement('div'); el.className = 'ra-shader-item'; el.dataset.file = p.file;
+        el.innerHTML = `<span class="ra-shader-tag">${SHADER_TAG[p.type] || '?'}</span><span>${escHtml(p.name)}</span>`;
+        if (p.file === (_raCfg.video_shader || '')) el.classList.add('sel');
+        el.onclick = () => setShaderCurrent(p.file);
+        b.appendChild(el);
+    });
+    if (!res.dirs.length && !res.presets.length) b.innerHTML = '<div class="ra-pane-hint" style="padding:12px;">Empty folder.</div>';
+}
+function renderRaShaders() {
+    const en = document.getElementById('ra-shader-enable');
+    en.value = _raCfg.video_shader_enable === 'true' ? 'true' : 'false';
+    en.onchange = () => { _raChanges.video_shader_enable = en.value; _raCfg.video_shader_enable = en.value; };
+    document.getElementById('ra-shader-current').textContent = _raCfg.video_shader ? _raCfg.video_shader.split('/').pop() : '(none)';
+    document.getElementById('ra-shader-clear').onclick = () => setShaderCurrent('');
+    browseShaders('');
+}
+async function renderRaCoreOpts() {
+    const c = document.getElementById('ra-coreopts-list'); c.innerHTML = '';
+    let res = { options: [] }; try { res = await window.api.raCoreOptionsGet(); } catch {}
+    if (!res.options || !res.options.length) { c.innerHTML = '<div class="ra-pane-hint">No core options set yet — they appear once you set them in RetroArch (Quick Menu → Core Options).</div>'; return; }
+    res.options.forEach(({ k, v }) => {
+        const row = document.createElement('div'); row.className = 'ra-set-row'; row.dataset.label = k.toLowerCase();
+        const lab = document.createElement('label'); lab.innerHTML = `<span class="ra-key">${escHtml(k)}</span>`;
+        const inp = document.createElement('input'); inp.type = 'text'; inp.value = v;
+        inp.addEventListener('change', () => { _raCoreChanges[k] = inp.value; });
+        row.append(lab, inp); c.appendChild(row);
+    });
+}
+async function renderRaTemplates() {
+    const c = document.getElementById('ra-template-list'); c.innerHTML = '';
+    let templates = []; try { templates = await window.api.getControlTemplates(); } catch {}
+    if (!templates.length) { c.innerHTML = '<div class="ra-pane-hint">No templates apply to your current systems.</div>'; return; }
+    templates.forEach(t => {
+        const card = document.createElement('div'); card.className = 'tool-card'; card.style.marginBottom = '10px';
+        const title = document.createElement('div'); title.className = 'tool-card-title'; title.textContent = t.name;
+        const desc = document.createElement('div'); desc.className = 'hint'; desc.style.marginTop = '0'; desc.textContent = t.desc;
+        card.append(title, desc);
+        t.targets.forEach(tg => {
+            const row = document.createElement('div'); row.className = 'ra-set-row';
+            const lab = document.createElement('label'); lab.innerHTML = `${escHtml(tg.systemName)}<br><span class="ra-key">${escHtml(tg.folder)}${tg.installed ? ' · installed' : ''}</span>`;
+            const btn = document.createElement('button'); btn.textContent = tg.installed ? 'Re-install' : 'Install'; btn.style.fontSize = '11px'; btn.style.flexShrink = '0';
+            btn.onclick = async () => {
+                btn.disabled = true; btn.textContent = '…';
+                const r = await window.api.installControlTemplate(t.id, tg.systemId);
+                if (r.ok) { showLaunchToast(`Installed “${t.name}” for ${tg.systemName}.`, null, 'CONTROLS'); renderRaTemplates(); renderRaRemaps(); }
+                else { btn.disabled = false; btn.textContent = 'Install'; showLaunchToast(r.error || 'Install failed', null, 'CONTROLS'); }
+            };
+            row.append(lab, btn); card.appendChild(row);
+        });
+        c.appendChild(card);
+    });
+}
+async function renderRaRemaps() {
+    const c = document.getElementById('ra-remap-list'); c.innerHTML = '';
+    let list = []; try { list = await window.api.raListRemaps(); } catch {}
+    if (!list.length) { c.innerHTML = '<div class="ra-pane-hint">No remap files found.</div>'; return; }
+    list.forEach(r => {
+        const row = document.createElement('div'); row.className = 'ra-set-row';
+        const lab = document.createElement('label'); lab.innerHTML = `${escHtml(r.name)}<br><span class="ra-key">${escHtml(r.core)}${r.enabled ? '' : ' · disabled'}</span>`;
+        const wrap = document.createElement('div'); wrap.style.cssText = 'display:flex; gap:8px; flex-shrink:0;';
+        const tog = document.createElement('button'); tog.textContent = r.enabled ? 'Disable' : 'Enable'; tog.style.fontSize = '11px';
+        tog.onclick = async () => { await window.api.raRemapToggle(r.path, !r.enabled); renderRaRemaps(); };
+        const del = document.createElement('button'); del.textContent = 'Delete'; del.className = 'danger'; del.style.fontSize = '11px';
+        del.onclick = async () => { if (await showConfirm(`Delete remap “${r.name}” (${r.core})?`, 'Delete', true, 'Delete Remap')) { await window.api.raRemapDelete(r.path); renderRaRemaps(); } };
+        wrap.append(tog, del); row.append(lab, wrap); c.appendChild(row);
+    });
+}
+
 async function openRaSettings() {
     closeModal('modal-settings');                       // never stack two blurred modals
-    _raCfg = await window.api.raConfigGetAll(); _raChanges = {}; _raAllRendered = false;
+    _raCfg = await window.api.raConfigGetAll(); _raChanges = {}; _raCoreChanges = {}; _raAllRendered = false;
+    renderRaShaders(); renderRaCoreOpts(); renderRaTemplates(); renderRaRemaps();
     renderRaPane('ra-pane-drivers', RA_DRIVERS_SPEC);
     renderRaPane('ra-pane-video', RA_VIDEO_SPEC);
     renderRaPane('ra-pane-audio', RA_AUDIO_SPEC);
@@ -1847,7 +1940,11 @@ function enhanceSelect(sel) {
     syncLabel();
 }
 
-function enhanceAllSelects() { document.querySelectorAll('select').forEach(enhanceSelect); }
+function enhanceAllSelects() {
+    // RetroArch-settings selects stay native (CSS-themed) — they live in scrollable panes
+    // and are created dynamically, so the portal widget mispositions there.
+    document.querySelectorAll('select').forEach(sel => { if (!sel.closest('#modal-ra-settings')) enhanceSelect(sel); });
+}
 
 function wireUI() {
     // Titlebar
@@ -2565,9 +2662,31 @@ function wireUI() {
     document.getElementById('btn-ra-settings').addEventListener('click', openRaSettings);
     document.getElementById('btn-ra-set-close').addEventListener('click', () => closeModal('modal-ra-settings'));
     document.getElementById('btn-ra-set-save').addEventListener('click', async () => {
-        await window.api.raConfigSet(_raChanges); _raChanges = {};
+        await window.api.raConfigSet(_raChanges);
+        if (Object.keys(_raCoreChanges).length) await window.api.raCoreOptionsSet(_raCoreChanges);
+        _raChanges = {}; _raCoreChanges = {};
         closeModal('modal-ra-settings');
         showLaunchToast('RetroArch settings saved — applies on next launch.', null, 'RETROARCH');
+    });
+    document.getElementById('btn-ra-remap-in-ra').addEventListener('click', () => window.api.launchRetroarchConfig());
+    // Shader pack download + bundled presets
+    const raShaderStatus = m => { const el = document.getElementById('ra-shader-status'); if (el) el.textContent = m || ''; };
+    window.api.onShaderPackProgress(d => {
+        if (d.extracting) raShaderStatus('Extracting shader pack…');
+        else raShaderStatus(`Downloading shader pack… ${(d.got / 1048576).toFixed(1)} MB${d.total ? ' / ' + (d.total / 1048576).toFixed(0) + ' MB' : ''}`);
+    });
+    document.getElementById('btn-ra-shader-pack').addEventListener('click', async () => {
+        const btn = document.getElementById('btn-ra-shader-pack'); btn.disabled = true;
+        raShaderStatus('Starting download…');
+        const r = await window.api.downloadShaderPack();
+        btn.disabled = false;
+        raShaderStatus(r.ok ? `✓ Installed ${r.files} shader files. Browse below.` : `✗ ${r.error || 'Download failed'}`);
+        if (r.ok) browseShaders('');
+    });
+    document.getElementById('btn-ra-shader-bundled').addEventListener('click', async () => {
+        const r = await window.api.installBundledPresets();
+        raShaderStatus(r.ok ? `✓ Installed: ${r.names.join(', ')}` : `✗ ${r.error || 'Failed'}`);
+        if (r.ok) browseShaders('');
     });
     document.querySelectorAll('#ra-set-rail .cp-rail-item').forEach(item => {
         item.addEventListener('click', () => {

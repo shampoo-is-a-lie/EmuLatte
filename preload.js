@@ -53,6 +53,17 @@ contextBridge.exposeInMainWorld('api', {
     raConfigImport:      ()        => ipcRenderer.invoke('ra-config-import'),
     raConfigExport:      ()        => ipcRenderer.invoke('ra-config-export'),
     launchRetroarchConfig: ()      => ipcRenderer.invoke('launch-retroarch-config'),
+    raCoreOptionsGet:    ()              => ipcRenderer.invoke('ra-core-options-get'),
+    raCoreOptionsSet:    (updates)       => ipcRenderer.invoke('ra-core-options-set', updates),
+    raBrowseShaders:     (rel)           => ipcRenderer.invoke('ra-browse-shaders', rel),
+    downloadShaderPack:  ()              => ipcRenderer.invoke('download-shader-pack'),
+    installBundledPresets: ()            => ipcRenderer.invoke('install-bundled-presets'),
+    onShaderPackProgress: (cb)           => ipcRenderer.on('shader-pack-progress', (_, d) => cb(d)),
+    raListRemaps:        ()              => ipcRenderer.invoke('ra-list-remaps'),
+    raRemapToggle:       (file, enable)  => ipcRenderer.invoke('ra-remap-toggle', file, enable),
+    raRemapDelete:       (file)          => ipcRenderer.invoke('ra-remap-delete', file),
+    getControlTemplates: ()              => ipcRenderer.invoke('get-control-templates'),
+    installControlTemplate: (id, sysId)  => ipcRenderer.invoke('install-control-template', id, sysId),
 
     // Save-state manager
     listSaveStates:     (id)            => ipcRenderer.invoke('list-save-states', id),
