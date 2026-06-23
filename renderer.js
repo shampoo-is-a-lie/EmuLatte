@@ -269,6 +269,105 @@ async function runDiscRepair(btn, out, call) {
     finally { btn.disabled = false; }
 }
 
+// ── RetroArch launch settings (override editor) ───────────────────────────────
+let _raScope = 'global', _raRef = 0;
+function raOverrideToggleFields() {
+    const on = document.getElementById('ra-ovr-enabled').checked;
+    const f = document.getElementById('ra-ovr-fields');
+    f.style.opacity = on ? '1' : '0.4';
+    f.style.pointerEvents = on ? 'auto' : 'none';
+}
+async function openRaOverride(scope, refId, title, note) {
+    _raScope = scope; _raRef = refId || 0;
+    document.getElementById('ra-override-title').textContent = title;
+    document.getElementById('ra-override-scope-note').textContent = note || '';
+    const monSel = document.getElementById('ra-ovr-monitor');
+    const shSel  = document.getElementById('ra-ovr-shader');
+    const [mons, shaders, d] = await Promise.all([
+        window.api.getMonitors(), window.api.listRaShaders(), window.api.getRaOverride(scope, _raRef),
+    ]);
+    monSel.innerHTML = `<option value="">— Don't change —</option><option value="0">Auto / primary</option>` +
+        mons.map(m => `<option value="${m.index}">${escHtml(m.label)}</option>`).join('');
+    shSel.innerHTML  = `<option value="">— Select a shader —</option>` +
+        shaders.map(s => `<option value="${escHtml(s.path)}">${escHtml(s.name)}</option>`).join('');
+    const o = d || {};
+    document.getElementById('ra-ovr-enabled').checked     = !!o.enabled;
+    monSel.value                                          = o.monitor ?? '';
+    document.getElementById('ra-ovr-fullscreen').value    = o.fullscreen ?? '';
+    document.getElementById('ra-ovr-shader-enable').value = o.shaderEnable ?? '';
+    shSel.value                                           = o.shader ?? '';
+    document.getElementById('ra-ovr-custom').value        = o.custom ?? '';
+    raOverrideToggleFields();
+    openModal('modal-ra-override');
+}
+
+// ── SAVE STATE MANAGER (memory-card style) ────────────────────────────────────
+let _smGame = null, _smSlots = [], _smSel = -1, _smFromGames = false;
+const smFmtBytes = n => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+const smFmtDate  = ms => { try { return new Date(ms).toLocaleString(); } catch { return ''; } };
+const smSlotName = s => s === 'auto' ? 'AUTO' : `SLOT ${s}`;
+
+function openSaveManager(gameId = null) {
+    _smSel = -1; _smFromGames = false;
+    openModal('modal-save-manager');
+    gameId ? smShowSlots(gameId) : smShowGames();
+}
+
+async function smShowGames() {
+    _smGame = null;
+    document.getElementById('sm-back').style.display = 'none';
+    document.getElementById('sm-fresh').style.display = 'none';
+    document.getElementById('sm-slot-actions').style.display = 'none';
+    document.getElementById('sm-restore').style.display = '';
+    document.getElementById('sm-backup').textContent = '⤓ BACKUP ALL';
+    document.getElementById('sm-title').textContent = 'SAVE STATES';
+    const grid = document.getElementById('sm-grid');
+    const games = await window.api.listGamesWithSaves();
+    document.getElementById('sm-sub').textContent = `${games.length} GAMES`;
+    document.getElementById('sm-detail').textContent = games.length ? 'SELECT A GAME…' : 'NO SAVE STATES FOUND.';
+    grid.innerHTML = games.map(g => `<div class="sm-card" data-id="${g.id}">
+        ${g.cover ? `<img src="${escHtml(g.cover)}">` : `<span style="font-size:10px;color:var(--text_dim);text-align:center;padding:6px;">${escHtml(g.title)}</span>`}
+        <span class="sm-count">${g.count}</span>
+        <span class="sm-tag">${escHtml(g.title)}</span>
+    </div>`).join('');
+    grid.querySelectorAll('.sm-card').forEach(el => el.addEventListener('click', () => { _smFromGames = true; smShowSlots(Number(el.dataset.id)); }));
+}
+
+async function smShowSlots(gameId) {
+    _smGame = allGames.find(g => g.id === gameId) || { id: gameId, title: 'GAME' };
+    _smSel = -1;
+    document.getElementById('sm-back').style.display = _smFromGames ? '' : 'none';
+    document.getElementById('sm-fresh').style.display = '';
+    document.getElementById('sm-slot-actions').style.display = 'none';
+    document.getElementById('sm-restore').style.display = 'none';
+    document.getElementById('sm-backup').textContent = '⤓ BACKUP';
+    document.getElementById('sm-title').textContent = (_smGame.title || 'GAME').toUpperCase();
+    document.getElementById('sm-detail').textContent = 'SELECT A SAVE…';
+    _smSlots = await window.api.listSaveStates(gameId);
+    document.getElementById('sm-sub').textContent = `${_smSlots.length} SAVE${_smSlots.length !== 1 ? 'S' : ''}`;
+    const grid = document.getElementById('sm-grid');
+    grid.innerHTML = _smSlots.map((s, i) => `<div class="sm-card" data-idx="${i}">
+        ${s.thumb ? `<img src="${escHtml(s.thumb)}">` : `<span style="color:var(--text_dim);font-size:11px;">${smSlotName(s.slot)}</span>`}
+        <span class="sm-tag">${escHtml(s.label || smSlotName(s.slot))}</span>
+    </div>`).join('') || `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text_dim);">NO SAVES FOR THIS GAME YET.</div>`;
+    grid.querySelectorAll('.sm-card').forEach(el => el.addEventListener('click', () => smSelectSlot(Number(el.dataset.idx))));
+}
+
+function smSelectSlot(i) {
+    _smSel = i;
+    document.querySelectorAll('#sm-grid .sm-card').forEach((el, idx) => el.classList.toggle('sel', idx === i));
+    const s = _smSlots[i];
+    document.getElementById('sm-detail').textContent = `${smSlotName(s.slot)}${s.label ? ` · "${s.label}"` : ''} · ${smFmtBytes(s.size)} · ${smFmtDate(s.mtime)}`;
+    document.getElementById('sm-slot-actions').style.display = '';
+}
+
+async function smLaunch(opts) {
+    if (!_smGame) return;
+    const r = await window.api.launchGameEx(_smGame.id, opts);
+    if (r.ok) { closeModal('modal-save-manager'); showNowPlaying(allGames.find(g => g.id === _smGame.id) || _smGame); }
+    else showLaunchToast(r.error || 'Launch failed', null);
+}
+
 function renderGallery(games) {
     const grid = document.getElementById('gallery-grid');
     if (!games.length) {
@@ -2060,6 +2159,85 @@ function wireUI() {
         const out = document.getElementById('repair-disc-game-result');
         out.style.display = 'block';
         await runDiscRepair(document.getElementById('btn-repair-disc-game'), out, () => window.api.repairDiscRefsGame(id));
+    });
+
+    // ── RETROARCH LAUNCH SETTINGS (override editor) ───────────────────────────
+    document.getElementById('btn-ra-override-global').addEventListener('click', () =>
+        openRaOverride('global', 0, 'RetroArch Settings — Global', 'Applies to every game. System and per-game settings override these.'));
+    document.getElementById('btn-ra-override-system').addEventListener('click', () => {
+        const id = Number(document.getElementById('edit-system-id').value);
+        if (!id) { showAlert('Save the system first, then configure its RetroArch settings.', 'RetroArch Settings'); return; }
+        openRaOverride('system', id, `RetroArch Settings — ${document.getElementById('edit-system-name').value || 'System'}`, 'Applies to all games in this system. Overrides Global; a per-game setting wins over this.');
+    });
+    document.getElementById('btn-ra-override-game').addEventListener('click', () => {
+        const id = Number(document.getElementById('edit-game-id').value);
+        if (!id) { showAlert('Save the game first.', 'RetroArch Settings'); return; }
+        openRaOverride('game', id, `RetroArch Settings — ${document.getElementById('edit-title').value || 'Game'}`, 'Highest priority — overrides the system and global settings for this game only.');
+    });
+    document.getElementById('ra-ovr-enabled').addEventListener('change', raOverrideToggleFields);
+    document.getElementById('ra-override-cancel').addEventListener('click', () => closeModal('modal-ra-override'));
+    document.getElementById('ra-override-save').addEventListener('click', async () => {
+        await window.api.setRaOverride(_raScope, _raRef, {
+            enabled:      document.getElementById('ra-ovr-enabled').checked,
+            monitor:      document.getElementById('ra-ovr-monitor').value,
+            fullscreen:   document.getElementById('ra-ovr-fullscreen').value,
+            shaderEnable: document.getElementById('ra-ovr-shader-enable').value,
+            shader:       document.getElementById('ra-ovr-shader').value,
+            custom:       document.getElementById('ra-ovr-custom').value,
+        });
+        closeModal('modal-ra-override');
+    });
+
+    // ── SAVE STATE MANAGER ───────────────────────────────────────────────────
+    document.getElementById('btn-gamepage-saves').addEventListener('click', () => { if (currentGame) openSaveManager(currentGame.id); });
+    document.getElementById('btn-open-save-manager').addEventListener('click', () => openSaveManager(null));
+    document.getElementById('sm-close').addEventListener('click', () => closeModal('modal-save-manager'));
+    document.getElementById('sm-back').addEventListener('click', () => smShowGames());
+    document.getElementById('sm-fresh').addEventListener('click', () => smLaunch({ fresh: true }));
+    document.getElementById('sm-launch').addEventListener('click', () => { const s = _smSlots[_smSel]; if (s) smLaunch({ slot: s.slot }); });
+    document.getElementById('sm-delete').addEventListener('click', async () => {
+        const s = _smSlots[_smSel]; if (!s || !_smGame) return;
+        if (!await showConfirm(`Delete ${smSlotName(s.slot)}? This removes the save-state file from disk.`, 'Delete', true, 'Delete Save State')) return;
+        const r = await window.api.deleteSaveState(s.file);
+        if (r.ok) smShowSlots(_smGame.id); else showLaunchToast(r.error || 'Delete failed', null);
+    });
+    document.getElementById('sm-label').addEventListener('click', () => {
+        const s = _smSlots[_smSel]; if (!s || !_smGame) return;
+        const detail = document.getElementById('sm-detail');
+        detail.innerHTML = `<input id="sm-label-input" value="${escHtml(s.label || '')}" placeholder="LABEL THIS SAVE" style="font-family:'Courier New',monospace; width:280px; text-transform:uppercase;">`;
+        const inp = document.getElementById('sm-label-input'); inp.focus(); inp.select();
+        const commit = async () => {
+            await window.api.setSaveLabel(_smGame.id, s.slot, inp.value);
+            s.label = inp.value.trim();
+            const tag = document.querySelector(`#sm-grid .sm-card[data-idx="${_smSel}"] .sm-tag`);
+            if (tag) tag.textContent = s.label || smSlotName(s.slot);
+            smSelectSlot(_smSel);
+        };
+        inp.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); else if (e.key === 'Escape') smSelectSlot(_smSel); });
+        inp.addEventListener('blur', commit);
+    });
+    document.getElementById('sm-backup').addEventListener('click', async () => {
+        const r = _smGame ? await window.api.backupSaves('game', _smGame.id) : await window.api.backupSaves('all');
+        if (r.canceled) return;
+        showLaunchToast(r.ok ? `Backed up ${r.files} file(s) → ${r.path}` : (r.error || 'Backup failed'), null, 'BACKUP');
+    });
+    document.getElementById('sm-restore').addEventListener('click', async () => {
+        const r = await window.api.restoreSaves();
+        if (r.canceled) return;
+        if (r.ok) { showLaunchToast(`Restored ${r.restored} save file(s).`, null, 'RESTORE'); _smGame ? smShowSlots(_smGame.id) : smShowGames(); }
+        else showLaunchToast(r.error || 'Restore failed', null, 'RESTORE');
+    });
+    document.getElementById('btn-backup-ra-settings').addEventListener('click', async () => {
+        const out = document.getElementById('settings-backup-status');
+        const r = await window.api.backupRaSettings();
+        if (r.canceled) return;
+        out.textContent = r.ok ? `✓ Saved to ${r.path}` : `✗ ${r.error || 'Backup failed'}`;
+    });
+    document.getElementById('btn-restore-ra-settings').addEventListener('click', async () => {
+        const out = document.getElementById('settings-backup-status');
+        const r = await window.api.restoreRaSettings();
+        if (r.canceled) return;
+        out.textContent = r.ok ? `✓ Restored ${r.restored} setting group(s).` : `✗ ${r.error || 'Restore failed'}`;
     });
 
     // ── GAMEPAGE: + PLAYLIST ─────────────────────────────────────────────────

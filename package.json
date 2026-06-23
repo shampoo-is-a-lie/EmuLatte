@@ -11,10 +11,17 @@
     "dist": "electron-builder --linux AppImage",
     "postdist": "D=/home/jose/Games/CNGM; F=EmuLatte.AppImage; [ -f $D/$F ] && mv $D/$F $D/EmuLatte_old.AppImage; cp dist/$F $D/$F && echo \"Deployed $F to $D\""
   },
-  "keywords": ["emulation", "retro", "game", "manager", "linux"],
+  "keywords": [
+    "emulation",
+    "retro",
+    "game",
+    "manager",
+    "linux"
+  ],
   "author": "Shampoo is a Lie",
   "license": "GPL-3.0",
   "dependencies": {
+    "adm-zip": "^0.5.17",
     "better-sqlite3": "^12.9.0"
   },
   "devDependencies": {
@@ -44,7 +51,9 @@
       {
         "from": "assets/bin/linux",
         "to": "assets/bin/linux",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ]
   }

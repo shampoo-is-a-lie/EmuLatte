@@ -36,6 +36,25 @@ contextBridge.exposeInMainWorld('api', {
     repairDiscRefsGame:   (id) => ipcRenderer.invoke('repair-disc-refs-game', id),
     repairDiscRefsSystem: (id) => ipcRenderer.invoke('repair-disc-refs-system', id),
 
+    // RetroArch launch settings (override editor)
+    getRaOverride: (scope, refId) => ipcRenderer.invoke('get-ra-override', scope, refId),
+    setRaOverride: (scope, refId, data) => ipcRenderer.invoke('set-ra-override', scope, refId, data),
+    getMonitors:   ()  => ipcRenderer.invoke('get-monitors'),
+    listRaShaders: ()  => ipcRenderer.invoke('list-ra-shaders'),
+
+    // Save-state manager
+    listSaveStates:     (id)            => ipcRenderer.invoke('list-save-states', id),
+    listGamesWithSaves: ()              => ipcRenderer.invoke('list-games-with-saves'),
+    setSaveLabel:       (id, slot, lbl) => ipcRenderer.invoke('set-save-label', id, slot, lbl),
+    deleteSaveState:    (file)          => ipcRenderer.invoke('delete-save-state', file),
+    launchGameEx:       (id, opts)      => ipcRenderer.invoke('launch-game-ex', id, opts),
+
+    // Backup / restore
+    backupSaves:       (scope, refId) => ipcRenderer.invoke('backup-saves', scope, refId),
+    restoreSaves:      ()             => ipcRenderer.invoke('restore-saves'),
+    backupRaSettings:  ()             => ipcRenderer.invoke('backup-ra-settings'),
+    restoreRaSettings: ()             => ipcRenderer.invoke('restore-ra-settings'),
+
     // Image management
     selectLocalImage: (id, type) => ipcRenderer.invoke('select-local-image', id, type),
     readFileBase64:   (p)        => ipcRenderer.invoke('read-file-base64', p),
