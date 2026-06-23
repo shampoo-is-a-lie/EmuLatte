@@ -307,6 +307,264 @@ const smFmtBytes = n => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.m
 const smFmtDate  = ms => { try { return new Date(ms).toLocaleString(); } catch { return ''; } };
 const smSlotName = s => s === 'auto' ? 'AUTO' : `SLOT ${s}`;
 
+async function refreshRaConfigInfo() {
+    const el = document.getElementById('ra-config-info');
+    if (!el) return;
+    try {
+        const info = await window.api.raConfigInfo();
+        el.innerHTML = `Config file: <b>${escHtml(info.path)}</b><br>${info.keys} settings · ${(info.size / 1024).toFixed(1)} KB`;
+    } catch {}
+}
+
+// ── RETROARCH SETTINGS (full menu over EmuLatte's owned config) ───────────────
+let _raCfg = {}, _raChanges = {}, _raAllRendered = false;
+const RA_ASPECTS = [['0','4:3'],['1','16:9'],['2','16:10'],['3','16:15'],['4','21:9'],['5','1:1'],['6','2:1'],['7','3:2'],['11','5:4'],['19','Square pixel'],['20','Config'],['22','Core provided'],['23','Custom']];
+const RA_VIDEO_SPEC = [
+    {k:'video_driver', l:'Video driver', t:'select', o:['gl','glcore','vulkan','sdl2','d3d11','vga']},
+    {k:'video_fullscreen', l:'Start in fullscreen', t:'bool'},
+    {k:'video_windowed_fullscreen', l:'Windowed fullscreen', t:'bool'},
+    {k:'video_monitor_index', l:'Monitor index (0 = primary)', t:'number'},
+    {k:'video_fullscreen_x', l:'Fullscreen width', t:'number'},
+    {k:'video_fullscreen_y', l:'Fullscreen height', t:'number'},
+    {k:'video_vsync', l:'Vertical sync (VSync)', t:'bool'},
+    {k:'video_swap_interval', l:'VSync swap interval', t:'select', o:['1','2','3','4']},
+    {k:'video_scale_integer', l:'Integer scale', t:'bool'},
+    {k:'aspect_ratio_index', l:'Aspect ratio', t:'select', o:RA_ASPECTS},
+    {k:'video_smooth', l:'Bilinear filtering', t:'bool'},
+    {k:'video_threaded', l:'Threaded video', t:'bool'},
+    {k:'video_rotation', l:'Rotation', t:'select', o:[['0','Normal'],['1','90°'],['2','180°'],['3','270°']]},
+    {k:'video_shader_enable', l:'Enable shaders', t:'bool'},
+    {k:'video_black_frame_insertion', l:'Black frame insertion', t:'number'},
+    {k:'video_hard_sync', l:'Hard GPU sync', t:'bool'},
+    {k:'video_hard_sync_frames', l:'Hard sync frames', t:'number'},
+    {k:'video_max_swapchain_images', l:'Max swapchain images', t:'select', o:['1','2','3']},
+    {k:'crt_switch_resolution', l:'CRT SwitchRes (0 = off)', t:'select', o:[['0','Off'],['1','15 kHz'],['2','15 kHz interlaced'],['3','Native']]},
+    {k:'crt_switch_resolution_super', l:'CRT super resolution', t:'text'},
+];
+const RA_AUDIO_SPEC = [
+    {k:'audio_enable', l:'Enable audio', t:'bool'},
+    {k:'audio_driver', l:'Audio driver', t:'select', o:['alsa','alsathread','pulse','pipewire','oss','sdl2','jack']},
+    {k:'audio_device', l:'Audio device', t:'text'},
+    {k:'audio_latency', l:'Audio latency (ms)', t:'number'},
+    {k:'audio_volume', l:'Audio volume (dB)', t:'text'},
+    {k:'audio_mute_enable', l:'Mute', t:'bool'},
+    {k:'audio_sync', l:'Audio sync', t:'bool'},
+    {k:'audio_rate_control', l:'Dynamic rate control', t:'bool'},
+    {k:'audio_resampler', l:'Resampler', t:'select', o:['sinc','CC']},
+];
+const RA_INPUT_SPEC = [
+    {k:'input_max_users', l:'Max users', t:'number'},
+    {k:'input_autodetect_enable', l:'Autoconfig (auto-detect pads)', t:'bool'},
+    {k:'input_menu_toggle_gamepad_combo', l:'Menu toggle combo', t:'select', o:[['0','None'],['1','L3 + R3'],['2','L1+R1+Start+Select'],['3','Start + Select'],['4','L3 + R'],['5','L3 + L1'],['6','Hold Start'],['7','Hold Select'],['8','Down + Select']]},
+    {k:'menu_swap_ok_cancel_buttons', l:'Swap OK / Cancel buttons', t:'bool'},
+    {k:'input_poll_type_behavior', l:'Input poll type', t:'select', o:[['0','Early'],['1','Normal'],['2','Late']]},
+    {k:'input_overlay_enable', l:'On-screen overlay', t:'bool'},
+    {k:'quit_press_twice', l:'Press quit twice to exit', t:'bool'},
+    {k:'all_users_control_menu', l:'All users control the menu', t:'bool'},
+];
+const RA_DRIVERS_SPEC = [
+    {k:'menu_driver', l:'Menu driver', t:'select', o:['ozone','xmb','rgui','glui']},
+    {k:'video_driver', l:'Video driver', t:'select', o:['gl','glcore','vulkan','sdl2','vga']},
+    {k:'audio_driver', l:'Audio driver', t:'select', o:['alsa','alsathread','pulse','pipewire','oss','sdl2','jack']},
+    {k:'input_driver', l:'Input driver', t:'select', o:['udev','x','sdl2','linuxraw','wayland']},
+    {k:'input_joypad_driver', l:'Controller driver', t:'select', o:['udev','sdl2','linuxraw','hid']},
+    {k:'wifi_driver', l:'Wi-Fi driver', t:'text'},
+    {k:'location_driver', l:'Location driver', t:'text'},
+    {k:'camera_driver', l:'Camera driver', t:'text'},
+    {k:'record_driver', l:'Record driver', t:'text'},
+    {k:'midi_driver', l:'MIDI driver', t:'text'},
+];
+const RA_LATENCY_SPEC = [
+    {k:'run_ahead_enabled', l:'Run-Ahead (reduce latency)', t:'bool'},
+    {k:'run_ahead_frames', l:'Run-Ahead frames', t:'number'},
+    {k:'run_ahead_secondary_instance', l:'Run-Ahead via second instance', t:'bool'},
+    {k:'run_ahead_hide_warnings', l:'Hide Run-Ahead warnings', t:'bool'},
+    {k:'video_frame_delay', l:'Frame delay (ms)', t:'number'},
+    {k:'video_frame_delay_auto', l:'Automatic frame delay', t:'bool'},
+    {k:'input_block_timeout', l:'Input block timeout', t:'number'},
+];
+const RA_CORE_SPEC = [
+    {k:'video_shared_context', l:'Shared hardware context', t:'bool'},
+    {k:'check_firmware_before_loading', l:'Check firmware before loading', t:'bool'},
+    {k:'dummy_on_core_shutdown', l:'Stay in frontend on core shutdown', t:'bool'},
+    {k:'core_option_category_enable', l:'Core option categories', t:'bool'},
+    {k:'core_set_supports_no_game_enable', l:'Allow cores without content', t:'bool'},
+    {k:'core_info_cache_enable', l:'Cache core info files', t:'bool'},
+    {k:'video_allow_rotate', l:'Allow cores to rotate video', t:'bool'},
+];
+const RA_CONFIG_SPEC = [
+    {k:'config_save_on_exit', l:'Save configuration on exit', t:'bool'},
+    {k:'auto_overrides_enable', l:'Auto-load override files', t:'bool'},
+    {k:'auto_remaps_enable', l:'Auto-load remap files', t:'bool'},
+    {k:'auto_shaders_enable', l:'Auto-load shader presets', t:'bool'},
+    {k:'game_specific_options', l:'Per-game core options', t:'bool'},
+    {k:'global_core_options', l:'Single global core-options file', t:'bool'},
+];
+const RA_SAVING_SPEC = [
+    {k:'savestate_auto_save', l:'Auto save state on exit', t:'bool'},
+    {k:'savestate_auto_load', l:'Auto load state on start', t:'bool'},
+    {k:'savestate_auto_index', l:'Increment save-state index', t:'bool'},
+    {k:'savestate_max_keep', l:'Max auto save states to keep', t:'number'},
+    {k:'savestate_thumbnail_enable', l:'Save-state thumbnails', t:'bool'},
+    {k:'block_sram_overwrite', l:'Don’t overwrite SRAM on load', t:'bool'},
+    {k:'autosave_interval', l:'SaveRAM autosave interval (s)', t:'number'},
+    {k:'sort_savefiles_enable', l:'Sort saves into folders', t:'bool'},
+    {k:'sort_savestates_enable', l:'Sort save states into folders', t:'bool'},
+    {k:'savefiles_in_content_dir', l:'Write saves to content dir', t:'bool'},
+    {k:'savestates_in_content_dir', l:'Write states to content dir', t:'bool'},
+];
+const RA_THROTTLE_SPEC = [
+    {k:'fastforward_ratio', l:'Fast-forward rate (0 = unlimited)', t:'text'},
+    {k:'fastforward_frameskip', l:'Fast-forward frameskip', t:'bool'},
+    {k:'slowmotion_ratio', l:'Slow-motion rate', t:'text'},
+    {k:'vrr_runloop_enable', l:'Sync to exact content framerate', t:'bool'},
+    {k:'menu_throttle_framerate', l:'Throttle menu framerate', t:'bool'},
+    {k:'rewind_enable', l:'Rewind', t:'bool'},
+    {k:'rewind_granularity', l:'Rewind frames per step', t:'number'},
+    {k:'rewind_buffer_size', l:'Rewind buffer size (MB)', t:'number'},
+];
+const RA_OSD_SPEC = [
+    {k:'video_font_enable', l:'On-screen notifications', t:'bool'},
+    {k:'video_font_size', l:'Notification size', t:'number'},
+    {k:'video_message_pos_x', l:'Notification X position', t:'text'},
+    {k:'video_message_pos_y', l:'Notification Y position', t:'text'},
+    {k:'menu_enable_widgets', l:'Graphics widgets', t:'bool'},
+    {k:'menu_widget_scale_auto', l:'Auto-scale widgets', t:'bool'},
+    {k:'fps_show', l:'Display framerate', t:'bool'},
+    {k:'framecount_show', l:'Display frame count', t:'bool'},
+    {k:'memory_show', l:'Display memory usage', t:'bool'},
+    {k:'statistics_show', l:'Display statistics', t:'bool'},
+];
+const RA_UI_SPEC = [
+    {k:'pause_nonactive', l:'Pause when window unfocused', t:'bool'},
+    {k:'menu_pause_libretro', l:'Pause content while in menu', t:'bool'},
+    {k:'mouse_enable', l:'Menu mouse support', t:'bool'},
+    {k:'pointer_enable', l:'Menu touch support', t:'bool'},
+    {k:'menu_show_load_core', l:'Show “Load Core”', t:'bool'},
+    {k:'menu_show_load_content', l:'Show “Load Content”', t:'bool'},
+    {k:'kiosk_mode_enable', l:'Kiosk mode', t:'bool'},
+    {k:'quit_on_close_content', l:'Quit when content closes', t:'bool'},
+    {k:'video_disable_composition', l:'Disable desktop composition', t:'bool'},
+];
+const RA_CHEEVOS_SPEC = [
+    {k:'cheevos_enable', l:'Enable achievements', t:'bool'},
+    {k:'cheevos_username', l:'Username', t:'text'},
+    {k:'cheevos_hardcore_mode_enable', l:'Hardcore mode', t:'bool'},
+    {k:'cheevos_leaderboards_enable', l:'Leaderboards', t:'bool'},
+    {k:'cheevos_richpresence_enable', l:'Rich presence', t:'bool'},
+    {k:'cheevos_badges_enable', l:'Achievement badges', t:'bool'},
+    {k:'cheevos_test_unofficial', l:'Test unofficial achievements', t:'bool'},
+    {k:'cheevos_auto_screenshot', l:'Screenshot on unlock', t:'bool'},
+    {k:'cheevos_start_active', l:'Start with all active', t:'bool'},
+    {k:'cheevos_challenge_indicators', l:'Challenge indicators', t:'bool'},
+];
+const RA_NETPLAY_SPEC = [
+    {k:'netplay_nickname', l:'Nickname', t:'text'},
+    {k:'netplay_public_announce', l:'Publicly announce', t:'bool'},
+    {k:'netplay_ip_address', l:'Server address', t:'text'},
+    {k:'netplay_tcp_udp_port', l:'Port', t:'number'},
+    {k:'netplay_password', l:'Server password', t:'text'},
+    {k:'netplay_spectate_password', l:'Spectator password', t:'text'},
+    {k:'netplay_start_as_spectator', l:'Start in spectator mode', t:'bool'},
+    {k:'netplay_allow_slaves', l:'Allow slave-mode clients', t:'bool'},
+    {k:'netplay_check_frames', l:'Sync check frames', t:'number'},
+    {k:'network_cmd_enable', l:'Network commands', t:'bool'},
+    {k:'network_cmd_port', l:'Network command port', t:'number'},
+];
+const RA_PLAYLIST_SPEC = [
+    {k:'history_list_enable', l:'History playlist', t:'bool'},
+    {k:'content_history_size', l:'History size', t:'number'},
+    {k:'playlist_entry_remove_enable', l:'Allow removing entries', t:'select', o:[['0','Off'],['1','All'],['2','History only']]},
+    {k:'playlist_sort_alphabetical', l:'Sort alphabetically', t:'bool'},
+    {k:'playlist_show_sublabels', l:'Show sub-labels', t:'bool'},
+    {k:'scan_without_core_match', l:'Scan without core match', t:'bool'},
+];
+const RA_OVERLAY_SPEC = [
+    {k:'input_overlay_enable', l:'Display overlay', t:'bool'},
+    {k:'input_overlay', l:'Overlay preset (.cfg)', t:'text'},
+    {k:'input_overlay_opacity', l:'Overlay opacity', t:'text'},
+    {k:'input_overlay_scale', l:'Overlay scale', t:'text'},
+    {k:'input_overlay_hide_in_menu', l:'Hide overlay in menu', t:'bool'},
+    {k:'input_overlay_show_physical_inputs', l:'Show inputs on overlay', t:'bool'},
+    {k:'input_overlay_auto_scale', l:'Auto-scale overlay', t:'bool'},
+];
+const RA_DIR_SPEC = [
+    {k:'system_directory', l:'System / BIOS', t:'text'},
+    {k:'libretro_directory', l:'Cores', t:'text'},
+    {k:'libretro_info_path', l:'Core info', t:'text'},
+    {k:'savefile_directory', l:'Saves (SRAM)', t:'text'},
+    {k:'savestate_directory', l:'Save states', t:'text'},
+    {k:'video_shader_dir', l:'Shaders', t:'text'},
+    {k:'overlay_directory', l:'Overlays', t:'text'},
+    {k:'assets_directory', l:'Assets', t:'text'},
+    {k:'thumbnails_directory', l:'Thumbnails', t:'text'},
+    {k:'playlist_directory', l:'Playlists', t:'text'},
+    {k:'joypad_autoconfig_dir', l:'Controller profiles', t:'text'},
+    {k:'input_remapping_directory', l:'Input remaps', t:'text'},
+    {k:'cheat_database_path', l:'Cheats', t:'text'},
+    {k:'rgui_browser_directory', l:'File browser start', t:'text'},
+    {k:'log_dir', l:'Logs', t:'text'},
+];
+function makeRaSettingRow({ k, l, t, o }) {
+    const row = document.createElement('div'); row.className = 'ra-set-row';
+    row.dataset.k = k; row.dataset.label = `${l || k} ${k}`.toLowerCase();
+    const lab = document.createElement('label'); lab.innerHTML = `${escHtml(l || k)}<br><span class="ra-key">${escHtml(k)}</span>`;
+    const val = _raCfg[k] != null ? String(_raCfg[k]) : '';
+    let ctrl;
+    if (t === 'bool') {
+        ctrl = document.createElement('select');
+        ctrl.innerHTML = '<option value="true">On</option><option value="false">Off</option>';
+        ctrl.value = val === 'true' ? 'true' : 'false';
+    } else if (t === 'select') {
+        ctrl = document.createElement('select');
+        ctrl.innerHTML = (o || []).map(opt => { const v = Array.isArray(opt) ? opt[0] : opt, lbl = Array.isArray(opt) ? opt[1] : opt; return `<option value="${escHtml(v)}">${escHtml(lbl)}</option>`; }).join('');
+        if (![...ctrl.options].some(op => op.value === val)) ctrl.insertAdjacentHTML('beforeend', `<option value="${escHtml(val)}">${escHtml(val || '(unset)')}</option>`);
+        ctrl.value = val;
+    } else {
+        ctrl = document.createElement('input'); ctrl.type = t === 'number' ? 'number' : 'text'; ctrl.value = val;
+    }
+    ctrl.addEventListener('change', () => { _raChanges[k] = ctrl.value; _raCfg[k] = ctrl.value; });
+    row.append(lab, ctrl);
+    return row;
+}
+function renderRaPane(id, spec) { const c = document.getElementById(id); c.innerHTML = ''; spec.forEach(s => c.appendChild(makeRaSettingRow(s))); }
+function renderRaAll() {
+    const c = document.getElementById('ra-pane-all'); c.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    Object.keys(_raCfg).sort().forEach(k => {
+        const v = String(_raCfg[k] ?? '');
+        frag.appendChild(makeRaSettingRow({ k, l: k, t: (v === 'true' || v === 'false') ? 'bool' : 'text' }));
+    });
+    c.appendChild(frag); _raAllRendered = true;
+}
+async function openRaSettings() {
+    closeModal('modal-settings');                       // never stack two blurred modals
+    _raCfg = await window.api.raConfigGetAll(); _raChanges = {}; _raAllRendered = false;
+    renderRaPane('ra-pane-drivers', RA_DRIVERS_SPEC);
+    renderRaPane('ra-pane-video', RA_VIDEO_SPEC);
+    renderRaPane('ra-pane-audio', RA_AUDIO_SPEC);
+    renderRaPane('ra-pane-input', RA_INPUT_SPEC);
+    renderRaPane('ra-pane-latency', RA_LATENCY_SPEC);
+    renderRaPane('ra-pane-core', RA_CORE_SPEC);
+    renderRaPane('ra-pane-config', RA_CONFIG_SPEC);
+    renderRaPane('ra-pane-saving', RA_SAVING_SPEC);
+    renderRaPane('ra-pane-throttle', RA_THROTTLE_SPEC);
+    renderRaPane('ra-pane-osd', RA_OSD_SPEC);
+    renderRaPane('ra-pane-ui', RA_UI_SPEC);
+    renderRaPane('ra-pane-cheevos', RA_CHEEVOS_SPEC);
+    renderRaPane('ra-pane-netplay', RA_NETPLAY_SPEC);
+    renderRaPane('ra-pane-playlists', RA_PLAYLIST_SPEC);
+    renderRaPane('ra-pane-overlay', RA_OVERLAY_SPEC);
+    renderRaPane('ra-pane-directory', RA_DIR_SPEC);
+    document.getElementById('ra-pane-all').innerHTML = '';
+    document.getElementById('ra-set-search').value = '';
+    document.getElementById('ra-set-content').classList.remove('searching');
+    document.querySelectorAll('#ra-set-rail .cp-rail-item').forEach(b => b.classList.toggle('active', b.dataset.rapane === 'video'));
+    document.querySelectorAll('#modal-ra-settings .cp-pane').forEach(p => p.classList.toggle('active', p.dataset.rapane === 'video'));
+    document.getElementById('ra-set-content').scrollTop = 0;
+    openModal('modal-ra-settings');
+}
+
 function openSaveManager(gameId = null) {
     _smSel = -1; _smFromGames = false; _smScroll = 0;   // fresh open starts at the top
     openModal('modal-save-manager');
@@ -1677,8 +1935,7 @@ function wireUI() {
         openAddRomModal(presetId);
     });
 
-    // Systems manager
-    document.getElementById('btn-open-systems').addEventListener('click', openSystemsModal);
+    // Systems manager is reached from Settings → Systems (btn-settings-manage-systems)
 
     // Settings
     document.getElementById('btn-open-settings').addEventListener('click', async () => {
@@ -1695,6 +1952,10 @@ function wireUI() {
         document.querySelectorAll('.zoom-btn').forEach(b => b.classList.toggle('active', b.dataset.val === z));
         document.getElementById('settings-search').value = '';
         document.querySelectorAll('#modal-settings .tool-card').forEach(c => c.style.display = '');
+        document.getElementById('settings-content').classList.remove('searching');
+        document.querySelectorAll('#settings-rail .cp-rail-item').forEach(b => b.classList.toggle('active', b.dataset.pane === 'general'));
+        document.querySelectorAll('#modal-settings .cp-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === 'general'));
+        document.getElementById('settings-content').scrollTop = 0;
         document.getElementById('settings-ss-status').textContent   = '';
         document.getElementById('settings-ra-status').textContent   = '';
         document.getElementById('settings-igdb-status').textContent = '';
@@ -1707,6 +1968,8 @@ function wireUI() {
         raStatusEl.style.color = retroarchStatusColor(retroarchVariant);
         const coresEl = document.getElementById('settings-cores-status');
         coresEl.textContent = allCores.length ? `${allCores.length} core${allCores.length !== 1 ? 's' : ''} scanned.` : '';
+        document.getElementById('ra-config-status').textContent = '';
+        refreshRaConfigInfo();
         openModal('modal-settings');
     });
 
@@ -2211,6 +2474,10 @@ function wireUI() {
     // ── SAVE STATE MANAGER ───────────────────────────────────────────────────
     document.getElementById('btn-gamepage-saves').addEventListener('click', () => { if (currentGame) openSaveManager(currentGame.id); });
     document.getElementById('btn-open-save-manager').addEventListener('click', () => openSaveManager(null));
+    document.getElementById('btn-rail-save-manager').addEventListener('click', () => openSaveManager(null));
+    document.getElementById('btn-gamepage-ra').addEventListener('click', () => {
+        if (currentGame) openRaOverride('game', currentGame.id, `RetroArch Settings — ${currentGame.title || 'Game'}`, 'Highest priority — overrides the system and global settings for this game only.');
+    });
     document.getElementById('sm-close').addEventListener('click', () => closeModal('modal-save-manager'));
     document.getElementById('sm-back').addEventListener('click', () => smShowGames());
     document.getElementById('sm-search').addEventListener('input', () => smRenderGames());
@@ -2264,6 +2531,60 @@ function wireUI() {
         const r = await window.api.restoreRaSettings();
         if (r.canceled) return;
         out.textContent = r.ok ? `✓ Restored ${r.restored} setting group(s).` : `✗ ${r.error || 'Restore failed'}`;
+    });
+
+    // ── EMULATTE-OWNED RETROARCH CONFIG ──────────────────────────────────────
+    const raCfgStatus = msg => { document.getElementById('ra-config-status').textContent = msg || ''; };
+    document.getElementById('btn-ra-configure').addEventListener('click', async () => {
+        await window.api.launchRetroarchConfig();
+        raCfgStatus('Opened RetroArch on EmuLatte’s config. Changes you make there save back here.');
+    });
+    document.getElementById('btn-ra-reimport-paths').addEventListener('click', async () => {
+        await window.api.raConfigReimportPaths(); await refreshRaConfigInfo();
+        raCfgStatus('✓ Re-imported folder paths from this machine’s RetroArch.');
+    });
+    document.getElementById('btn-ra-cfg-import').addEventListener('click', async () => {
+        const r = await window.api.raConfigImport(); if (r.canceled) return;
+        await refreshRaConfigInfo(); raCfgStatus(r.ok ? '✓ Imported config.' : `✗ ${r.error || 'Import failed'}`);
+    });
+    document.getElementById('btn-ra-cfg-export').addEventListener('click', async () => {
+        const r = await window.api.raConfigExport(); if (r.canceled) return;
+        raCfgStatus(r.ok ? `✓ Exported to ${r.path}` : `✗ ${r.error || 'Export failed'}`);
+    });
+    document.getElementById('btn-ra-cfg-relocate').addEventListener('click', async () => {
+        const r = await window.api.raConfigRelocate(); if (r.canceled) return;
+        await refreshRaConfigInfo(); raCfgStatus(r.ok ? `✓ Config now at ${r.path}` : `✗ ${r.error || 'Failed'}`);
+    });
+    document.getElementById('btn-ra-cfg-folder').addEventListener('click', () => window.api.raConfigOpenFolder());
+    document.getElementById('btn-ra-cfg-reset').addEventListener('click', async () => {
+        if (!await showConfirm('Reset EmuLatte’s RetroArch config to a clean seed (only folder paths re-imported)? Your tweaks in this config will be lost.', 'Reset', true, 'Reset RetroArch Config')) return;
+        await window.api.raConfigReset(); await refreshRaConfigInfo(); raCfgStatus('✓ Reset to a clean config.');
+    });
+
+    // RetroArch full settings menu
+    document.getElementById('btn-ra-settings').addEventListener('click', openRaSettings);
+    document.getElementById('btn-ra-set-close').addEventListener('click', () => closeModal('modal-ra-settings'));
+    document.getElementById('btn-ra-set-save').addEventListener('click', async () => {
+        await window.api.raConfigSet(_raChanges); _raChanges = {};
+        closeModal('modal-ra-settings');
+        showLaunchToast('RetroArch settings saved — applies on next launch.', null, 'RETROARCH');
+    });
+    document.querySelectorAll('#ra-set-rail .cp-rail-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const pane = item.dataset.rapane;
+            if (pane === 'all' && !_raAllRendered) renderRaAll();
+            document.querySelectorAll('#ra-set-rail .cp-rail-item').forEach(b => b.classList.toggle('active', b === item));
+            document.querySelectorAll('#modal-ra-settings .cp-pane').forEach(p => p.classList.toggle('active', p.dataset.rapane === pane));
+            document.getElementById('ra-set-content').scrollTop = 0;
+        });
+    });
+    document.getElementById('ra-set-search').addEventListener('input', e => {
+        const q = e.target.value.trim().toLowerCase();
+        if (q && !_raAllRendered) renderRaAll();                       // search must reach every key
+        document.getElementById('ra-set-content').classList.toggle('searching', !!q);
+        document.querySelectorAll('#modal-ra-settings .ra-set-row').forEach(row => {
+            row.style.display = !q || (row.dataset.label || '').includes(q) ? '' : 'none';
+        });
     });
 
     // ── GAMEPAGE: + PLAYLIST ─────────────────────────────────────────────────
@@ -2744,11 +3065,24 @@ function wireUI() {
     // ── SETTINGS SEARCH ──────────────────────────────────────────────────────
     document.getElementById('settings-search').addEventListener('input', e => {
         const q = e.target.value.trim().toLowerCase();
+        document.getElementById('settings-content').classList.toggle('searching', !!q);   // show every pane while searching
         document.querySelectorAll('#modal-settings .tool-card').forEach(card => {
             const haystack = (card.dataset.search || '') + ' ' + (card.textContent || '');
             card.style.display = !q || haystack.toLowerCase().includes(q) ? '' : 'none';
         });
     });
+
+    // Settings hub: category rail switches panes
+    document.querySelectorAll('#settings-rail .cp-rail-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const pane = item.dataset.pane;
+            document.querySelectorAll('#settings-rail .cp-rail-item').forEach(b => b.classList.toggle('active', b === item));
+            document.querySelectorAll('#modal-settings .cp-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === pane));
+            document.getElementById('settings-content').scrollTop = 0;
+        });
+    });
+    // Manage Systems reachable from the hub (close Settings first so two blurred modals don't stack)
+    document.getElementById('btn-settings-manage-systems').addEventListener('click', () => { closeModal('modal-settings'); openSystemsModal(); });
 
     // Keyboard
     document.addEventListener('keydown', e => {

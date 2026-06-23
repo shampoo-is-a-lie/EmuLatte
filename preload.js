@@ -42,6 +42,18 @@ contextBridge.exposeInMainWorld('api', {
     getMonitors:   ()  => ipcRenderer.invoke('get-monitors'),
     listRaShaders: ()  => ipcRenderer.invoke('list-ra-shaders'),
 
+    // EmuLatte-owned RetroArch config (engine model)
+    raConfigInfo:        ()        => ipcRenderer.invoke('ra-config-info'),
+    raConfigGetAll:      ()        => ipcRenderer.invoke('ra-config-get-all'),
+    raConfigSet:         (updates) => ipcRenderer.invoke('ra-config-set', updates),
+    raConfigReimportPaths: ()      => ipcRenderer.invoke('ra-config-reimport-paths'),
+    raConfigReset:       ()        => ipcRenderer.invoke('ra-config-reset'),
+    raConfigOpenFolder:  ()        => ipcRenderer.invoke('ra-config-open-folder'),
+    raConfigRelocate:    ()        => ipcRenderer.invoke('ra-config-relocate'),
+    raConfigImport:      ()        => ipcRenderer.invoke('ra-config-import'),
+    raConfigExport:      ()        => ipcRenderer.invoke('ra-config-export'),
+    launchRetroarchConfig: ()      => ipcRenderer.invoke('launch-retroarch-config'),
+
     // Save-state manager
     listSaveStates:     (id)            => ipcRenderer.invoke('list-save-states', id),
     listGamesWithSaves: ()              => ipcRenderer.invoke('list-games-with-saves'),

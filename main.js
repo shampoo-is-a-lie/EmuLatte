@@ -378,12 +378,84 @@ function getRetroArchCfgDir() {
         ? path.join(os.homedir(), '.var', 'app', 'org.libretro.RetroArch', 'config', 'retroarch')
         : path.join(os.homedir(), '.config', 'retroarch');
 }
+const hostRaCfgPath = () => path.join(getRetroArchCfgDir(), 'retroarch.cfg');
+
+// ── EMULATTE-OWNED RETROARCH CONFIG ───────────────────────────────────────────
+// RetroArch runs as an engine on EmuLatte's OWN config (launched with --config), never the
+// host's. The base is seeded clean: only directory/path keys are imported from the host so
+// cores/BIOS/saves resolve; everything else stays at RetroArch defaults. EmuLatte owns it.
+const RA_PATH_KEYS = [
+    'system_directory', 'libretro_directory', 'libretro_info_path', 'core_assets_directory',
+    'savefile_directory', 'savestate_directory', 'video_shader_dir', 'assets_directory',
+    'joypad_autoconfig_dir', 'overlay_directory', 'osk_overlay_directory', 'input_remapping_directory',
+    'playlist_directory', 'thumbnails_directory', 'cheat_database_path', 'cursor_directory',
+    'video_filter_dir', 'audio_filter_dir', 'rgui_browser_directory', 'rgui_config_directory',
+    'recording_config_directory', 'recording_output_directory', 'video_layout_directory',
+    'cache_directory', 'content_database_path', 'log_dir',
+];
+function ownedRaCfgPath() {
+    const custom = db?.prepare('SELECT value FROM settings WHERE key=?').get('ra_config_path')?.value;
+    return custom || path.join(configDir, 'retroarch', 'emulatte-retroarch.cfg');
+}
+function parseRaCfg(file) {
+    const map = {};
+    try {
+        for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
+            if (line.trim().startsWith('#')) continue;
+            const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*"?(.*?)"?\s*$/);
+            if (m) map[m[1]] = m[2];
+        }
+    } catch {}
+    return map;
+}
+function readHostPathKeys() {
+    const out = {};
+    let txt = ''; try { txt = fs.readFileSync(hostRaCfgPath(), 'utf8'); } catch {}
+    for (const k of RA_PATH_KEYS) {
+        const m = txt.match(new RegExp(`^\\s*${k}\\s*=\\s*"([^"]*)"`, 'm'));
+        if (m) out[k] = m[1];
+    }
+    return out;
+}
+// Merge keys into a .cfg, updating existing lines in place and appending new ones.
+function writeRaCfgKeys(file, updates) {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    let lines = []; try { lines = fs.readFileSync(file, 'utf8').split('\n'); } catch {}
+    const seen = new Set();
+    lines = lines.map(line => {
+        const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=/);
+        if (m && Object.prototype.hasOwnProperty.call(updates, m[1])) { seen.add(m[1]); return `${m[1]} = "${updates[m[1]]}"`; }
+        return line;
+    });
+    for (const [k, v] of Object.entries(updates)) if (!seen.has(k)) lines.push(`${k} = "${v}"`);
+    fs.writeFileSync(file, lines.join('\n').replace(/\n*$/, '\n'), 'utf8');
+}
+// Create the owned config if missing (or re-seed when force=true): clean + imported paths.
+function ensureOwnedRaCfg(force = false) {
+    const file = ownedRaCfgPath();
+    if (!force && fs.existsSync(file)) return file;
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const lines = [
+        '# EmuLatte-owned RetroArch configuration.',
+        '# Seeded clean — only directory paths were imported from your host config; everything else is RetroArch defaults.',
+        '# Tailor this from EmuLatte (Settings -> RetroArch). RetroArch is the engine; this is the config.',
+        'config_save_on_exit = "true"',
+        ...Object.entries(readHostPathKeys()).map(([k, v]) => `${k} = "${v}"`),
+    ];
+    fs.writeFileSync(file, lines.join('\n') + '\n', 'utf8');
+    return file;
+}
+// Re-derive only the path keys from the local host config (portability / a new machine).
+const reimportRaPaths = () => { const f = ensureOwnedRaCfg(); writeRaCfgKeys(f, readHostPathKeys()); return f; };
+
 function readRaCfgKey(key) {
     const cfgDir = getRetroArchCfgDir();
-    try {
-        const m = fs.readFileSync(path.join(cfgDir, 'retroarch.cfg'), 'utf8').match(new RegExp(`^\\s*${key}\\s*=\\s*"([^"]*)"`, 'm'));
-        if (m && m[1] && m[1] !== 'default') return m[1].replace(/^~(?=[/\\])/, os.homedir()).replace(/^:/, cfgDir);
-    } catch {}
+    for (const file of [ownedRaCfgPath(), hostRaCfgPath()]) {   // prefer EmuLatte's owned config
+        try {
+            const m = fs.readFileSync(file, 'utf8').match(new RegExp(`^\\s*${key}\\s*=\\s*"([^"]*)"`, 'm'));
+            if (m && m[1] && m[1] !== 'default') return m[1].replace(/^~(?=[/\\])/, os.homedir()).replace(/^:/, cfgDir);
+        } catch {}
+    }
     return '';
 }
 // Render a saved override to a .cfg file (or remove it when disabled). Returns the path or null.
@@ -410,7 +482,19 @@ function raOverrideFiles(game) {
     }
     return paths;
 }
-const raOverrideArg = game => { const f = raOverrideFiles(game); return f.length ? ` --appendconfig "${f.join(',')}"` : ''; };
+// Session cfg that disables save-on-exit, so normal gameplay never writes the owned base config
+// (keeps per-game/per-system overrides from leaking into it).
+function sessionNoSavePath() {
+    const f = raOverridePath('_session', 'nosave');
+    try { fs.writeFileSync(f, 'config_save_on_exit = "false"\n'); } catch {}
+    return f;
+}
+// RetroArch flags for a normal launch: run on EmuLatte's owned config + per-scope overrides, no save-back.
+function retroarchConfigArgs(game) {
+    const files = game ? raOverrideFiles(game) : [];
+    files.push(sessionNoSavePath());
+    return ` --config "${ensureOwnedRaCfg()}" --appendconfig "${files.join(',')}"`;
+}
 
 function baseLaunchCommand(game) {   // the command WITHOUT EmuLatte's --appendconfig overrides
     let cmd = game.launch_override;
@@ -425,7 +509,7 @@ function baseLaunchCommand(game) {   // the command WITHOUT EmuLatte's --appendc
 }
 function buildLaunchCommand(game) {
     let cmd = baseLaunchCommand(game);
-    if (cmd && /retroarch/i.test(cmd)) cmd += raOverrideArg(game);   // layer EmuLatte's overrides (RetroArch only)
+    if (cmd && /retroarch/i.test(cmd)) cmd += retroarchConfigArgs(game);   // run on EmuLatte's owned config + overrides
     return cmd;
 }
 
@@ -583,10 +667,52 @@ ipcMain.handle('launch-game-ex', (_, gameId, opts = {}) => {
             const fp = raOverridePath('_fresh', 0);
             try { fs.writeFileSync(fp, 'config_save_on_exit = "false"\nsavestate_auto_load = "false"\n'); files.push(fp); } catch {}
         }
-        if (files.length) cmd += ` --appendconfig "${files.join(',')}"`;
+        files.push(sessionNoSavePath());
+        cmd += ` --config "${ensureOwnedRaCfg()}" --appendconfig "${files.join(',')}"`;
         if (opts.slot != null && opts.slot !== 'auto') cmd += ` --entryslot ${Number(opts.slot)}`;
     }
     db.prepare('UPDATE games SET last_played=? WHERE id=?').run(Date.now(), gameId);
+    spawn('bash', ['-c', cmd], { detached: true, stdio: 'ignore' }).unref();
+    return { ok: true };
+});
+
+// ── EMULATTE-OWNED RETROARCH CONFIG: management + 1:1 settings ────────────────
+ipcMain.handle('ra-config-info', () => {
+    const file = ensureOwnedRaCfg();
+    let size = 0, mtime = 0, keys = 0;
+    try { const st = fs.statSync(file); size = st.size; mtime = st.mtimeMs; } catch {}
+    try { keys = Object.keys(parseRaCfg(file)).length; } catch {}
+    return { path: file, host: hostRaCfgPath(), size, mtime, keys };
+});
+ipcMain.handle('ra-config-get-all', () => parseRaCfg(ensureOwnedRaCfg()));            // every key/value, for the editor
+ipcMain.handle('ra-config-set', (_, updates) => { writeRaCfgKeys(ensureOwnedRaCfg(), updates || {}); return { ok: true }; });
+ipcMain.handle('ra-config-reimport-paths', () => { reimportRaPaths(); return { ok: true }; });
+ipcMain.handle('ra-config-reset', () => { ensureOwnedRaCfg(true); return { ok: true }; });
+ipcMain.handle('ra-config-open-folder', () => { shell.showItemInFolder(ensureOwnedRaCfg()); return { ok: true }; });
+ipcMain.handle('ra-config-relocate', async () => {
+    const { canceled, filePath } = await dialog.showSaveDialog({ defaultPath: ownedRaCfgPath(), filters: [{ name: 'RetroArch config', extensions: ['cfg'] }] });
+    if (canceled || !filePath) return { ok: false, canceled: true };
+    try { fs.copyFileSync(ensureOwnedRaCfg(), filePath); } catch (e) { return { ok: false, error: e.message }; }
+    db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run('ra_config_path', filePath);
+    return { ok: true, path: filePath };
+});
+ipcMain.handle('ra-config-import', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'RetroArch config', extensions: ['cfg'] }] });
+    if (canceled || !filePaths?.length) return { ok: false, canceled: true };
+    try { fs.copyFileSync(filePaths[0], ownedRaCfgPath()); } catch (e) { return { ok: false, error: e.message }; }
+    return { ok: true };
+});
+ipcMain.handle('ra-config-export', async () => {
+    const { canceled, filePath } = await dialog.showSaveDialog({ defaultPath: `emulatte-retroarch-${dateStamp()}.cfg`, filters: [{ name: 'RetroArch config', extensions: ['cfg'] }] });
+    if (canceled || !filePath) return { ok: false, canceled: true };
+    try { fs.copyFileSync(ensureOwnedRaCfg(), filePath); } catch (e) { return { ok: false, error: e.message }; }
+    return { ok: true, path: filePath };
+});
+// Open RetroArch's own menu running on EmuLatte's config, with save-on-exit ON (two-way sync).
+ipcMain.handle('launch-retroarch-config', () => {
+    const variant = db?.prepare('SELECT value FROM settings WHERE key=?').get('retroarch_variant')?.value || detectRetroArch();
+    const exec = variant === 'flatpak' ? 'flatpak run org.libretro.RetroArch' : 'retroarch';
+    const cmd = `${exec} --config "${ensureOwnedRaCfg()}" --menu`;
     spawn('bash', ['-c', cmd], { detached: true, stdio: 'ignore' }).unref();
     return { ok: true };
 });
