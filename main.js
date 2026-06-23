@@ -523,9 +523,9 @@ ipcMain.handle('list-save-states', (_, gameId) => {
 // Games that have at least one save state — for the cross-library card view.
 ipcMain.handle('list-games-with-saves', () => {
     if (!db) return [];
-    const games = db.prepare(`SELECT g.id,g.title,g.cover,g.rom_path,s.name sys FROM games g LEFT JOIN systems s ON g.system_id=s.id WHERE g.rom_path<>''`).all();
+    const games = db.prepare(`SELECT g.id,g.title,g.cover,g.logo,g.rom_path,s.name sys FROM games g LEFT JOIN systems s ON g.system_id=s.id WHERE g.rom_path<>''`).all();
     const byBase = new Map(games.map(g => [contentBase(g.rom_path), g]));
-    const agg = new Map();   // gameId -> {count, latest}
+    const agg = new Map();   // gameId -> {count, latest, latestFile}
     (function scan(d, depth) {
         if (depth > 2) return;
         let es = []; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
@@ -536,14 +536,18 @@ ipcMain.handle('list-games-with-saves', () => {
             const m = n.match(/^(.*)\.state(\d+|\.auto)?$/);
             if (!m) continue;
             const g = byBase.get(m[1]); if (!g) continue;
-            let st; try { st = fs.statSync(path.join(d, n)); } catch { continue; }
-            const a = agg.get(g.id) || { count: 0, latest: 0 };
-            a.count++; a.latest = Math.max(a.latest, st.mtimeMs); agg.set(g.id, a);
+            const full = path.join(d, n);
+            let st; try { st = fs.statSync(full); } catch { continue; }
+            const a = agg.get(g.id) || { count: 0, latest: 0, latestFile: null };
+            a.count++;
+            if (st.mtimeMs >= a.latest) { a.latest = st.mtimeMs; a.latestFile = full; }
+            agg.set(g.id, a);
         }
     })(savestateDir(), 0);
     return [...agg.entries()].map(([id, a]) => {
         const g = games.find(x => x.id === id);
-        return { id, title: g.title, cover: g.cover, system: g.sys, count: a.count, latest: a.latest };
+        const thumb = a.latestFile && fs.existsSync(a.latestFile + '.png') ? a.latestFile + '.png' : null;
+        return { id, title: g.title, cover: g.cover, logo: g.logo, thumb, system: g.sys, count: a.count, latest: a.latest };
     }).sort((x, y) => y.latest - x.latest);
 });
 

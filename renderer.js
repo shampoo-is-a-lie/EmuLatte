@@ -302,13 +302,13 @@ async function openRaOverride(scope, refId, title, note) {
 }
 
 // ── SAVE STATE MANAGER (memory-card style) ────────────────────────────────────
-let _smGame = null, _smSlots = [], _smSel = -1, _smFromGames = false;
+let _smGame = null, _smSlots = [], _smSel = -1, _smFromGames = false, _smGames = [], _smSort = 'recent', _smScroll = 0;
 const smFmtBytes = n => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
 const smFmtDate  = ms => { try { return new Date(ms).toLocaleString(); } catch { return ''; } };
 const smSlotName = s => s === 'auto' ? 'AUTO' : `SLOT ${s}`;
 
 function openSaveManager(gameId = null) {
-    _smSel = -1; _smFromGames = false;
+    _smSel = -1; _smFromGames = false; _smScroll = 0;   // fresh open starts at the top
     openModal('modal-save-manager');
     gameId ? smShowSlots(gameId) : smShowGames();
 }
@@ -319,18 +319,33 @@ async function smShowGames() {
     document.getElementById('sm-fresh').style.display = 'none';
     document.getElementById('sm-slot-actions').style.display = 'none';
     document.getElementById('sm-restore').style.display = '';
+    document.getElementById('sm-search').style.display = '';
+    document.getElementById('sm-sort').style.display = '';
     document.getElementById('sm-backup').textContent = '⤓ BACKUP ALL';
     document.getElementById('sm-title').textContent = 'SAVE STATES';
+    document.getElementById('sm-grid').classList.remove('slots');
+    _smGames = await window.api.listGamesWithSaves();
+    document.getElementById('sm-sub').textContent = `${_smGames.length} GAMES`;
+    smRenderGames();
+    document.getElementById('sm-grid').scrollTop = _smScroll;   // keep position when returning from a game
+}
+
+function smRenderGames() {
+    const q = (document.getElementById('sm-search').value || '').trim().toLowerCase();
+    let list = q ? _smGames.filter(g => (g.title || '').toLowerCase().includes(q)) : _smGames.slice();
+    if (_smSort === 'alpha') list.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+    else                     list.sort((a, b) => (b.latest || 0) - (a.latest || 0));
+    document.getElementById('sm-detail').textContent = !_smGames.length ? 'NO SAVE STATES FOUND.' : (list.length ? 'SELECT A GAME' : 'NO MATCHES.');
     const grid = document.getElementById('sm-grid');
-    const games = await window.api.listGamesWithSaves();
-    document.getElementById('sm-sub').textContent = `${games.length} GAMES`;
-    document.getElementById('sm-detail').textContent = games.length ? 'SELECT A GAME…' : 'NO SAVE STATES FOUND.';
-    grid.innerHTML = games.map(g => `<div class="sm-card" data-id="${g.id}">
-        ${g.cover ? `<img src="${escHtml(g.cover)}">` : `<span style="font-size:10px;color:var(--text_dim);text-align:center;padding:6px;">${escHtml(g.title)}</span>`}
-        <span class="sm-count">${g.count}</span>
-        <span class="sm-tag">${escHtml(g.title)}</span>
-    </div>`).join('');
-    grid.querySelectorAll('.sm-card').forEach(el => el.addEventListener('click', () => { _smFromGames = true; smShowSlots(Number(el.dataset.id)); }));
+    grid.innerHTML = list.map(g => {
+        const fg = g.logo || g.cover || g.thumb;   // foreground art — always contained & centered
+        const bg = g.cover || g.thumb;             // blurred backdrop fills the box with the game's palette
+        const art = fg
+            ? `${bg ? `<div class="sm-bg" style="background-image:url('${escHtml(bg)}')"></div>` : ''}<img class="logo" src="${escHtml(fg)}">`
+            : `<div class="sm-name">${escHtml(g.title)}</div>`;
+        return `<div class="sm-card" data-id="${g.id}">${art}<span class="sm-count">${g.count}</span><span class="sm-tag">${escHtml(g.title)}</span></div>`;
+    }).join('') || `<div class="sm-name" style="grid-column:1/-1;padding:40px;">NO MATCHES.</div>`;
+    grid.querySelectorAll('.sm-card').forEach(el => el.addEventListener('click', () => { _smScroll = grid.scrollTop; _smFromGames = true; smShowSlots(Number(el.dataset.id)); }));
 }
 
 async function smShowSlots(gameId) {
@@ -340,16 +355,19 @@ async function smShowSlots(gameId) {
     document.getElementById('sm-fresh').style.display = '';
     document.getElementById('sm-slot-actions').style.display = 'none';
     document.getElementById('sm-restore').style.display = 'none';
+    document.getElementById('sm-search').style.display = 'none';
+    document.getElementById('sm-sort').style.display = 'none';
     document.getElementById('sm-backup').textContent = '⤓ BACKUP';
     document.getElementById('sm-title').textContent = (_smGame.title || 'GAME').toUpperCase();
     document.getElementById('sm-detail').textContent = 'SELECT A SAVE…';
     _smSlots = await window.api.listSaveStates(gameId);
     document.getElementById('sm-sub').textContent = `${_smSlots.length} SAVE${_smSlots.length !== 1 ? 'S' : ''}`;
     const grid = document.getElementById('sm-grid');
+    grid.classList.add('slots');
     grid.innerHTML = _smSlots.map((s, i) => `<div class="sm-card" data-idx="${i}">
-        ${s.thumb ? `<img src="${escHtml(s.thumb)}">` : `<span style="color:var(--text_dim);font-size:11px;">${smSlotName(s.slot)}</span>`}
+        ${s.thumb ? `<img src="${escHtml(s.thumb)}">` : `<div class="sm-name">${smSlotName(s.slot)}</div>`}
         <span class="sm-tag">${escHtml(s.label || smSlotName(s.slot))}</span>
-    </div>`).join('') || `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text_dim);">NO SAVES FOR THIS GAME YET.</div>`;
+    </div>`).join('') || `<div class="sm-name" style="grid-column:1/-1;padding:40px;">NO SAVES FOR THIS GAME YET.</div>`;
     grid.querySelectorAll('.sm-card').forEach(el => el.addEventListener('click', () => smSelectSlot(Number(el.dataset.idx))));
 }
 
@@ -979,6 +997,8 @@ function openModal(id) {
     document.getElementById(id)?.classList.add('active');
 }
 function closeModal(id) {
+    _openCustSel?.close();                                                  // dismiss any open themed dropdown…
+    document.querySelectorAll('.cust-sel-list').forEach(el => el.remove()); // …and sweep an orphaned portaled list (z-100000) so it can't linger and block clicks
     document.getElementById(id)?.classList.remove('active');
 }
 
@@ -2193,6 +2213,12 @@ function wireUI() {
     document.getElementById('btn-open-save-manager').addEventListener('click', () => openSaveManager(null));
     document.getElementById('sm-close').addEventListener('click', () => closeModal('modal-save-manager'));
     document.getElementById('sm-back').addEventListener('click', () => smShowGames());
+    document.getElementById('sm-search').addEventListener('input', () => smRenderGames());
+    document.getElementById('sm-sort').addEventListener('click', () => {
+        _smSort = _smSort === 'recent' ? 'alpha' : 'recent';
+        document.getElementById('sm-sort').textContent = _smSort === 'alpha' ? 'A-Z' : 'RECENT';
+        smRenderGames();
+    });
     document.getElementById('sm-fresh').addEventListener('click', () => smLaunch({ fresh: true }));
     document.getElementById('sm-launch').addEventListener('click', () => { const s = _smSlots[_smSel]; if (s) smLaunch({ slot: s.slot }); });
     document.getElementById('sm-delete').addEventListener('click', async () => {
