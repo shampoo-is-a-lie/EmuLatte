@@ -282,20 +282,18 @@ async function openRaOverride(scope, refId, title, note) {
     document.getElementById('ra-override-title').textContent = title;
     document.getElementById('ra-override-scope-note').textContent = note || '';
     const monSel = document.getElementById('ra-ovr-monitor');
-    const shSel  = document.getElementById('ra-ovr-shader');
-    const [mons, shaders, d] = await Promise.all([
-        window.api.getMonitors(), window.api.listRaShaders(), window.api.getRaOverride(scope, _raRef),
+    const [mons, d] = await Promise.all([
+        window.api.getMonitors(), window.api.getRaOverride(scope, _raRef),
     ]);
     monSel.innerHTML = `<option value="">— Don't change —</option><option value="0">Auto / primary</option>` +
         mons.map(m => `<option value="${m.index}">${escHtml(m.label)}</option>`).join('');
-    shSel.innerHTML  = `<option value="">— Select a shader —</option>` +
-        shaders.map(s => `<option value="${escHtml(s.path)}">${escHtml(s.name)}</option>`).join('');
     const o = d || {};
     document.getElementById('ra-ovr-enabled').checked     = !!o.enabled;
     monSel.value                                          = o.monitor ?? '';
     document.getElementById('ra-ovr-fullscreen').value    = o.fullscreen ?? '';
     document.getElementById('ra-ovr-shader-enable').value = o.shaderEnable ?? '';
-    shSel.value                                           = o.shader ?? '';
+    _raOvrShader                                          = o.shader ?? '';
+    _shaderBrowserOvr.refreshCurrent(); _shaderBrowserOvr.go('');
     document.getElementById('ra-ovr-custom').value        = o.custom ?? '';
     raOverrideToggleFields();
     openModal('modal-ra-override');
@@ -505,6 +503,56 @@ const RA_DIR_SPEC = [
     {k:'rgui_browser_directory', l:'File browser start', t:'text'},
     {k:'log_dir', l:'Logs', t:'text'},
 ];
+const RA_LOGGING_SPEC = [
+    {k:'log_verbosity', l:'Logging verbosity', t:'bool'},
+    {k:'frontend_log_level', l:'Frontend log level', t:'select', o:[['0','Debug'],['1','Info'],['2','Warning'],['3','Error']]},
+    {k:'libretro_log_level', l:'Core log level', t:'select', o:[['0','Debug'],['1','Info'],['2','Warning'],['3','Error']]},
+    {k:'log_to_file', l:'Log to file', t:'bool'},
+    {k:'log_to_file_timestamp', l:'Timestamp log files', t:'bool'},
+    {k:'perfcnt_enable', l:'Performance counters', t:'bool'},
+];
+const RA_RECORDING_SPEC = [
+    {k:'video_gpu_record', l:'Use GPU recording', t:'bool'},
+    {k:'video_record_quality', l:'Recording quality', t:'select', o:[['0','Custom'],['1','Low'],['2','Medium'],['3','High'],['4','Lossless'],['5','WebM Fast'],['6','WebM High']]},
+    {k:'video_stream_quality', l:'Streaming quality', t:'select', o:[['10','Custom'],['11','Low'],['12','Medium'],['13','High']]},
+    {k:'streaming_mode', l:'Streaming mode', t:'select', o:[['0','Twitch'],['1','YouTube'],['2','Local'],['3','Custom'],['4','Facebook']]},
+    {k:'video_stream_port', l:'UDP stream port', t:'number'},
+    {k:'streaming_title', l:'Stream title', t:'text'},
+    {k:'streaming_url', l:'Stream URL', t:'text'},
+];
+const RA_POWER_SPEC = [
+    {k:'sustained_performance_mode', l:'Sustained performance mode', t:'bool'},
+    {k:'gamemode_enable', l:'Feral GameMode', t:'bool'},
+    {k:'menu_battery_level_enable', l:'Show battery level', t:'bool'},
+];
+const RA_AI_SPEC = [
+    {k:'ai_service_enable', l:'Enable AI Service', t:'bool'},
+    {k:'ai_service_mode', l:'Output mode', t:'select', o:[['0','Image overlay'],['1','Text To Speech'],['2','Narrator']]},
+    {k:'ai_service_url', l:'Service URL', t:'text'},
+    {k:'ai_service_source_lang', l:'Source language (code)', t:'number'},
+    {k:'ai_service_target_lang', l:'Target language (code)', t:'number'},
+    {k:'ai_service_pause', l:'Pause during translation', t:'bool'},
+];
+const RA_ACCESS_SPEC = [
+    {k:'accessibility_enable', l:'Accessibility (menu narration)', t:'bool'},
+    {k:'accessibility_narrator_speech_speed', l:'Narrator speech speed', t:'number'},
+];
+const RA_USER_SPEC = [
+    {k:'user_language', l:'Menu language (index)', t:'number'},
+    {k:'camera_allow', l:'Allow camera access', t:'bool'},
+    {k:'location_allow', l:'Allow location access', t:'bool'},
+    {k:'discord_allow', l:'Discord rich presence', t:'bool'},
+    {k:'youtube_stream_key', l:'YouTube stream key', t:'text'},
+    {k:'twitch_stream_key', l:'Twitch stream key', t:'text'},
+    {k:'facebook_stream_key', l:'Facebook stream key', t:'text'},
+];
+const RA_FILEBROWSER_SPEC = [
+    {k:'show_hidden_files', l:'Show hidden files', t:'bool'},
+    {k:'use_last_start_directory', l:'Remember last directory', t:'bool'},
+    {k:'menu_navigation_browser_filter_supported_extensions_enable', l:'Filter unknown extensions', t:'bool'},
+    {k:'filter_by_current_core', l:'Filter by current core', t:'bool'},
+    {k:'navigation_wraparound', l:'Navigation wrap-around', t:'bool'},
+];
 function makeRaSettingRow({ k, l, t, o }) {
     const row = document.createElement('div'); row.className = 'ra-set-row';
     row.dataset.k = k; row.dataset.label = `${l || k} ${k}`.toLowerCase();
@@ -537,45 +585,58 @@ function renderRaAll() {
     });
     c.appendChild(frag); _raAllRendered = true;
 }
-let _raShaderRel = '';
-function setShaderCurrent(file) {
-    _raChanges.video_shader = file; _raCfg.video_shader = file;
-    document.getElementById('ra-shader-current').textContent = file ? file.split('/').pop() : '(none)';
-    document.querySelectorAll('#ra-shader-browser .ra-shader-item').forEach(el => el.classList.toggle('sel', el.dataset.file === file && !!file));
-}
 const SHADER_TAG = { slangp: 'SLANG', glslp: 'GLSL', cgp: 'CG' };
-async function browseShaders(rel = '') {
-    _raShaderRel = rel;
-    let res = { dirs: [], presets: [] }; try { res = await window.api.raBrowseShaders(rel); } catch {}
-    const crumbs = document.getElementById('ra-shader-crumbs');
-    const parts = rel ? rel.split('/').filter(Boolean) : [];
-    let acc = ''; let html = `<a data-rel="">shaders</a>`;
-    parts.forEach(p => { acc = acc ? acc + '/' + p : p; html += ` <span>/</span> <a data-rel="${escHtml(acc)}">${escHtml(p)}</a>`; });
-    crumbs.innerHTML = html;
-    crumbs.querySelectorAll('a').forEach(a => a.onclick = () => browseShaders(a.dataset.rel));
-    const b = document.getElementById('ra-shader-browser'); b.innerHTML = '';
-    res.dirs.forEach(d => {
-        const el = document.createElement('div'); el.className = 'ra-shader-item folder';
-        el.innerHTML = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><span>${escHtml(d)}</span>`;
-        el.onclick = () => browseShaders(rel ? rel + '/' + d : d);
-        b.appendChild(el);
-    });
-    res.presets.forEach(p => {
-        const el = document.createElement('div'); el.className = 'ra-shader-item'; el.dataset.file = p.file;
-        el.innerHTML = `<span class="ra-shader-tag">${SHADER_TAG[p.type] || '?'}</span><span>${escHtml(p.name)}</span>`;
-        if (p.file === (_raCfg.video_shader || '')) el.classList.add('sel');
-        el.onclick = () => setShaderCurrent(p.file);
-        b.appendChild(el);
-    });
-    if (!res.dirs.length && !res.presets.length) b.innerHTML = '<div class="ra-pane-hint" style="padding:12px;">Empty folder.</div>';
+// Reusable shader folder-browser. get()/set() bind it to wherever the selected preset lives.
+function createShaderBrowser({ crumbs, list, current, get, set }) {
+    const refreshCurrent = () => {
+        const cur = get();
+        const el = document.getElementById(current); if (el) el.textContent = cur ? cur.split('/').pop() : '(none)';
+        document.querySelectorAll('#' + list + ' .ra-shader-item').forEach(x => x.classList.toggle('sel', x.dataset.file === cur && !!cur));
+    };
+    async function go(rel = '') {
+        let res = { dirs: [], presets: [] }; try { res = await window.api.raBrowseShaders(rel); } catch {}
+        const cr = document.getElementById(crumbs);
+        const parts = rel ? rel.split('/').filter(Boolean) : [];
+        let acc = ''; let html = `<a data-rel="">shaders</a>`;
+        parts.forEach(p => { acc = acc ? acc + '/' + p : p; html += ` <span>/</span> <a data-rel="${escHtml(acc)}">${escHtml(p)}</a>`; });
+        cr.innerHTML = html;
+        cr.querySelectorAll('a').forEach(a => a.onclick = () => go(a.dataset.rel));
+        const b = document.getElementById(list); b.innerHTML = '';
+        res.dirs.forEach(d => {
+            const el = document.createElement('div'); el.className = 'ra-shader-item folder';
+            el.innerHTML = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><span>${escHtml(d)}</span>`;
+            el.onclick = () => go(rel ? rel + '/' + d : d);
+            b.appendChild(el);
+        });
+        res.presets.forEach(p => {
+            const el = document.createElement('div'); el.className = 'ra-shader-item'; el.dataset.file = p.file;
+            el.innerHTML = `<span class="ra-shader-tag">${SHADER_TAG[p.type] || '?'}</span><span>${escHtml(p.name)}</span>`;
+            if (p.file === get()) el.classList.add('sel');
+            el.onclick = () => { set(p.file); refreshCurrent(); };
+            b.appendChild(el);
+        });
+        if (!res.dirs.length && !res.presets.length) b.innerHTML = '<div class="ra-pane-hint" style="padding:12px;">Empty folder.</div>';
+    }
+    return { go, refreshCurrent };
 }
+// Main Shaders pane (writes the owned base config).
+const _shaderBrowserMain = createShaderBrowser({
+    crumbs: 'ra-shader-crumbs', list: 'ra-shader-browser', current: 'ra-shader-current',
+    get: () => _raCfg.video_shader || '', set: f => { _raChanges.video_shader = f; _raCfg.video_shader = f; },
+});
+// Per-system / per-game override modal (writes the override's shader field).
+let _raOvrShader = '';
+const _shaderBrowserOvr = createShaderBrowser({
+    crumbs: 'ra-ovr-shader-crumbs', list: 'ra-ovr-shader-browser', current: 'ra-ovr-shader-current',
+    get: () => _raOvrShader, set: f => { _raOvrShader = f; },
+});
 function renderRaShaders() {
     const en = document.getElementById('ra-shader-enable');
     en.value = _raCfg.video_shader_enable === 'true' ? 'true' : 'false';
     en.onchange = () => { _raChanges.video_shader_enable = en.value; _raCfg.video_shader_enable = en.value; };
-    document.getElementById('ra-shader-current').textContent = _raCfg.video_shader ? _raCfg.video_shader.split('/').pop() : '(none)';
-    document.getElementById('ra-shader-clear').onclick = () => setShaderCurrent('');
-    browseShaders('');
+    _shaderBrowserMain.refreshCurrent();
+    document.getElementById('ra-shader-clear').onclick = () => { _raChanges.video_shader = ''; _raCfg.video_shader = ''; _shaderBrowserMain.refreshCurrent(); };
+    _shaderBrowserMain.go('');
 }
 async function renderRaCoreOpts() {
     const c = document.getElementById('ra-coreopts-list'); c.innerHTML = '';
@@ -648,6 +709,13 @@ async function openRaSettings() {
     renderRaPane('ra-pane-netplay', RA_NETPLAY_SPEC);
     renderRaPane('ra-pane-playlists', RA_PLAYLIST_SPEC);
     renderRaPane('ra-pane-overlay', RA_OVERLAY_SPEC);
+    renderRaPane('ra-pane-logging', RA_LOGGING_SPEC);
+    renderRaPane('ra-pane-recording', RA_RECORDING_SPEC);
+    renderRaPane('ra-pane-power', RA_POWER_SPEC);
+    renderRaPane('ra-pane-ai', RA_AI_SPEC);
+    renderRaPane('ra-pane-access', RA_ACCESS_SPEC);
+    renderRaPane('ra-pane-user', RA_USER_SPEC);
+    renderRaPane('ra-pane-filebrowser', RA_FILEBROWSER_SPEC);
     renderRaPane('ra-pane-directory', RA_DIR_SPEC);
     document.getElementById('ra-pane-all').innerHTML = '';
     document.getElementById('ra-set-search').value = '';
@@ -2542,8 +2610,6 @@ function wireUI() {
     });
 
     // ── RETROARCH LAUNCH SETTINGS (override editor) ───────────────────────────
-    document.getElementById('btn-ra-override-global').addEventListener('click', () =>
-        openRaOverride('global', 0, 'RetroArch Settings — Global', 'Applies to every game. System and per-game settings override these.'));
     document.getElementById('btn-ra-override-system').addEventListener('click', () => {
         const id = Number(document.getElementById('edit-system-id').value);
         if (!id) { showAlert('Save the system first, then configure its RetroArch settings.', 'RetroArch Settings'); return; }
@@ -2555,6 +2621,7 @@ function wireUI() {
         openRaOverride('game', id, `RetroArch Settings — ${document.getElementById('edit-title').value || 'Game'}`, 'Highest priority — overrides the system and global settings for this game only.');
     });
     document.getElementById('ra-ovr-enabled').addEventListener('change', raOverrideToggleFields);
+    document.getElementById('ra-ovr-shader-clear').addEventListener('click', () => { _raOvrShader = ''; _shaderBrowserOvr.refreshCurrent(); });
     document.getElementById('ra-override-cancel').addEventListener('click', () => closeModal('modal-ra-override'));
     document.getElementById('ra-override-save').addEventListener('click', async () => {
         await window.api.setRaOverride(_raScope, _raRef, {
@@ -2562,7 +2629,7 @@ function wireUI() {
             monitor:      document.getElementById('ra-ovr-monitor').value,
             fullscreen:   document.getElementById('ra-ovr-fullscreen').value,
             shaderEnable: document.getElementById('ra-ovr-shader-enable').value,
-            shader:       document.getElementById('ra-ovr-shader').value,
+            shader:       _raOvrShader,
             custom:       document.getElementById('ra-ovr-custom').value,
         });
         closeModal('modal-ra-override');
