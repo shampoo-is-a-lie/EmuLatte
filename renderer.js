@@ -2727,12 +2727,13 @@ function wireUI() {
 
     // RetroArch full settings menu
     document.getElementById('btn-ra-settings').addEventListener('click', openRaSettings);
-    document.getElementById('btn-ra-set-close').addEventListener('click', () => closeModal('modal-ra-settings'));
+    const closeRaSettings = () => { closeModal('modal-ra-settings'); openModal('modal-settings'); };   // return to the Settings hub it came from
+    document.getElementById('btn-ra-set-close').addEventListener('click', closeRaSettings);
     document.getElementById('btn-ra-set-save').addEventListener('click', async () => {
         await window.api.raConfigSet(_raChanges);
         if (Object.keys(_raCoreChanges).length) await window.api.raCoreOptionsSet(_raCoreChanges);
         _raChanges = {}; _raCoreChanges = {};
-        closeModal('modal-ra-settings');
+        closeRaSettings();
         showLaunchToast('RetroArch settings saved — applies on next launch.', null, 'RETROARCH');
     });
     document.getElementById('btn-ra-remap-in-ra').addEventListener('click', () => window.api.launchRetroarchConfig());
