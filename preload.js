@@ -140,6 +140,9 @@ contextBridge.exposeInMainWorld('api', {
     // Cores
     scanCores:     ()     => ipcRenderer.invoke('scan-cores'),
     getCores:      ()     => ipcRenderer.invoke('get-cores'),
+    listAvailableCores: () => ipcRenderer.invoke('list-available-cores'),
+    installCore:   (core) => ipcRenderer.invoke('install-core', core),
+    onCoreInstallProgress: (cb) => ipcRenderer.on('core-install-progress', (_, d) => cb(d)),
     scanEmulators: ()     => ipcRenderer.invoke('scan-emulators'),
 
     // Playlists

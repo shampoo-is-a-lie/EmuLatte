@@ -229,6 +229,9 @@ const coreByPath = p => allCores.find(c => c.path === p);
 
 function coreMatchesSystem(core, system) {
     if (!system) return false;
+    // the system's explicitly-named core (preset or stored) always counts — even when the fuzzy
+    // name/extension matching misses it (e.g. FinalBurn Neo: "FBNeo" vs "FinalBurn", generic .zip)
+    if (system.default_core && core.path.split('/').pop() === system.default_core.split('/').pop()) return true;
     const sysExts  = (system.extensions || '').split(',').map(e => e.trim().toLowerCase().replace(/^\./, '')).filter(Boolean);
     const coreExts = (core.supported_extensions || '').split('|').map(e => e.trim().toLowerCase()).filter(Boolean);
     // 1) a distinctive (non-generic) shared extension → compatible (cartridge systems)
@@ -291,6 +294,7 @@ async function openRaOverride(scope, refId, title, note) {
     document.getElementById('ra-ovr-enabled').checked     = !!o.enabled;
     monSel.value                                          = o.monitor ?? '';
     document.getElementById('ra-ovr-fullscreen').value    = o.fullscreen ?? '';
+    document.getElementById('ra-ovr-aspect').value        = o.aspect ?? '';
     document.getElementById('ra-ovr-shader-enable').value = o.shaderEnable ?? '';
     _raOvrShader                                          = o.shader ?? '';
     _shaderBrowserOvr.refreshCurrent(); _shaderBrowserOvr.go('');
@@ -553,6 +557,7 @@ const RA_FILEBROWSER_SPEC = [
     {k:'filter_by_current_core', l:'Filter by current core', t:'bool'},
     {k:'navigation_wraparound', l:'Navigation wrap-around', t:'bool'},
 ];
+// (Express RA settings are rendered bespoke — see renderExpressSettings / paintExpress below.)
 function makeRaSettingRow({ k, l, t, o }) {
     const row = document.createElement('div'); row.className = 'ra-set-row';
     row.dataset.k = k; row.dataset.label = `${l || k} ${k}`.toLowerCase();
@@ -576,6 +581,225 @@ function makeRaSettingRow({ k, l, t, o }) {
     return row;
 }
 function renderRaPane(id, spec) { const c = document.getElementById(id); c.innerHTML = ''; spec.forEach(s => c.appendChild(makeRaSettingRow(s))); }
+// ── EXPRESS RA SETTINGS (Settings hub → Express) ──────────────────────────────
+// Curated essentials that write EmuLatte's OWN RetroArch cfg immediately (no Save button).
+// Bespoke (not spec-driven) because several controls map one chip-set onto multiple cfg keys.
+let _expressCfg         = {};   // live copy of the owned cfg
+let _expressMonitors    = [];   // Electron displays (1-based .index; matches RA video_monitor_index)
+let _expressRootShaders = [];   // root-level .slangp presets = "Emulatte presets" (user-extensible)
+let _expressFavs        = [];   // [{file,name}] favourited shaders (persisted in a setting)
+// Correct RetroArch aspect_ratio_index values (aspectratio_lut order) for the "More…" menu.
+const EXP_ASPECT_MORE = [['1','16:9'],['2','16:10'],['4','21:9'],['5','1:1'],['7','3:2'],['11','5:4'],
+                         ['21','Square pixel'],['19','32:9'],['20','Config'],['23','Custom']];
+
+function flashExpressSaved() {
+    const el = document.getElementById('express-saved'); if (!el) return;
+    el.textContent = '✓ Saved'; el.classList.add('show');
+    clearTimeout(flashExpressSaved._t);
+    flashExpressSaved._t = setTimeout(() => el.classList.remove('show'), 1200);
+}
+function expApply(updates) {                        // merge → persist → repaint (so coupled chips refresh)
+    Object.assign(_expressCfg, updates);
+    window.api.raConfigSet(updates);
+    flashExpressSaved();
+    paintExpress();
+}
+async function renderExpressSettings() {            // async entry: load cfg + monitors + shaders + favs, then paint
+    const c = document.getElementById('settings-express');
+    c.innerHTML = '<div class="ra-pane-hint">Loading…</div>';
+    let root = { presets: [] };
+    try {
+        const [cfg, mons, r, favRaw] = await Promise.all([
+            window.api.raConfigGetAll().then(x => x || {}),
+            window.api.getMonitors().catch(() => []),
+            window.api.raBrowseShaders('').catch(() => ({ presets: [] })),
+            window.api.getSetting('express_fav_shaders'),
+        ]);
+        _expressCfg = cfg || {}; _expressMonitors = mons || []; root = r || { presets: [] };
+        try { _expressFavs = JSON.parse(favRaw) || []; } catch { _expressFavs = []; }
+    } catch { _expressCfg = _expressCfg || {}; }
+    _expressRootShaders = root.presets || [];
+    paintExpress();
+}
+// small builders
+function expGroup(c, title) { const h = document.createElement('div'); h.className = 'ra-simple-group'; h.textContent = title; c.appendChild(h); }
+function expRow(c, label, sub) {
+    const row = document.createElement('div'); row.className = 'ra-simple-row';
+    const lab = document.createElement('div'); lab.className = 'ra-simple-label'; lab.textContent = label; row.appendChild(lab);
+    const body = document.createElement('div'); row.appendChild(body);
+    if (sub) { const s = document.createElement('div'); s.className = 'ra-simple-sub'; s.textContent = sub; row.appendChild(s); }
+    c.appendChild(row); return body;
+}
+function expChips(body, options) {                  // options: [{label, rec, sel, on}]
+    const chips = document.createElement('div'); chips.className = 'ra-chips';
+    options.forEach(o => {
+        const chip = document.createElement('button');
+        chip.className = 'ra-chip' + (o.rec ? ' star' : '') + (o.sel ? ' sel' : '');
+        chip.innerHTML = (o.rec ? '<span class="stari">★</span>' : '') + escHtml(o.label);
+        chip.onclick = o.on;
+        chips.appendChild(chip);
+    });
+    body.appendChild(chips); return chips;
+}
+function expTextRow(c, label, key, isPassword, sub) {
+    const body = expRow(c, label, sub);
+    const inp = document.createElement('input'); inp.type = isPassword ? 'password' : 'text';
+    inp.value = _expressCfg[key] != null ? String(_expressCfg[key]) : ''; inp.style.width = '260px';
+    inp.addEventListener('change', () => { _expressCfg[key] = inp.value; window.api.raConfigSet({ [key]: inp.value }); flashExpressSaved(); });
+    body.appendChild(inp);
+}
+function paintExpress() {
+    const c = document.getElementById('settings-express'); if (!c) return;
+    const sc = document.getElementById('settings-content'); const top = sc ? sc.scrollTop : 0;
+    c.innerHTML = '';
+    const g = k => (_expressCfg[k] != null ? String(_expressCfg[k]) : '');
+
+    expGroup(c, 'Display');
+
+    if (_expressMonitors.length > 1) {                              // Screen — numbers only (Electron order ≠ desktop order)
+        const cur = g('video_monitor_index') || '0';
+        const body = expRow(c, 'Screen', 'Which monitor RetroArch opens on. Numbers match RetroArch — if the wrong screen lights up, try the next number.');
+        const opts = [{ label: 'Auto', rec: true, sel: cur === '0', on: () => expApply({ video_monitor_index: '0' }) }];
+        _expressMonitors.forEach(m => {
+            const v = String(m.index);
+            opts.push({ label: v, sel: cur === v, on: () => expApply({ video_monitor_index: v, video_fullscreen: 'true', video_windowed_fullscreen: 'false' }) });
+        });
+        expChips(body, opts);
+    }
+
+    {                                                               // Screen ratio — quick chips + More…
+        const cur = g('aspect_ratio_index');
+        const setA = v => expApply({ aspect_ratio_index: v, video_aspect_ratio_auto: 'false' });
+        const body = expRow(c, 'Screen ratio', '4:3 = classic shape · Core provided = the system’s own · Full = stretch to fill.');
+        const chips = expChips(body, [
+            { label: '4:3', rec: true, sel: cur === '0', on: () => setA('0') },
+            { label: 'Core provided', sel: cur === '22', on: () => setA('22') },
+            { label: 'Full', sel: cur === '24', on: () => setA('24') },
+        ]);
+        const sel = document.createElement('select'); sel.className = 'exp-more';
+        sel.innerHTML = `<option value="">More…</option>` + EXP_ASPECT_MORE.map(([v, l]) => `<option value="${v}">${escHtml(l)}</option>`).join('');
+        if (EXP_ASPECT_MORE.some(([v]) => v === cur)) sel.value = cur;
+        sel.onchange = () => { if (sel.value) setA(sel.value); };
+        chips.appendChild(sel);
+    }
+
+    {                                                               // Fullscreen — 3-way over two keys
+        const fs = g('video_fullscreen') === 'true', win = g('video_windowed_fullscreen') === 'true';
+        const body = expRow(c, 'Fullscreen', 'Windowed = borderless (friendly with multi-monitor). Full = exclusive (needed to force a specific screen).');
+        expChips(body, [
+            { label: 'On (Windowed)', sel: fs && win, on: () => expApply({ video_fullscreen: 'true', video_windowed_fullscreen: 'true' }) },
+            { label: 'On (Full)', rec: true, sel: fs && !win, on: () => expApply({ video_fullscreen: 'true', video_windowed_fullscreen: 'false' }) },
+            { label: 'Off', sel: !fs, on: () => expApply({ video_fullscreen: 'false' }) },
+        ]);
+    }
+
+    {                                                               // Big menu for CRT — RA's OWN menu scale + Ozone font scale (not EmuLatte)
+        const big = parseFloat(g('menu_scale_factor') || '1') >= 1.5;
+        const body = expRow(c, 'Big menu (for CRT / TV)', 'Enlarges RetroArch’s OWN menu so it’s readable on a CRT or TV (menu scale 2× + Global font scale 2.00×). Doesn’t affect EmuLatte.');
+        expChips(body, [
+            { label: 'Off', rec: true, sel: !big, on: () => expApply({ menu_scale_factor: '1.000000', ozone_font_scale: '0', ozone_font_scale_factor_global: '1.000000' }) },
+            { label: 'On', sel: big, on: () => expApply({ menu_scale_factor: '2.000000', ozone_font_scale: '1', ozone_font_scale_factor_global: '2.000000' }) },
+        ]);
+    }
+
+    expGroup(c, 'Shaders');
+    {
+        const on = g('video_shader_enable') === 'true';
+        const body = expRow(c, 'Shaders', 'Visual filters like CRT scanlines.');
+        expChips(body, [
+            { label: 'Off', rec: true, sel: !on, on: () => expApply({ video_shader_enable: 'false' }) },
+            { label: 'On', sel: on, on: () => expApply({ video_shader_enable: 'true' }) },
+        ]);
+        if (on) paintExpressShaders(c);
+    }
+
+    expGroup(c, 'Saves');
+    {
+        const auto = g('savestate_auto_save') === 'true' && g('savestate_auto_load') === 'true';
+        const body = expRow(c, 'Auto-save & resume', 'Saves a state when you quit and reloads it next launch — pick up exactly where you left off.');
+        expChips(body, [
+            { label: 'Off', rec: true, sel: !auto, on: () => expApply({ savestate_auto_save: 'false', savestate_auto_load: 'false' }) },
+            { label: 'On', sel: auto, on: () => expApply({ savestate_auto_save: 'true', savestate_auto_load: 'true' }) },
+        ]);
+    }
+
+    expGroup(c, 'RetroAchievements');
+    {
+        const on = g('cheevos_enable') === 'true';
+        const body = expRow(c, 'Achievements', 'Earn achievements as you play (needs a free retroachievements.org account).');
+        expChips(body, [
+            { label: 'Off', rec: true, sel: !on, on: () => expApply({ cheevos_enable: 'false' }) },
+            { label: 'On', sel: on, on: () => expApply({ cheevos_enable: 'true' }) },
+        ]);
+        if (on) {
+            expTextRow(c, 'Username', 'cheevos_username', false);
+            expTextRow(c, 'Password', 'cheevos_password', true, 'Used once to sign in; RetroArch then stores a token.');
+        }
+    }
+
+    if (sc) sc.scrollTop = top;
+}
+function paintExpressShaders(c) {
+    const cur = _expressCfg.video_shader || '';
+    const info = expRow(c, 'Current shader');
+    info.textContent = cur ? cur.split('/').pop().replace(/\.(slangp|glslp|cgp)$/i, '') : '(none)';
+    info.style.cssText = `font-size:12px; font-weight:700; color:${cur ? 'var(--accent)' : 'var(--text_dim)'};`;
+
+    if (_expressRootShaders.length) {                               // Emulatte presets = root-level .slangp (user-extensible)
+        const body = expRow(c, 'Emulatte presets', 'Curated presets. Add or remove .slangp files in the shaders folder and they show up here.');
+        const wrap = document.createElement('div'); wrap.className = 'ra-chips';
+        _expressRootShaders.forEach(p => wrap.appendChild(expShaderChip(p.file, p.name)));
+        body.appendChild(wrap);
+    } else {
+        const body = expRow(c, 'Emulatte presets', 'No curated presets installed yet.');
+        const btn = document.createElement('button'); btn.textContent = 'Install Emulatte presets';
+        btn.onclick = async () => { btn.disabled = true; btn.textContent = '…'; await window.api.installBundledPresets(); renderExpressSettings(); };
+        body.appendChild(btn);
+    }
+
+    const favs = _expressFavs.filter(f => !_expressRootShaders.some(r => r.file === f.file));
+    if (favs.length) {
+        const body = expRow(c, 'Favourites', 'Shaders you’ve starred for quick access.');
+        const wrap = document.createElement('div'); wrap.className = 'ra-chips';
+        favs.forEach(f => wrap.appendChild(expShaderChip(f.file, f.name)));
+        body.appendChild(wrap);
+    }
+
+    const b = expRow(c, 'More shaders', 'Browse the full shader collection, organised by folder — star any to favourite it.');
+    const btn = document.createElement('button'); btn.textContent = 'Browse all shaders…'; btn.onclick = openExpressShaderBrowser;
+    b.appendChild(btn);
+}
+function expShaderChip(file, name) {
+    const wrap = document.createElement('span'); wrap.className = 'exp-shader-chip';
+    const chip = document.createElement('button');
+    chip.className = 'ra-chip' + (_expressCfg.video_shader === file ? ' sel' : '');
+    chip.textContent = name;
+    chip.onclick = () => expApply({ video_shader: file, video_shader_enable: 'true' });
+    const isFav = _expressFavs.some(f => f.file === file);
+    const star = document.createElement('button');
+    star.className = 'exp-fav' + (isFav ? ' on' : ''); star.innerHTML = '★';
+    star.title = isFav ? 'Remove favourite' : 'Add favourite';
+    star.onclick = e => { e.stopPropagation(); toggleExpressFav(file, name); };
+    wrap.append(chip, star); return wrap;
+}
+function toggleExpressFav(file, name) {
+    const i = _expressFavs.findIndex(f => f.file === file);
+    if (i >= 0) _expressFavs.splice(i, 1); else _expressFavs.push({ file, name });
+    window.api.setSetting('express_fav_shaders', JSON.stringify(_expressFavs));
+    paintExpress();
+}
+const _shaderBrowserExpress = createShaderBrowser({
+    crumbs: 'exp-shader-crumbs', list: 'exp-shader-browser', current: 'exp-shader-current',
+    get: () => _expressCfg.video_shader || '',
+    set: f => { _expressCfg.video_shader = f; _expressCfg.video_shader_enable = 'true';
+                window.api.raConfigSet({ video_shader: f, video_shader_enable: 'true' }); flashExpressSaved(); },
+    fav: { has: f => _expressFavs.some(x => x.file === f), toggle: (f, n) => toggleExpressFav(f, n) },
+});
+function openExpressShaderBrowser() {
+    openModal('modal-express-shaders');
+    _shaderBrowserExpress.refreshCurrent();
+    _shaderBrowserExpress.go('');
+}
 function renderRaAll() {
     const c = document.getElementById('ra-pane-all'); c.innerHTML = '';
     const frag = document.createDocumentFragment();
@@ -587,7 +811,7 @@ function renderRaAll() {
 }
 const SHADER_TAG = { slangp: 'SLANG', glslp: 'GLSL', cgp: 'CG' };
 // Reusable shader folder-browser. get()/set() bind it to wherever the selected preset lives.
-function createShaderBrowser({ crumbs, list, current, get, set }) {
+function createShaderBrowser({ crumbs, list, current, get, set, fav }) {
     const refreshCurrent = () => {
         const cur = get();
         const el = document.getElementById(current); if (el) el.textContent = cur ? cur.split('/').pop() : '(none)';
@@ -610,9 +834,16 @@ function createShaderBrowser({ crumbs, list, current, get, set }) {
         });
         res.presets.forEach(p => {
             const el = document.createElement('div'); el.className = 'ra-shader-item'; el.dataset.file = p.file;
-            el.innerHTML = `<span class="ra-shader-tag">${SHADER_TAG[p.type] || '?'}</span><span>${escHtml(p.name)}</span>`;
+            el.innerHTML = `<span class="ra-shader-tag">${SHADER_TAG[p.type] || '?'}</span><span style="flex:1; min-width:0;">${escHtml(p.name)}</span>`;
             if (p.file === get()) el.classList.add('sel');
             el.onclick = () => { set(p.file); refreshCurrent(); };
+            if (fav) {                                              // optional ⭐ favourite toggle per preset
+                const star = document.createElement('button');
+                star.className = 'exp-fav' + (fav.has(p.file) ? ' on' : ''); star.innerHTML = '★';
+                star.title = fav.has(p.file) ? 'Remove favourite' : 'Add favourite';
+                star.onclick = e => { e.stopPropagation(); fav.toggle(p.file, p.name); star.classList.toggle('on'); };
+                el.appendChild(star);
+            }
             b.appendChild(el);
         });
         if (!res.dirs.length && !res.presets.length) b.innerHTML = '<div class="ra-pane-hint" style="padding:12px;">Empty folder.</div>';
@@ -1486,6 +1717,100 @@ function populateSystemCoreSelect(system, currentValue, showAll = false) {
     updateCoreDesc('edit-system-core', 'edit-system-core-desc');
 }
 
+// ── CORE DOWNLOADER (libretro buildbot) ───────────────────────────────────────
+let _coreDlAvailable = [];   // cached buildbot index (per session)
+let _coreDlSystem    = null; // system the downloader was opened for → "recommended" banner + dropdown refresh
+let _coreDlBusy      = false;
+
+const coreInstalledNames = () => {                          // installed .so basename → display name
+    const m = {};
+    allCores.forEach(c => { m[c.path.split('/').pop()] = c.name; });
+    return m;
+};
+function recommendedCoreBase(system) {
+    if (!system) return '';
+    let dc = system.default_core || '';
+    if (!dc && system.short_name) dc = (allSystemPresets.find(p => p.short_name === system.short_name) || {}).default_core || '';
+    return (dc || '').split('/').pop().replace(/\.so$/, '');   // → "name_libretro"
+}
+async function openCoreDownloader(system = null) {
+    _coreDlSystem = system;
+    document.getElementById('core-dl-search').value = '';
+    document.getElementById('core-dl-status').textContent = '';
+    document.getElementById('core-dl-rec').innerHTML = '';
+    document.getElementById('core-dl-list').innerHTML = '<div class="ra-pane-hint" style="padding:14px;">Loading core list…</div>';
+    openModal('modal-core-downloader');
+    if (!_coreDlAvailable.length) {
+        const r = await window.api.listAvailableCores();
+        if (!r.ok) { document.getElementById('core-dl-list').innerHTML = `<div class="ra-pane-hint" style="padding:14px; color:#ef5350;">${escHtml(r.error || 'Could not load the core list.')}</div>`; return; }
+        _coreDlAvailable = r.cores;
+    }
+    renderCoreDownloader();
+}
+function coreDlRow(core, installed, isRec) {
+    const row = document.createElement('div');
+    row.className = 'core-dl-item' + (isRec ? ' rec' : '');
+    const isInstalled = !!installed[core.so];
+    const left = document.createElement('div'); left.style.minWidth = '0';
+    left.innerHTML = `<div class="cdl-name">${escHtml(isInstalled ? installed[core.so] : core.name)}</div><div class="cdl-id">${escHtml(core.base)}</div>`;
+    const right = document.createElement('div'); right.style.cssText = 'display:flex; align-items:center; gap:8px; flex-shrink:0;';
+    if (isInstalled) {
+        const tag = document.createElement('span'); tag.className = 'core-dl-installed'; tag.textContent = '✓ Installed';
+        const upd = document.createElement('button'); upd.textContent = 'Update'; upd.onclick = () => installCoreFromRow(core, row);
+        right.append(tag, upd);
+    } else {
+        const btn = document.createElement('button'); btn.textContent = '⬇ Install';
+        btn.style.cssText = 'background:var(--accent); color:var(--bg); border-color:var(--accent); font-weight:900;';
+        btn.onclick = () => installCoreFromRow(core, row);
+        right.append(btn);
+    }
+    row.append(left, right);
+    return row;
+}
+function renderCoreDownloader() {
+    const q = (document.getElementById('core-dl-search').value || '').trim().toLowerCase();
+    const installed = coreInstalledNames();
+    const recBase = recommendedCoreBase(_coreDlSystem);
+    const rec = recBase && _coreDlAvailable.find(c => c.base === recBase);
+
+    const recEl = document.getElementById('core-dl-rec');
+    if (rec && !q) {
+        recEl.innerHTML = `<div class="core-dl-rec-hdr">Recommended for ${escHtml(_coreDlSystem?.name || 'this system')}</div>`;
+        recEl.appendChild(coreDlRow(rec, installed, true));
+    } else recEl.innerHTML = '';
+
+    let list = _coreDlAvailable;
+    if (q)        list = list.filter(c => c.name.toLowerCase().includes(q) || c.base.toLowerCase().includes(q));
+    else if (rec) list = list.filter(c => c.base !== rec.base);   // already shown in the banner above
+    const listEl = document.getElementById('core-dl-list');
+    if (!list.length) { listEl.innerHTML = '<div class="ra-pane-hint" style="padding:14px;">No cores match.</div>'; return; }
+    const frag = document.createDocumentFragment();
+    list.forEach(c => frag.appendChild(coreDlRow(c, installed, false)));
+    listEl.innerHTML = ''; listEl.appendChild(frag);
+}
+async function installCoreFromRow(core, row) {
+    if (_coreDlBusy) return;
+    _coreDlBusy = true;
+    const btn = row.querySelector('button'); const orig = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    const statusEl = document.getElementById('core-dl-status');
+    statusEl.style.color = 'var(--text_dim)'; statusEl.textContent = `Downloading ${core.name}…`;
+    const r = await window.api.installCore(core.base);
+    _coreDlBusy = false;
+    if (r.ok) {
+        await loadCores();
+        statusEl.style.color = 'var(--accent)'; statusEl.textContent = `Installed ${core.name}.`;
+        renderCoreDownloader();                                   // refresh installed badges
+        if (_coreDlSystem) {                                      // refresh the open Edit-System dropdown + select the new core
+            document.getElementById('edit-system-core-all').checked = false;
+            populateSystemCoreSelect(_coreDlSystem, r.path);
+        }
+    } else {
+        if (btn) { btn.disabled = false; btn.textContent = orig; }
+        statusEl.style.color = '#ef5350'; statusEl.textContent = r.error || 'Install failed.';
+    }
+}
+
 function openEditGameModal(game) {
     document.getElementById('edit-game-id').value        = game.id;
     document.getElementById('edit-title').value          = game.title || '';
@@ -1625,7 +1950,8 @@ function renderPresetList(query) {
             (p.short_name || '').toLowerCase().includes(q))
         : allSystemPresets;
     list.innerHTML = filtered.map((p, i) => {
-        const hasCore = coresForSystem(p).length > 0;
+        // The preset's own named core being installed counts as ready, even if the fuzzy matcher misses it.
+        const hasCore = !!resolveCorePath(p.default_core) || coresForSystem(p).length > 0;
         return `<div class="preset-item" data-index="${allSystemPresets.indexOf(p)}"
             style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; border-radius:6px; background:rgba(0,0,0,0.2); border:1px solid var(--border); cursor:pointer; transition:background 0.15s, border-color 0.15s; gap:10px;">
             <div style="min-width:0;">
@@ -2628,6 +2954,7 @@ function wireUI() {
             enabled:      document.getElementById('ra-ovr-enabled').checked,
             monitor:      document.getElementById('ra-ovr-monitor').value,
             fullscreen:   document.getElementById('ra-ovr-fullscreen').value,
+            aspect:       document.getElementById('ra-ovr-aspect').value,
             shaderEnable: document.getElementById('ra-ovr-shader-enable').value,
             shader:       _raOvrShader,
             custom:       document.getElementById('ra-ovr-custom').value,
@@ -2880,6 +3207,32 @@ function wireUI() {
             statusEl.textContent = result.error || 'Scan failed.';
             statusEl.style.color = '#ef5350';
         }
+    });
+
+    // ── CORE DOWNLOADER ──────────────────────────────────────────────────────
+    document.getElementById('btn-download-cores').addEventListener('click', () => openCoreDownloader(null));
+    document.getElementById('btn-core-dl-close').addEventListener('click', () => closeModal('modal-core-downloader'));
+    document.getElementById('btn-express-shaders-close').addEventListener('click', () => closeModal('modal-express-shaders'));
+    document.getElementById('core-dl-search').addEventListener('input', renderCoreDownloader);
+    document.getElementById('btn-edit-system-core-download').addEventListener('click', () => {
+        const id  = document.getElementById('edit-system-id').value;
+        const sys = id ? allSystems.find(s => s.id === Number(id)) : null;
+        // build a system-like object from the live form so "recommended" works even for an unsaved system
+        openCoreDownloader({
+            id:           sys?.id,
+            name:         document.getElementById('edit-system-name').value || sys?.name || 'this system',
+            short_name:   document.getElementById('edit-system-short').value || sys?.short_name || '',
+            default_core: document.getElementById('edit-system-core').value || sys?.default_core || '',
+            extensions:   document.getElementById('edit-system-extensions').value || sys?.extensions || '',
+        });
+    });
+    window.api.onCoreInstallProgress(d => {
+        const el = document.getElementById('core-dl-status');
+        if (!el || d.done) return;                               // final message is set by installCoreFromRow
+        el.style.color = 'var(--text_dim)';
+        if (d.extracting) el.textContent = 'Extracting…';
+        else if (d.total) el.textContent = `Downloading… ${(d.got / 1048576).toFixed(1)} / ${(d.total / 1048576).toFixed(1)} MB`;
+        else if (d.got)   el.textContent = `Downloading… ${(d.got / 1048576).toFixed(1)} MB`;
     });
 
     // ── MODAL: SS SYSTEM BROWSER ─────────────────────────────────────────────
@@ -3263,6 +3616,7 @@ function wireUI() {
     document.querySelectorAll('#settings-rail .cp-rail-item').forEach(item => {
         item.addEventListener('click', () => {
             const pane = item.dataset.pane;
+            if (pane === 'express') renderExpressSettings();   // load fresh + render the chips on entry
             document.querySelectorAll('#settings-rail .cp-rail-item').forEach(b => b.classList.toggle('active', b === item));
             document.querySelectorAll('#modal-settings .cp-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === pane));
             document.getElementById('settings-content').scrollTop = 0;

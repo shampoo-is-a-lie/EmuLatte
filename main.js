@@ -476,6 +476,7 @@ function writeRaOverride(scope, refId) {
     } else if (data.fullscreen != null && data.fullscreen !== '') {
         lines.push(`video_fullscreen = "${data.fullscreen}"`);
     }
+    if (data.aspect != null && data.aspect !== '') { lines.push(`aspect_ratio_index = "${data.aspect}"`); lines.push('video_aspect_ratio_auto = "false"'); }
     if (data.shaderEnable != null && data.shaderEnable !== '') lines.push(`video_shader_enable = "${data.shaderEnable}"`);
     if (data.shaderEnable === 'true' && data.shader)           lines.push(`video_shader = "${data.shader}"`);
     if (data.custom && data.custom.trim())                     lines.push(data.custom.trim());
@@ -528,6 +529,7 @@ function launchConfigFile(game, extra = {}) {
         if (mon != null && mon !== '') cfg.video_monitor_index = mon;
         if (specificMon) { cfg.video_fullscreen = 'true'; cfg.video_windowed_fullscreen = 'false'; }   // exclusive fullscreen so the index applies
         else if (data.fullscreen != null && data.fullscreen !== '') cfg.video_fullscreen = data.fullscreen;
+        if (data.aspect != null && data.aspect !== '') { cfg.aspect_ratio_index = data.aspect; cfg.video_aspect_ratio_auto = 'false'; }
         if (data.shaderEnable != null && data.shaderEnable !== '') cfg.video_shader_enable = data.shaderEnable;
         if (data.shaderEnable === 'true' && data.shader) cfg.video_shader = data.shader;
         if (data.custom && data.custom.trim())
@@ -1435,7 +1437,7 @@ function infoField(txt, key) {
     return u ? u[1].trim() : '';
 }
 
-ipcMain.handle('scan-cores', () => {
+function scanCoresNow() {
     if (!db) return { ok: false, error: 'DB not ready' };
     const coreDirs = [
         path.join(os.homedir(), '.config', 'retroarch', 'cores'),
@@ -1478,11 +1480,77 @@ ipcMain.handle('scan-cores', () => {
     }
     insertAll(found);
     return { ok: true, count: found.length };
-});
+}
+ipcMain.handle('scan-cores', () => scanCoresNow());
 
 ipcMain.handle('get-cores', () => {
     if (!db) return [];
     return db.prepare('SELECT * FROM cores ORDER BY name').all();
+});
+
+// ── CORE DOWNLOADER (libretro buildbot) ───────────────────────────────────────
+// Cores install into the SAME dirs scan-cores reads from, so they're picked up immediately.
+function buildbotCoreBase() {
+    const arch = { x64: 'x86_64', ia32: 'i686', arm64: 'arm64', arm: 'armhf' }[process.arch] || 'x86_64';
+    return `https://buildbot.libretro.com/nightly/linux/${arch}/latest`;
+}
+const coresInstallDir    = () => readRaCfgKey('libretro_directory')  || path.join(getRetroArchCfgDir(), 'cores');
+const coreInfoInstallDir = () => readRaCfgKey('libretro_info_path')  || path.join(getRetroArchCfgDir(), 'info');
+const prettyCoreName = base => base.replace(/_libretro$/, '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+let _coreIndexCache = null;
+async function fetchCoreIndex(force) {
+    if (_coreIndexCache && !force) return _coreIndexCache;
+    const { status, body } = await httpsGet(`${buildbotCoreBase()}/.index-extended`);
+    if (status !== 200) throw new Error('Core list unavailable (HTTP ' + status + ')');
+    const list = body.toString('utf8').split('\n').map(line => {
+        const file = line.trim().split(/\s+/).pop();             // "<date> <crc> name_libretro.so.zip"
+        if (!file || !file.endsWith('_libretro.so.zip')) return null;
+        const so   = file.replace(/\.zip$/, '');                 // name_libretro.so
+        const base = so.replace(/\.so$/, '');                    // name_libretro
+        return { file, so, base, name: prettyCoreName(base) };
+    }).filter(Boolean);
+    list.sort((a, b) => a.name.localeCompare(b.name));
+    _coreIndexCache = list;
+    return list;
+}
+ipcMain.handle('list-available-cores', async () => {
+    try { return { ok: true, cores: await fetchCoreIndex() }; }
+    catch (err) { return { ok: false, error: err.message }; }
+});
+// Download a single core (+ its .info) and install it where RetroArch/EmuLatte look for cores.
+ipcMain.handle('install-core', async (e, coreArg) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    let base = String(coreArg || '').split('/').pop().replace(/\.zip$/, '').replace(/\.so$/, '');   // accept name / name_libretro / .so / path
+    if (!base) return { ok: false, error: 'No core specified' };
+    if (!/_libretro$/.test(base)) base += '_libretro';
+    const so = base + '.so', zipName = so + '.zip';
+    const tmp = path.join(os.tmpdir(), 'emulatte-' + zipName);
+    try {
+        await httpsDownload(`${buildbotCoreBase()}/${zipName}`, tmp,
+            (got, total) => win?.webContents.send('core-install-progress', { base, got, total }));
+        win?.webContents.send('core-install-progress', { base, extracting: true });
+        const dir = coresInstallDir(); fs.mkdirSync(dir, { recursive: true });
+        const zip = new AdmZip(tmp);
+        const entry = zip.getEntries().find(en => en.entryName.endsWith(so)) || zip.getEntries().find(en => en.entryName.endsWith('.so'));
+        if (!entry) throw new Error('No .so core found in the downloaded archive');
+        fs.writeFileSync(path.join(dir, so), entry.getData());
+        try { fs.unlinkSync(tmp); } catch {}
+        // best-effort: fetch the matching .info so scan-cores can categorise the new core
+        try {
+            const info = await httpsGet(`https://raw.githubusercontent.com/libretro/libretro-core-info/master/${base}.info`);
+            if (info.status === 200 && info.body?.length) {
+                const idir = coreInfoInstallDir(); fs.mkdirSync(idir, { recursive: true });
+                fs.writeFileSync(path.join(idir, base + '.info'), info.body);
+            }
+        } catch {}
+        scanCoresNow();
+        win?.webContents.send('core-install-progress', { base, done: true });
+        return { ok: true, so, path: path.join(dir, so) };
+    } catch (err) {
+        try { fs.unlinkSync(tmp); } catch {}
+        return { ok: false, error: err.message };
+    }
 });
 
 // ── RETROACHIEVEMENTS ────────────────────────────────────────────────────────

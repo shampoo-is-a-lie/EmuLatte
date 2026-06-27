@@ -267,6 +267,38 @@
     .ra-set-row .ra-key { font-size: 9px; color: var(--text_dim); font-family: monospace; font-weight: 400; }
     .ra-set-row select, .ra-set-row input { width: 240px; flex-shrink: 0; }
     .ra-pane-hint { font-size: 11px; color: var(--text_dim); margin-bottom: 8px; }
+    /* Express (simple) RetroArch settings pane */
+    .ra-simple-group { font-size: 8px; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text_dim); padding: 16px 2px 2px; }
+    .ra-simple-group:first-child { padding-top: 2px; }
+    .express-saved { font-size: 10px; font-weight: 700; color: var(--accent); letter-spacing: 0; margin-left: 8px; opacity: 0; transition: opacity .2s; }
+    .express-saved.show { opacity: 1; }
+    .ra-simple-row { padding: 13px 2px; border-bottom: 1px solid var(--border); }
+    .ra-simple-label { font-size: 13px; font-weight: 700; color: var(--text_main); margin-bottom: 9px; display: flex; align-items: center; gap: 8px; }
+    .ra-simple-sub { font-size: 11px; color: var(--text_dim); font-weight: 400; margin-top: 6px; }
+    .ra-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .ra-chip { font-size: 11px; padding: 6px 11px; border-radius: 14px; border: 1px solid var(--border_solid); background: rgba(0,0,0,0.25); color: var(--text_sec); cursor: pointer; white-space: nowrap; }
+    .ra-chip:hover { border-color: var(--accent); color: var(--text_main); }
+    .ra-chip.sel { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+    .ra-chip.star { padding: 6px 9px; }
+    .ra-chip .stari { color: #ffcf6b; }
+    .ra-simple-row input[type="text"], .ra-simple-row input[type="password"] { margin-top: 6px; }
+    /* the curated Express pane duplicates keys searchable in other hub panes — hide it while searching */
+    #settings-content.searching .cp-pane[data-pane="express"] { display: none; }
+    /* Express: "More…" aspect dropdown + shader preset chips with favourite star */
+    .exp-more { margin-left: 6px; font-size: 11px; padding: 6px 8px; vertical-align: middle; width: auto; }
+    .exp-shader-chip { display: inline-flex; align-items: stretch; }
+    .exp-shader-chip .ra-chip { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+    .exp-fav { font-size: 12px; line-height: 1; padding: 0 9px; border: 1px solid var(--border_solid); border-left: none; border-radius: 0 14px 14px 0; background: rgba(0,0,0,0.25); color: var(--text_dim); cursor: pointer; }
+    .exp-fav:hover, .exp-fav.on { color: #ffcf6b; }
+    .ra-shader-item .exp-fav { border: 1px solid var(--border_solid); border-radius: 4px; margin-left: auto; padding: 3px 8px; }
+    /* Core downloader */
+    .core-dl-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 12px; border-radius: 6px; background: rgba(0,0,0,0.2); border: 1px solid var(--border); }
+    .core-dl-item.rec { border-color: var(--accent); background: rgba(212,163,115,0.10); }
+    .core-dl-item .cdl-name { font-size: 13px; font-weight: 700; color: var(--text_main); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .core-dl-item .cdl-id { font-size: 10px; color: var(--text_dim); font-family: monospace; }
+    .core-dl-item button { flex-shrink: 0; white-space: nowrap; font-size: 11px; }
+    .core-dl-installed { font-size: 10px; font-weight: 900; color: #66bb6a; letter-spacing: 1px; text-transform: uppercase; white-space: nowrap; flex-shrink: 0; }
+    .core-dl-rec-hdr { font-size: 9px; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; color: var(--accent); margin: 2px 2px 5px; }
     /* Shader folder browser */
     .ra-shader-crumbs { font-size: 12px; color: var(--text_dim); margin: 8px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
     .ra-shader-crumbs a { color: var(--accent); cursor: pointer; }
@@ -937,9 +969,10 @@
         <div id="edit-system-core-desc" class="core-desc" style="display:none;"></div>
         <div class="row" style="margin-top:6px; align-items:center;">
           <label class="core-all-toggle" style="flex:1; margin-top:0;"><input type="checkbox" id="edit-system-core-all"> Show all installed cores</label>
+          <button id="btn-edit-system-core-download" style="flex-shrink:0; white-space:nowrap;">⬇ Get Core</button>
           <button id="btn-edit-system-core-browse" style="flex-shrink:0; white-space:nowrap;">Custom…</button>
         </div>
-        <div class="hint">The core used for every game in this system. Scan RetroArch cores in Settings to populate.</div>
+        <div class="hint">The core used for every game in this system. No core installed? <b>⬇ Get Core</b> downloads one from RetroArch.</div>
       </div>
       <div class="form-row"><label>Default Emulator Path</label><input type="text" id="edit-system-emulator" placeholder="/path/to/emulator or flatpak app ID (e.g. org.ppsspp.PPSSPP)"></div>
       <div class="form-row">
@@ -994,6 +1027,9 @@
           </button>
           <button class="cp-rail-item" data-pane="retroarch">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="11" x2="10" y2="11"/><line x1="8" y1="9" x2="8" y2="13"/><line x1="15" y1="12" x2="15.01" y2="12"/><line x1="18" y1="10" x2="18.01" y2="10"/><rect x="2" y="6" width="20" height="12" rx="6"/></svg><span>RetroArch</span>
+          </button>
+          <button class="cp-rail-item" data-pane="express">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.3 6.2L22 12l-6.7 2.8L13 21l-2.3-6.2L4 12l6.7-2.8z"/></svg><span>Express</span>
           </button>
           <button class="cp-rail-item" data-pane="scrapers">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Scrapers</span>
@@ -1070,6 +1106,9 @@
                 <button id="btn-detect-retroarch" style="flex:1;">Re-detect</button>
                 <button id="btn-scan-cores" style="flex:1;">Scan Cores</button>
               </div>
+              <div class="row" style="margin-top:8px;">
+                <button id="btn-download-cores" style="flex:1; background:var(--accent); color:var(--bg); border-color:var(--accent); font-weight:900;">⬇ Download Cores</button>
+              </div>
               <div id="settings-cores-status" style="font-size:11px; color:var(--text_dim);"></div>
               <div class="hint">Scans ~/.config/retroarch/cores and the Flatpak location for installed cores. Global launch settings now live in <b>⚙ Edit RetroArch Settings</b> above; per-system &amp; per-game overrides are in their Edit screens.</div>
               <div class="row" style="margin-top:10px;">
@@ -1083,6 +1122,12 @@
               <div id="settings-backup-status" style="font-size:11px; color:var(--text_dim); margin-top:6px;"></div>
               <div class="hint">Zips your EmuLatte RetroArch overrides (+ a copy of retroarch.cfg) to move to another machine.</div>
             </div>
+          </section>
+
+          <section class="cp-pane" data-pane="express">
+            <div class="cp-pane-title">Express RetroArch <span id="express-saved" class="express-saved"></span></div>
+            <div class="ra-pane-hint">The essentials, in plain language — changes apply instantly. ★ marks the recommended pick. For everything else, use <b>RetroArch → ⚙ Edit RetroArch Settings</b>.</div>
+            <div id="settings-express"></div>
           </section>
 
           <section class="cp-pane" data-pane="scrapers">
@@ -1324,6 +1369,41 @@
     </div>
     <div class="modal-float-btns">
       <button id="btn-preset-cancel" class="btn-modal-x">✕</button>
+    </div>
+    </div>
+  </div>
+
+  <!-- ── MODAL: CORE DOWNLOADER ────────────────────────────────────────────── -->
+  <div id="modal-core-downloader" class="modal-overlay">
+    <div class="modal-wrapper">
+    <div class="modal-box wide tall">
+      <div class="modal-hdr">
+        <div class="modal-title">Download Cores <span style="font-size:11px; color:var(--text_dim); font-weight:400;">— from RetroArch buildbot</span></div>
+      </div>
+      <div id="core-dl-rec"></div>
+      <input type="text" id="core-dl-search" placeholder="Search cores…">
+      <div id="core-dl-list" style="display:flex; flex-direction:column; gap:5px; max-height:400px; overflow-y:auto; margin-top:4px;"></div>
+      <div id="core-dl-status" style="font-size:11px; color:var(--text_dim); margin-top:8px; min-height:14px;"></div>
+    </div>
+    <div class="modal-float-btns">
+      <button id="btn-core-dl-close" class="btn-modal-x">✕</button>
+    </div>
+    </div>
+  </div>
+
+  <!-- ── MODAL: EXPRESS SHADER BROWSER ─────────────────────────────────────── -->
+  <div id="modal-express-shaders" class="modal-overlay">
+    <div class="modal-wrapper">
+    <div class="modal-box wide tall">
+      <div class="modal-hdr">
+        <div class="modal-title">Choose a Shader</div>
+      </div>
+      <div class="ra-shader-crumbs" id="exp-shader-crumbs"></div>
+      <div class="ra-shader-browser" id="exp-shader-browser" style="max-height:420px; overflow-y:auto;"></div>
+      <div class="ra-pane-hint" style="margin-top:8px;">Current: <span id="exp-shader-current">(none)</span> — click a preset to use it, ★ to favourite it for quick access.</div>
+    </div>
+    <div class="modal-float-btns">
+      <button id="btn-express-shaders-close" class="btn-modal-x">✕</button>
     </div>
     </div>
   </div>
@@ -1578,6 +1658,26 @@
               <option value="true">On</option>
               <option value="false">Off</option>
             </select>
+          </div>
+          <div class="form-row">
+            <label>Aspect ratio</label>
+            <select id="ra-ovr-aspect">
+              <option value="">— Don't change —</option>
+              <option value="0">4:3</option>
+              <option value="1">16:9</option>
+              <option value="2">16:10</option>
+              <option value="3">16:15</option>
+              <option value="4">21:9</option>
+              <option value="5">1:1</option>
+              <option value="6">2:1</option>
+              <option value="7">3:2</option>
+              <option value="11">5:4</option>
+              <option value="19">Square pixel (1:1 PAR)</option>
+              <option value="20">Config</option>
+              <option value="22">Core provided</option>
+              <option value="23">Custom</option>
+            </select>
+            <div class="hint">Forces this aspect for the scope (e.g. 4:3 for retro on a widescreen monitor).</div>
           </div>
           <div class="form-row">
             <label>Shader</label>
