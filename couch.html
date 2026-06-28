@@ -6,27 +6,81 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { height: 100%; }
-    body { background: #241813; color: #e8d9c5; font-family: 'Raleway', system-ui, sans-serif;
-           display: flex; flex-direction: column; align-items: center; justify-content: center;
-           gap: 22px; user-select: none; overflow: hidden; text-align: center; padding: 4vw; }
-    .badge { font-size: 11px; font-weight: 900; letter-spacing: 6px; color: #9c8674; }
-    h1 { font-size: clamp(40px, 9vw, 120px); font-weight: 900; letter-spacing: 4px; color: #d4a373;
-         text-shadow: 0 0 40px rgba(212,163,115,0.3); }
-    .sub { font-size: clamp(13px, 2.4vw, 22px); color: #b8a691; max-width: 60ch; line-height: 1.6; }
-    .keys { font-size: 13px; color: #9c8674; letter-spacing: 1px; }
-    .keys b { color: #d4a373; }
-    #exit { margin-top: 8px; cursor: pointer; border: 1px solid #d4a373; background: rgba(212,163,115,0.14);
-            color: #d4a373; font-family: inherit; font-size: 14px; font-weight: 900; letter-spacing: 2px;
-            padding: 12px 26px; border-radius: 18px; transition: background-color .15s, color .15s; }
-    #exit:hover { background: #d4a373; color: #241813; }
+    body { background: #1c120d; color: #e8d9c5; font-family: 'Raleway', system-ui, sans-serif;
+           display: flex; flex-direction: column; user-select: none; overflow: hidden; }
+    button { font-family: inherit; cursor: pointer; }
+
+    /* ── Header ── */
+    #couch-header { flex-shrink: 0; display: flex; align-items: center; gap: 18px; padding: 14px 26px;
+                    background: #241813; border-bottom: 1px solid rgba(212,163,115,0.18); }
+    .brand { font-size: 15px; font-weight: 900; letter-spacing: 5px; color: #d4a373; white-space: nowrap; }
+    #couch-search { flex: 1; max-width: 420px; background: rgba(0,0,0,0.35); border: 1.5px solid rgba(212,163,115,0.3);
+                    border-radius: 12px; color: #e8d9c5; font-size: 15px; font-weight: 700; padding: 11px 16px; }
+    #couch-search::placeholder { color: #9c8674; font-weight: 400; font-style: italic; }
+    #couch-search:focus { outline: none; border-color: #d4a373; }
+    #couch-count { font-size: 11px; font-weight: 900; letter-spacing: 1.5px; color: #9c8674; white-space: nowrap; margin-left: auto; }
+    #couch-exit { border: 1px solid #d4a373; background: rgba(212,163,115,0.14); color: #d4a373; font-size: 12px;
+                  font-weight: 900; letter-spacing: 2px; padding: 9px 18px; border-radius: 16px; transition: .15s; white-space: nowrap; }
+    #couch-exit:hover { background: #d4a373; color: #1c120d; }
+
+    /* ── Filter chips ── */
+    #couch-filters { flex-shrink: 0; display: flex; gap: 8px; padding: 12px 26px; overflow-x: auto; background: #20140e;
+                     border-bottom: 1px solid rgba(212,163,115,0.12); scrollbar-width: thin; }
+    #couch-filters::-webkit-scrollbar { height: 6px; }
+    #couch-filters::-webkit-scrollbar-thumb { background: rgba(212,163,115,0.3); border-radius: 3px; }
+    .cf-chip { flex-shrink: 0; border: 1px solid rgba(212,163,115,0.3); background: rgba(0,0,0,0.25); color: #c9b8a3;
+               font-size: 12px; font-weight: 800; letter-spacing: 1px; padding: 9px 16px; border-radius: 16px; white-space: nowrap; transition: .12s; }
+    .cf-chip:hover { border-color: #d4a373; color: #fff; }
+    .cf-chip.active { background: #d4a373; border-color: #d4a373; color: #1c120d; }
+    .cf-count { opacity: 0.6; font-weight: 900; }
+
+    /* ── Game wall ── */
+    #couch-grid { flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+                  gap: 20px; padding: 26px; align-content: start; }
+    #couch-grid::-webkit-scrollbar { width: 10px; }
+    #couch-grid::-webkit-scrollbar-thumb { background: rgba(212,163,115,0.3); border-radius: 5px; }
+    .couch-card { background: #2a1c14; border: 2px solid transparent; border-radius: 10px; overflow: hidden; padding: 0;
+                  color: inherit; text-align: center; display: flex; flex-direction: column; transition: border-color .12s, transform .12s, box-shadow .12s;
+                  content-visibility: auto; contain-intrinsic-width: auto 180px; contain-intrinsic-height: auto 300px; }
+    .couch-card:hover, .couch-card:focus { outline: none; border-color: #d4a373; transform: translateY(-4px);
+                  box-shadow: 0 10px 28px rgba(0,0,0,0.55), 0 0 22px rgba(212,163,115,0.25); }
+    .cc-slot { position: relative; width: 100%; aspect-ratio: 5 / 7; background: #160e09; overflow: hidden; }
+    .cc-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .cc-fallback { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; padding: 10px;
+                   font-size: 13px; font-weight: 900; letter-spacing: 1px; color: #9c8674; text-align: center; }
+    .cc-title { font-size: 13px; font-weight: 700; color: #d9c8b3; padding: 9px 8px; line-height: 1.3;
+                display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .couch-empty { grid-column: 1/-1; text-align: center; padding: 80px; color: #9c8674; font-size: 16px; font-weight: 900; letter-spacing: 2px; }
+
+    /* ── Now Playing ── */
+    #couch-now { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
+                 background: rgba(10,6,4,0.82); backdrop-filter: blur(8px); transition: opacity .25s; }
+    #couch-now.hidden { opacity: 0; pointer-events: none; }
+    .now-art { width: 460px; max-width: 80vw; aspect-ratio: 16/9; background-size: cover; background-position: center;
+               border-radius: 14px; box-shadow: 0 20px 60px rgba(0,0,0,0.7); border: 1px solid rgba(212,163,115,0.3); }
+    .now-box { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+    .now-label { font-size: 12px; font-weight: 900; letter-spacing: 5px; color: #d4a373; }
+    .now-title { font-size: clamp(22px, 4vw, 40px); font-weight: 900; color: #fff; text-align: center; max-width: 80vw; }
   </style>
 </head>
 <body>
-  <div class="badge">EMULATTE</div>
-  <h1>COUCH MODE</h1>
-  <div class="sub">Fullscreen play-only mode — Phase 0 placeholder. The gamepad-first game wall, density / CRT scaling and screen targeting arrive in the next phases.</div>
-  <div class="keys">Exit: <b>Esc</b> · <b>F11</b> · gamepad <b>B</b></div>
-  <button id="exit">◄ EXIT TO DESKTOP</button>
+  <header id="couch-header">
+    <div class="brand">EMULATTE</div>
+    <input id="couch-search" placeholder="Search games…" autocomplete="off" spellcheck="false">
+    <div id="couch-count"></div>
+    <button id="couch-exit">✕ EXIT</button>
+  </header>
+  <div id="couch-filters"></div>
+  <main id="couch-grid"></main>
+
+  <div id="couch-now" class="hidden">
+    <div class="now-box">
+      <div class="now-art"></div>
+      <div class="now-label">NOW LAUNCHING</div>
+      <div class="now-title"></div>
+    </div>
+  </div>
+
   <script src="couch.js"></script>
 </body>
 </html>
