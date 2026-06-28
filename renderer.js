@@ -54,8 +54,10 @@ async function loadSystems() {
     populateSystemSelects();
 }
 
+let gamesById = new Map();   // O(1) id → game lookup (gallery/list event delegation; avoids per-card find)
 async function loadGames() {
     allGames = await window.api.getGames();
+    gamesById = new Map(allGames.map(g => [g.id, g]));
     renderSystemFilters();
     renderCurrentView();
     startHeroCycle();
@@ -1064,71 +1066,84 @@ function renderGallery(games) {
         return;
     }
     document.getElementById('hero-icon').style.display = 'none';
+    // Build the whole grid as one string. Interactions are handled by ONE delegated listener on the
+    // grid (wired once in wireUI) — not per-card listeners — and covers lazy-load + skip off-screen
+    // layout via CSS content-visibility, so even a multi-thousand-game library stays responsive.
+    const fbStyle  = 'align-items:center; justify-content:center; color:var(--text_dim); font-size:11px; font-weight:900; letter-spacing:1px; text-align:center;';
     grid.innerHTML = games.map(g => {
         const hasCover = g.cover && g.cover !== '';
         const sysLabel = g.system_short || g.system_name || '';
         const special  = hasSpecialCover(g.system_short);
-        const fbStyle  = 'align-items:center; justify-content:center; color:var(--text_dim); font-size:11px; font-weight:900; letter-spacing:1px; text-align:center;';
-        return `<div class="gallery-item" data-id="${g.id}">
+        const jewel    = isJewel(g.system_short);
+        return `<div class="gallery-item" data-id="${g.id}"${jewel ? ' data-jewel="1"' : ''}>
             <div class="gallery-cover-wrap${special ? ' special' : ''}">
                 ${special && hasCover ? `<div class="gcover-bg" style="background-image:url('${g.cover}')"></div>` : ''}
                 <div class="cover-frame">
                     ${hasCover
-                        ? `<img class="gallery-cover" src="${g.cover}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+                        ? `<img class="gallery-cover" src="${g.cover}" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
                            <div class="gallery-cover gallery-cover-fallback" style="display:none; ${fbStyle}">${escHtml(g.title)}</div>`
                         : `<div class="gallery-cover gallery-cover-fallback" style="display:flex; ${fbStyle}">${escHtml(g.title)}</div>`
                     }
                 </div>
                 ${sysLabel ? `<div class="gallery-system-badge">${escHtml(sysLabel)}</div>` : ''}
                 <div class="gallery-flag-btns ${g.fav || g.want ? 'has-active' : ''}">
-                    <button class="btn-gallery-fav  ${g.fav  ? 'active' : ''}" data-id="${g.id}" data-field="fav"  title="Favourite">★</button>
-                    <button class="btn-gallery-want ${g.want ? 'active' : ''}" data-id="${g.id}" data-field="want" title="Want to Play">♥</button>
-                    <button class="btn-gallery-playlist" data-id="${g.id}" title="Add to playlist"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="14" y2="6"/><line x1="3" y1="12" x2="14" y2="12"/><line x1="3" y1="18" x2="10" y2="18"/><line x1="18" y1="9" x2="18" y2="19"/><line x1="13" y1="14" x2="23" y2="14"/></svg></button>
+                    <button class="btn-gallery-fav  ${g.fav  ? 'active' : ''}" data-field="fav"  title="Favourite">★</button>
+                    <button class="btn-gallery-want ${g.want ? 'active' : ''}" data-field="want" title="Want to Play">♥</button>
+                    <button class="btn-gallery-playlist" title="Add to playlist"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="14" y2="6"/><line x1="3" y1="12" x2="14" y2="12"/><line x1="3" y1="18" x2="10" y2="18"/><line x1="18" y1="9" x2="18" y2="19"/><line x1="13" y1="14" x2="23" y2="14"/></svg></button>
                 </div>
             </div>
             <div class="gallery-title">${escHtml(g.title)}</div>
-            <button class="btn-play-gallery" data-id="${g.id}">▶ PLAY</button>
+            <button class="btn-play-gallery">▶ PLAY</button>
         </div>`;
     }).join('');
+}
 
-    grid.querySelectorAll('.gallery-item').forEach(el => {
-        const game = allGames.find(g => g.id === Number(el.dataset.id));
-        // In the uniform slot, contained art already shows landscape/square/natural covers at their
-        // true shape — only the jewel case still needs measuring (square art → case, else flat).
-        if (game && isJewel(game.system_short))
-            applyJewelCase(el.querySelector('img.gallery-cover'), el.querySelector('.cover-frame'));
-        el.addEventListener('click', e => {
-            if (e.target.closest('.btn-gallery-fav, .btn-gallery-want, .btn-gallery-playlist, .btn-play-gallery')) return;
-            if (game) openGamePage(game);
-        });
-    });
-
-    grid.querySelectorAll('.btn-play-gallery').forEach(btn => {
-        btn.addEventListener('click', e => { e.stopPropagation(); launchGame(Number(btn.dataset.id)); });
-    });
-
-    grid.querySelectorAll('.btn-gallery-playlist').forEach(btn => {
-        btn.addEventListener('click', e => { e.stopPropagation(); openPlaylistPicker(Number(btn.dataset.id)); });
-    });
-
-    grid.querySelectorAll('.btn-gallery-fav, .btn-gallery-want').forEach(btn => {
-        btn.addEventListener('click', async e => {
+// Wired ONCE (wireUI). Delegated click + lazy-image jewel measuring — O(1) per render regardless of size.
+function wireGalleryDelegation() {
+    const grid = document.getElementById('gallery-grid');
+    grid.addEventListener('click', async e => {
+        const card = e.target.closest('.gallery-item'); if (!card) return;
+        const id = Number(card.dataset.id);
+        if (e.target.closest('.btn-play-gallery'))     { e.stopPropagation(); launchGame(id); return; }
+        if (e.target.closest('.btn-gallery-playlist'))  { e.stopPropagation(); openPlaylistPicker(id); return; }
+        const flag = e.target.closest('.btn-gallery-fav, .btn-gallery-want');
+        if (flag) {
             e.stopPropagation();
-            const id    = Number(btn.dataset.id);
-            const field = btn.dataset.field;
-            const game  = allGames.find(g => g.id === id);
-            if (!game) return;
-            const newVal = game[field] ? 0 : 1;
-            game[field] = newVal;
+            const field = flag.dataset.field, game = gamesById.get(id); if (!game) return;
+            const newVal = game[field] ? 0 : 1; game[field] = newVal;
             await window.api.setGameFlag(id, field, newVal);
-            btn.classList.toggle('active', !!newVal);
-            const wrap = btn.closest('.gallery-flag-btns');
-            const anyActive = wrap.querySelector('.active');
-            wrap.classList.toggle('has-active', !!anyActive);
-            btn.style.animation = '';
-            void btn.offsetWidth;
-            btn.style.animation = 'gallery-flag-glow 0.35s ease-out';
-        });
+            flag.classList.toggle('active', !!newVal);
+            const wrap = flag.closest('.gallery-flag-btns');
+            wrap.classList.toggle('has-active', !!wrap.querySelector('.active'));
+            flag.style.animation = ''; void flag.offsetWidth; flag.style.animation = 'gallery-flag-glow 0.35s ease-out';
+            return;
+        }
+        const game = gamesById.get(id); if (game) openGamePage(game);
+    });
+    // Cover load → only jewel cards need AR measuring; load doesn't bubble, so listen in capture phase.
+    grid.addEventListener('load', e => {
+        const img = e.target;
+        if (img.classList && img.classList.contains('gallery-cover')) {
+            const item = img.closest('.gallery-item');
+            if (item && item.dataset.jewel === '1') applyJewelCase(img, img.closest('.cover-frame'));
+        }
+    }, true);
+    // List view: one delegated listener for the table rows.
+    document.getElementById('list-tbody').addEventListener('click', async e => {
+        const fav = e.target.closest('[data-fav]');
+        if (fav) {
+            e.stopPropagation();
+            const id = Number(fav.dataset.fav), game = gamesById.get(id); if (!game) return;
+            game.fav = game.fav ? 0 : 1;
+            await window.api.setGameFlag(id, 'fav', game.fav);
+            fav.textContent = game.fav ? '★' : '☆';
+            fav.style.color = game.fav ? '#ffeb3b' : 'var(--text_dim)';
+            return;
+        }
+        const launch = e.target.closest('.btn-launch-list');
+        if (launch) { e.stopPropagation(); launchGame(Number(launch.dataset.id)); return; }
+        const row = e.target.closest('tr[data-id]');
+        if (row) { const game = gamesById.get(Number(row.dataset.id)); if (game) openGamePage(game); }
     });
 }
 
@@ -1149,30 +1164,7 @@ function renderList(games) {
         </tr>
     `).join('');
 
-    tbody.querySelectorAll('tr[data-id]').forEach(tr => {
-        tr.addEventListener('click', e => {
-            if (e.target.closest('.btn-launch-list') || e.target.closest('[data-fav]')) return;
-            const game = allGames.find(g => g.id === Number(tr.dataset.id));
-            if (game) openGamePage(game);
-        });
-    });
-
-    tbody.querySelectorAll('.btn-launch-list').forEach(btn => {
-        btn.addEventListener('click', e => { e.stopPropagation(); launchGame(Number(btn.dataset.id)); });
-    });
-
-    tbody.querySelectorAll('[data-fav]').forEach(el => {
-        el.addEventListener('click', async e => {
-            e.stopPropagation();
-            const id   = Number(el.dataset.fav);
-            const game = allGames.find(g => g.id === id);
-            if (!game) return;
-            game.fav = game.fav ? 0 : 1;
-            await window.api.setGameFlag(id, 'fav', game.fav);
-            el.textContent = game.fav ? '★' : '☆';
-            el.style.color = game.fav ? '#ffeb3b' : 'var(--text_dim)';
-        });
-    });
+    // Row interactions handled by one delegated listener on #list-tbody (wired once in wireUI).
 }
 
 // ── HERO CYCLE ────────────────────────────────────────────────────────────────
@@ -2389,8 +2381,13 @@ function wireUI() {
         btn.style.animation = '';
     });
 
-    // Gallery search
-    document.getElementById('gallery-search').addEventListener('input', () => renderCurrentView());
+    // Gallery search — debounced so typing doesn't rebuild the whole grid on every keystroke
+    wireGalleryDelegation();
+    let _searchDebounce;
+    document.getElementById('gallery-search').addEventListener('input', () => {
+        clearTimeout(_searchDebounce);
+        _searchDebounce = setTimeout(() => renderCurrentView(), 140);
+    });
     document.getElementById('gallery-sort').addEventListener('change', e => { currentSort = e.target.value; renderCurrentView(); });
     document.getElementById('gallery-category').addEventListener('change', e => { currentCategory = e.target.value; renderCurrentView(); });
     document.getElementById('btn-gsearch-clear').addEventListener('click', () => {
