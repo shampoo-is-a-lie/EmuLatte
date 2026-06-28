@@ -3400,6 +3400,27 @@ function wireUI() {
         window.api.openPath(dir);
     });
 
+    // ── DATA: BACKUP / RESTORE ───────────────────────────────────────────────
+    const runBackup = async (scope, label) => {
+        const status = document.getElementById('backup-status');
+        status.style.color = 'var(--text_dim)'; status.textContent = `Backing up ${label}… (this can take a moment)`;
+        const r = await window.api.createBackup(scope);
+        if (r.canceled) { status.textContent = ''; return; }
+        status.style.color = r.ok ? 'var(--accent)' : '#ef5350';
+        status.textContent = r.ok ? `✓ Saved backup${r.withSaves ? ' (incl. save states)' : ''}.` : (r.error || 'Backup failed.');
+    };
+    document.getElementById('btn-backup-emulatte').addEventListener('click', () => runBackup('emulatte', 'EmuLatte'));
+    document.getElementById('btn-backup-suite').addEventListener('click', () => runBackup('suite', 'the CafeNeurotico Suite'));
+    document.getElementById('btn-restore-backup').addEventListener('click', async () => {
+        if (!await showConfirm('Restore from a backup ZIP?\nThis OVERWRITES your current library and settings, then restarts EmuLatte.', 'Restore', true, 'Restore Backup')) return;
+        const status = document.getElementById('backup-status');
+        status.style.color = 'var(--text_dim)'; status.textContent = 'Restoring…';
+        const r = await window.api.restoreBackup();
+        if (r.canceled) { status.textContent = ''; return; }
+        if (r.ok) { status.style.color = 'var(--accent)'; status.textContent = `✓ Restored ${r.configFiles} files${r.saveFiles ? ` + ${r.saveFiles} saves` : ''}. Restarting…`; }
+        else { status.style.color = '#ef5350'; status.textContent = r.error || 'Restore failed.'; }
+    });
+
     // ── DATA: CLEAN UNUSED MEDIA ─────────────────────────────────────────────
     document.getElementById('btn-clean-media').addEventListener('click', async () => {
         const status = document.getElementById('clean-media-status');

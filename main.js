@@ -1044,6 +1044,67 @@ ipcMain.handle('restore-ra-settings', async () => {
     } catch (e) { return { ok: false, error: e.message }; }
 });
 
+// ── FULL BACKUP / RESTORE (config folder + RetroArch saves) ───────────────────
+// scope 'emulatte' → just GameManagerConfig/EmuLatte; scope 'suite' → all of GameManagerConfig
+// (CafeNeurotico Suite, same as CafeNeurotico's own backup). Both bundle RetroArch save states +
+// savefiles (which live OUTSIDE GameManagerConfig) under a known prefix so restore can re-home them.
+const BK_STATES = '__ra_saves__/states/';
+const BK_SAVES  = '__ra_saves__/saves/';
+ipcMain.handle('create-backup', async (_, scope = 'emulatte') => {
+    const isSuite = scope === 'suite';
+    const { canceled, filePath } = await dialog.showSaveDialog({
+        title: isSuite ? 'Back Up CafeNeurotico Suite' : 'Back Up EmuLatte',
+        defaultPath: isSuite ? `CafeNeurotico Suite ${dateStamp()}.zip` : `EmuLatte ${dateStamp()}.zip`,
+        filters: [{ name: 'Zip archive', extensions: ['zip'] }],
+    });
+    if (canceled || !filePath) return { ok: false, canceled: true };
+    try {
+        try { db?.pragma('wal_checkpoint(TRUNCATE)'); } catch {}            // flush WAL so emulatte.db is consistent in the zip
+        const zip = new AdmZip();
+        if (isSuite) zip.addLocalFolder(path.join(baseDir, 'GameManagerConfig'), 'GameManagerConfig');
+        else         zip.addLocalFolder(configDir, 'GameManagerConfig/EmuLatte');
+        const stateDir = savestateDir(), saveDir = savefileDir();
+        let withSaves = false;
+        if (stateDir && fs.existsSync(stateDir)) { zip.addLocalFolder(stateDir, BK_STATES.slice(0, -1)); withSaves = true; }
+        if (saveDir && fs.existsSync(saveDir) && path.resolve(saveDir) !== path.resolve(stateDir || '')) { zip.addLocalFolder(saveDir, BK_SAVES.slice(0, -1)); withSaves = true; }
+        zip.addFile('__emulatte_backup__.json', Buffer.from(JSON.stringify({ app: 'EmuLatte', scope, created: Date.now(), withSaves }, null, 2)));
+        zip.writeZip(filePath);
+        return { ok: true, path: filePath, withSaves };
+    } catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('restore-backup', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'Zip archive', extensions: ['zip'] }] });
+    if (canceled || !filePaths?.length) return { ok: false, canceled: true };
+    let result;
+    try {
+        const zip = new AdmZip(filePaths[0]);
+        const entries = zip.getEntries();
+        if (!entries.some(e => e.entryName.startsWith('GameManagerConfig/'))) return { ok: false, error: 'This ZIP is not an EmuLatte or CafeNeurotico Suite backup.' };
+        const stateDir = savestateDir(), saveDir = savefileDir();
+        // Finalize + close the DB before overwriting it, so a later WAL checkpoint can't clobber the restore.
+        try { db?.pragma('wal_checkpoint(TRUNCATE)'); } catch {}
+        try { db?.close(); } catch {}
+        db = null;
+        let cfgN = 0, saveN = 0;
+        for (const e of entries) {
+            if (e.isDirectory) continue;
+            const name = e.entryName;
+            let out = null;
+            if (name.startsWith('GameManagerConfig/'))      { out = path.join(baseDir, name); cfgN++; }
+            else if (name.startsWith(BK_STATES) && stateDir) { out = path.join(stateDir, name.slice(BK_STATES.length)); saveN++; }
+            else if (name.startsWith(BK_SAVES)  && saveDir)  { out = path.join(saveDir,  name.slice(BK_SAVES.length));  saveN++; }
+            if (!out) continue;
+            fs.mkdirSync(path.dirname(out), { recursive: true });
+            fs.writeFileSync(out, e.getData());
+        }
+        result = { ok: true, configFiles: cfgN, saveFiles: saveN };
+    } catch (e) { result = { ok: false, error: e.message }; }
+    // DB is closed either way → relaunch so EmuLatte reopens the restored data cleanly.
+    if (result.ok) setTimeout(() => { app.relaunch(); app.exit(0); }, 900);
+    return result;
+});
+
 // Push a game into CafeNeurotico's library under the Emulation category. CNGM shares the
 // GameManagerConfig folder, buckets by the Store column, stores art as relative
 // GameManagerConfig/images/<file> paths, and shell-execs LaunchCommand — so we copy the art

@@ -159,6 +159,8 @@ contextBridge.exposeInMainWorld('api', {
     checkLocalTrailer: (title)          => ipcRenderer.invoke('check-local-trailer', title),
     deleteTrailer:     (title)          => ipcRenderer.invoke('delete-trailer', title),
     cleanUnusedMedia:  (dryRun)         => ipcRenderer.invoke('clean-unused-media', dryRun),
+    createBackup:      (scope)          => ipcRenderer.invoke('create-backup', scope),
+    restoreBackup:     ()               => ipcRenderer.invoke('restore-backup'),
     searchYoutube:     (title)          => ipcRenderer.invoke('search-youtube', title),
     downloadTrailer:   (title, videoId) => ipcRenderer.invoke('download-trailer', title, videoId),
     onDownloadProgress:(cb)             => ipcRenderer.on('download-progress', (_, d) => cb(d)),
