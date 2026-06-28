@@ -44,6 +44,8 @@
       "preload.js",
       "renderer.js",
       "index.html",
+      "couch.html",
+      "couch.js",
       "assets/**/*",
       "!assets/ss_dev.json"
     ],

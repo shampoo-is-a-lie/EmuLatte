@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('api', {
     minimize: () => ipcRenderer.send('window-minimize'),
     maximize: () => ipcRenderer.send('window-maximize'),
     close:    () => ipcRenderer.send('window-close'),
+    enterCouch: (opts) => ipcRenderer.invoke('enter-couch-mode', opts),
+    exitCouch:  ()     => ipcRenderer.invoke('exit-couch-mode'),
 
     // Systems
     getSystems:   ()         => ipcRenderer.invoke('get-systems'),

@@ -68,7 +68,7 @@ function createWindow() {
     win.loadFile('index.html');
 
     win.on('close', () => {
-        if (!win.isMaximized() && !win.isMinimized()) {
+        if (!win.isMaximized() && !win.isMinimized() && !win.isFullScreen()) {   // don't persist couch-mode fullscreen bounds
             const b = win.getBounds();
             db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('window_bounds',?)").run(JSON.stringify(b));
         }
@@ -230,6 +230,23 @@ ipcMain.on('window-maximize', e => {
     w?.isMaximized() ? w.unmaximize() : w?.maximize();
 });
 ipcMain.on('window-close', e => BrowserWindow.fromWebContents(e.sender)?.close());
+
+// ── COUCH MODE (fullscreen play-only face) ───────────────────────────────────
+// Phase 0: fullscreen on the window's CURRENT output (works natively on every platform).
+// Chosen-screen targeting + the Wayland→XWayland relaunch path arrive in Phase 4
+// (see docs/couch-mode-plan.md §3). couch.html/couch.js are the lean gamepad-first renderer.
+ipcMain.handle('enter-couch-mode', e => {
+    const win = BrowserWindow.fromWebContents(e.sender); if (!win) return { ok: false };
+    win.setFullScreen(true);
+    win.loadFile('couch.html');
+    return { ok: true };
+});
+ipcMain.handle('exit-couch-mode', e => {
+    const win = BrowserWindow.fromWebContents(e.sender); if (!win) return { ok: false };
+    win.setFullScreen(false);
+    win.loadFile('index.html');
+    return { ok: true };
+});
 
 // ── SYSTEMS ──────────────────────────────────────────────────────────────────
 ipcMain.handle('get-systems', () => {

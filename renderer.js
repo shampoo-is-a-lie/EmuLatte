@@ -2362,6 +2362,7 @@ function wireUI() {
     document.getElementById('btn-min').addEventListener('click', () => window.api.minimize());
     document.getElementById('btn-max').addEventListener('click', () => window.api.maximize());
     document.getElementById('btn-close').addEventListener('click', () => window.api.close());
+    document.getElementById('btn-go-fullscreen').addEventListener('click', () => window.api.enterCouch());
 
     // View switches
     document.getElementById('btn-view-gallery').addEventListener('click', () => {

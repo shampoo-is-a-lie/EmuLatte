@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>EmuLatte — Couch Mode</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; }
+    body { background: #241813; color: #e8d9c5; font-family: 'Raleway', system-ui, sans-serif;
+           display: flex; flex-direction: column; align-items: center; justify-content: center;
+           gap: 22px; user-select: none; overflow: hidden; text-align: center; padding: 4vw; }
+    .badge { font-size: 11px; font-weight: 900; letter-spacing: 6px; color: #9c8674; }
+    h1 { font-size: clamp(40px, 9vw, 120px); font-weight: 900; letter-spacing: 4px; color: #d4a373;
+         text-shadow: 0 0 40px rgba(212,163,115,0.3); }
+    .sub { font-size: clamp(13px, 2.4vw, 22px); color: #b8a691; max-width: 60ch; line-height: 1.6; }
+    .keys { font-size: 13px; color: #9c8674; letter-spacing: 1px; }
+    .keys b { color: #d4a373; }
+    #exit { margin-top: 8px; cursor: pointer; border: 1px solid #d4a373; background: rgba(212,163,115,0.14);
+            color: #d4a373; font-family: inherit; font-size: 14px; font-weight: 900; letter-spacing: 2px;
+            padding: 12px 26px; border-radius: 18px; transition: background-color .15s, color .15s; }
+    #exit:hover { background: #d4a373; color: #241813; }
+  </style>
+</head>
+<body>
+  <div class="badge">EMULATTE</div>
+  <h1>COUCH MODE</h1>
+  <div class="sub">Fullscreen play-only mode — Phase 0 placeholder. The gamepad-first game wall, density / CRT scaling and screen targeting arrive in the next phases.</div>
+  <div class="keys">Exit: <b>Esc</b> · <b>F11</b> · gamepad <b>B</b></div>
+  <button id="exit">◄ EXIT TO DESKTOP</button>
+  <script src="couch.js"></script>
+</body>
+</html>

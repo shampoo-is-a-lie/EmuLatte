@@ -21,6 +21,8 @@
     #titlebar { height: 35px; flex-shrink: 0; background: var(--bg_menu); display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border_solid); user-select: none; -webkit-app-region: drag; z-index: 9999; box-sizing: border-box; }
     .titlebar-brand { padding-left: 20px; font-size: 11px; font-weight: 900; color: var(--text_dim); letter-spacing: 3px; }
     .titlebar-controls { display: flex; height: 100%; -webkit-app-region: no-drag; }
+    .titlebar-pill { -webkit-app-region: no-drag; cursor: pointer; border: 1px solid var(--accent); background: rgba(212,163,115,0.14); color: var(--accent); font-family: 'Raleway', sans-serif; font-size: 10px; font-weight: 900; letter-spacing: 2px; padding: 5px 16px; border-radius: 13px; transition: background-color 0.15s, color 0.15s; }
+    .titlebar-pill:hover { background: var(--accent); color: var(--bg); }
     .win-btn { border: none; border-radius: 0; background: transparent; width: 45px; font-size: 14px; display: flex; align-items: center; justify-content: center; transition: background-color 0.1s; cursor: pointer; color: var(--text_main); }
     .win-btn:hover { background-color: rgba(255,255,255,0.1); color: var(--text_main); transform: none; box-shadow: none; }
     .win-close:hover { background-color: #d32f2f; color: white; }
@@ -450,6 +452,7 @@
 
   <div id="titlebar">
     <div class="titlebar-brand">CAFE NEUROTICO — EMULATTE</div>
+    <button id="btn-go-fullscreen" class="titlebar-pill" title="Switch to fullscreen play mode">▶ GO FULLSCREEN</button>
     <div class="titlebar-controls">
       <button id="btn-min" class="win-btn">—</button>
       <button id="btn-max" class="win-btn">□</button>
