@@ -199,6 +199,8 @@ app.whenReady().then(() => {
         // Richer core metadata parsed from RetroArch .info files (for compatibility + descriptions).
         for (const col of ['display_name', 'supported_extensions', 'db_names', 'description'])
             try { db.prepare(`ALTER TABLE cores ADD COLUMN ${col} TEXT`).run(); } catch {}
+        // Fix a wrong ScreenScraper system id shipped in an old preset (Wii was 117 → 404; correct is 16).
+        try { db.prepare(`UPDATE systems SET screenscraper_id=16 WHERE short_name='wii' AND screenscraper_id=117`).run(); } catch {}
         db.prepare(`CREATE TABLE IF NOT EXISTS ra_achievements (
             ra_game_id  INTEGER NOT NULL,
             ach_id      TEXT    NOT NULL,
@@ -310,6 +312,7 @@ ipcMain.handle('add-game', (_, data) => {
           rating:          data.rating          || '',
           launch_override: data.launch_override || ''
       });
+    ensureScummvmTarget(data.rom_path);   // make ScummVM games launchable automatically (fill empty .scummvm)
     return r.lastInsertRowid;
 });
 
@@ -545,6 +548,19 @@ function retroarchConfigArgs(game) {
     return ` --config "${launchConfigFile(game)}"${shaderArg(game)}`;
 }
 
+// ScummVM's libretro core reads the game's target id from the .scummvm file. Many ROM sets ship
+// these files EMPTY → RetroArch "Failed to load contents of game file". Populate an empty one with
+// its basename (the conventional ScummVM gameid) so the game just launches. Written in place, since
+// the core auto-detects the game's data directory from where the .scummvm file lives.
+function ensureScummvmTarget(romPath) {
+    try {
+        if (!romPath || !/\.scummvm$/i.test(romPath) || !fs.existsSync(romPath)) return;
+        if (fs.statSync(romPath).size > 0) return;
+        const id = path.basename(romPath).replace(/\.scummvm$/i, '').trim();
+        if (id) fs.writeFileSync(romPath, id + '\n', 'utf8');
+    } catch {}
+}
+
 function baseLaunchCommand(game) {   // the command WITHOUT EmuLatte's --appendconfig overrides
     let cmd = game.launch_override;
     if (!cmd && game.launch_template && game.rom_path) {
@@ -573,6 +589,7 @@ ipcMain.handle('launch-game', (_, gameId) => {
     const game = gameWithSystem(gameId);
     if (!game) return { ok: false, error: 'Game not found' };
 
+    ensureScummvmTarget(game.rom_path);   // safety net for already-imported ScummVM games with an empty .scummvm
     const cmd = buildLaunchCommand(game);
     if (!cmd) return { ok: false, error: 'No launch command configured — set a Launch Template in System Manager or a Launch Override on this ROM.' };
 
@@ -1045,6 +1062,7 @@ ipcMain.handle('add-to-cngm', (_, gameId) => {
     const game = gameWithSystem(gameId);
     if (!game) return { ok: false, error: 'Game not found' };
 
+    ensureScummvmTarget(game.rom_path);   // safety net for already-imported ScummVM games with an empty .scummvm
     const cmd = buildLaunchCommand(game);
     if (!cmd) return { ok: false, error: 'No launch command for this game — set a Launch Template/core first.' };
 
@@ -1246,39 +1264,48 @@ function ssPickMedia(medias, type) {
     return candidates[0];
 }
 
-async function scrapeGameById(gameId, ssUser, ssPass, win, metaOnly = false) {
+async function scrapeGameById(gameId, ssUser, ssPass, win, metaOnly = false, searchName = '') {
     const game = db.prepare(`
         SELECT g.*, s.screenscraper_id AS system_ss_id
         FROM games g LEFT JOIN systems s ON g.system_id = s.id WHERE g.id=?
     `).get(gameId);
     if (!game) return { ok: false, error: 'Game not found' };
 
-    let crc = '', romSize = 0;
-    const romFileName = game.rom_path ? path.basename(game.rom_path) : '';
-
-    if (game.rom_path && fs.existsSync(game.rom_path)) {
-        try {
-            crc     = await computeFileCrc32(game.rom_path);
-            romSize = fs.statSync(game.rom_path).size;
-        } catch {}
-    }
-
-    const params = {
-        ...ssBaseParams(ssUser, ssPass),
-        romtype: 'rom', romnom: romFileName,
-    };
-    if (crc)                params.crc        = crc;
-    if (romSize)            params.romtaille  = romSize;
-    if (game.system_ss_id)  params.systemeid  = game.system_ss_id;
-
-    let apiResult;
-    try { apiResult = await ssApiCall('jeuInfos.php', params); }
-    catch(e) { return { ok: false, error: `API error: ${e.message}` }; }
-
-    const jeu = apiResult.response?.jeu;
-    if (!jeu) {
-        const msg = apiResult.response?.msg || 'Game not found on ScreenScraper';
-        return { ok: false, error: msg };
+    let apiResult, jeu;
+    const refine = (searchName || '').trim();
+    if (refine) {
+        // Refine-by-name: jeuRecherche returns full jeu objects (incl. medias), best match first.
+        const params = { ...ssBaseParams(ssUser, ssPass), recherche: refine };
+        if (game.system_ss_id) params.systemeid = game.system_ss_id;
+        try { apiResult = await ssApiCall('jeuRecherche.php', params); }
+        catch (e) {
+            if (/HTTP 404/.test(e.message)) return { ok: false, notFound: true, error: `No ScreenScraper match for “${refine}”.` };
+            return { ok: false, error: `API error: ${e.message}` };
+        }
+        jeu = apiResult.response?.jeux?.[0];
+        if (!jeu) return { ok: false, notFound: true, error: `No ScreenScraper match for “${refine}”.` };
+    } else {
+        // Default: match by ROM filename + CRC/size.
+        let crc = '', romSize = 0;
+        const romFileName = game.rom_path ? path.basename(game.rom_path) : '';
+        if (game.rom_path && fs.existsSync(game.rom_path)) {
+            try {
+                crc     = await computeFileCrc32(game.rom_path);
+                romSize = fs.statSync(game.rom_path).size;
+            } catch {}
+        }
+        const params = { ...ssBaseParams(ssUser, ssPass), romtype: 'rom', romnom: romFileName };
+        if (crc)               params.crc       = crc;
+        if (romSize)           params.romtaille = romSize;
+        if (game.system_ss_id) params.systemeid = game.system_ss_id;
+        try { apiResult = await ssApiCall('jeuInfos.php', params); }
+        catch (e) {
+            // ScreenScraper returns HTTP 404 ("Rom/Iso/Dossier non trouvée") when nothing matches — soft "not found" so the UI can offer a name refine.
+            if (/HTTP 404/.test(e.message)) return { ok: false, notFound: true, error: 'Not found on ScreenScraper — try refining the name.' };
+            return { ok: false, error: `API error: ${e.message}` };
+        }
+        jeu = apiResult.response?.jeu;
+        if (!jeu) return { ok: false, notFound: true, error: apiResult.response?.msg || 'Not found on ScreenScraper — try refining the name.' };
     }
 
     // Session info (rate limits)
@@ -1330,12 +1357,12 @@ async function scrapeGameById(gameId, ssUser, ssPass, win, metaOnly = false) {
 
 let batchScrapeCancel = false;
 
-ipcMain.handle('scrape-game', async (event, gameId, metaOnly = false) => {
+ipcMain.handle('scrape-game', async (event, gameId, metaOnly = false, searchName = '') => {
     if (!db) return { ok: false, error: 'DB not ready' };
     const ssUser = db.prepare('SELECT value FROM settings WHERE key=?').get('ss_user')?.value;
     const ssPass = db.prepare('SELECT value FROM settings WHERE key=?').get('ss_pass')?.value;
     if (!ssUser || !ssPass) return { ok: false, error: 'ScreenScraper credentials not set. Go to Settings.' };
-    return scrapeGameById(gameId, ssUser, ssPass, BrowserWindow.fromWebContents(event.sender), metaOnly);
+    return scrapeGameById(gameId, ssUser, ssPass, BrowserWindow.fromWebContents(event.sender), metaOnly, searchName);
 });
 
 ipcMain.handle('scrape-batch', async (event, gameIds) => {
@@ -2660,6 +2687,36 @@ ipcMain.handle('delete-trailer', (_, title) => {
     const p = trailerFilePath(title);
     try { if (fs.existsSync(p)) { fs.unlinkSync(p); return true; } } catch {}
     return false;
+});
+
+// Find (and optionally delete) managed art/trailers no longer referenced by any game.
+ipcMain.handle('clean-unused-media', (_, dryRun = true) => {
+    if (!db) return { ok: false, error: 'DB not ready' };
+    const games = db.prepare('SELECT title, cover, hero, logo, screenshot FROM games').all();
+    const refImages = new Set();
+    for (const g of games)
+        [g.cover, g.hero, g.logo, ...(g.screenshot ? g.screenshot.split('|') : [])]
+            .filter(Boolean).forEach(p => refImages.add(path.resolve(p)));
+    const refTrailers = new Set(games.map(g => path.resolve(trailerFilePath(g.title || ''))));
+
+    const orphans = [];
+    let bytes = 0;
+    const sweep = (dir, refSet) => {
+        let files = []; try { files = fs.readdirSync(dir); } catch { return; }
+        for (const f of files) {
+            const full = path.join(dir, f);
+            try {
+                const st = fs.statSync(full);
+                if (!st.isFile()) continue;
+                if (!refSet.has(path.resolve(full))) { orphans.push(full); bytes += st.size; }
+            } catch {}
+        }
+    };
+    for (const sub of ['covers', 'heroes', 'logos', 'screenshots']) sweep(path.join(imagesDir, sub), refImages);
+    sweep(trailersDir, refTrailers);
+
+    if (!dryRun) for (const p of orphans) { try { fs.unlinkSync(p); } catch {} }
+    return { ok: true, count: orphans.length, bytes };
 });
 
 ipcMain.handle('search-youtube', async (_, query) => {

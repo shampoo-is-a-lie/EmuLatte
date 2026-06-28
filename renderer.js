@@ -3,7 +3,9 @@
 // ── STATE ─────────────────────────────────────────────────────────────────────
 let allGames   = [];
 let allSystems = [];
-let currentFilter  = 'all';
+let currentFilter   = 'all';
+let currentSort     = 'alpha';   // gallery sort (next to search)
+let currentCategory = 'all';     // console / handheld / arcade filter
 let currentView    = 'view-gallery';
 let currentGame    = null;
 let slideshowUrls  = [];
@@ -94,7 +96,25 @@ function getFilteredGames() {
             (g.year        || '').includes(q)
         );
     }
-    return games;
+    if (currentCategory !== 'all') games = games.filter(g => systemCategory(g.system_short) === currentCategory);
+    return sortGames(games);
+}
+
+const HANDHELD_SYS = new Set(['gb','gbc','gba','gg','ngp','ngpc','ws','wsc','nds','dsi','3ds','psp','vita','lynx','vb','ngage','wonderswan','supervision','pokemini','gw']);
+const ARCADE_SYS   = new Set(['arcade','mame','fbneo','fba','neogeo','cps1','cps2','cps3','naomi','atomiswave','model2','model3']);
+const systemCategory = short => { const s = (short || '').toLowerCase(); return HANDHELD_SYS.has(s) ? 'handheld' : ARCADE_SYS.has(s) ? 'arcade' : 'console'; };
+const isScraped = g => !!(g.cover || g.screenscraper_id || g.description);
+function sortGames(games) {
+    const byTitle = (a, b) => (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' });
+    const arr = [...games];
+    switch (currentSort) {
+        case 'played':  return arr.sort((a, b) => (b.last_played || 0) - (a.last_played || 0) || byTitle(a, b));
+        case 'favs':    return arr.sort((a, b) => (b.fav ? 1 : 0) - (a.fav ? 1 : 0) || byTitle(a, b));
+        case 'want':    return arr.sort((a, b) => (b.want ? 1 : 0) - (a.want ? 1 : 0) || byTitle(a, b));
+        case 'added':   return arr.sort((a, b) => (b.id || 0) - (a.id || 0));                 // higher id = added later
+        case 'scraped': return arr.sort((a, b) => (isScraped(b) ? 1 : 0) - (isScraped(a) ? 1 : 0) || byTitle(a, b));
+        default:        return arr.sort(byTitle);                                             // 'alpha'
+    }
 }
 
 function renderCurrentView() {
@@ -145,7 +165,7 @@ const COVER_LANDSCAPE = new Set([
     'snes', 'n64', 'a2600', 'a5200', 'a7800', 'coleco', 'intv', 'vectrex',
 ]);
 const COVER_SQUARE = new Set([
-    'gb', 'gbc', 'gba', 'gg', 'ngp', 'ngpc', 'ws', 'wsc',
+    'gb', 'gbc', 'gba', 'gg', 'ngp', 'ngpc', 'ws', 'wsc', 'nds',   // DS boxes are squarish, not CD jewel cases
 ]);
 // CD-era systems eligible for the faux jewel case. This is only a GATE: within these systems
 // the cover's own shape decides the frame — square-ish art (JP CD jewel case) gets the jewel
@@ -1063,6 +1083,7 @@ function renderGallery(games) {
                 <div class="gallery-flag-btns ${g.fav || g.want ? 'has-active' : ''}">
                     <button class="btn-gallery-fav  ${g.fav  ? 'active' : ''}" data-id="${g.id}" data-field="fav"  title="Favourite">★</button>
                     <button class="btn-gallery-want ${g.want ? 'active' : ''}" data-id="${g.id}" data-field="want" title="Want to Play">♥</button>
+                    <button class="btn-gallery-playlist" data-id="${g.id}" title="Add to playlist"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="14" y2="6"/><line x1="3" y1="12" x2="14" y2="12"/><line x1="3" y1="18" x2="10" y2="18"/><line x1="18" y1="9" x2="18" y2="19"/><line x1="13" y1="14" x2="23" y2="14"/></svg></button>
                 </div>
             </div>
             <div class="gallery-title">${escHtml(g.title)}</div>
@@ -1077,13 +1098,17 @@ function renderGallery(games) {
         if (game && isJewel(game.system_short))
             applyJewelCase(el.querySelector('img.gallery-cover'), el.querySelector('.cover-frame'));
         el.addEventListener('click', e => {
-            if (e.target.closest('.btn-gallery-fav, .btn-gallery-want, .btn-play-gallery')) return;
+            if (e.target.closest('.btn-gallery-fav, .btn-gallery-want, .btn-gallery-playlist, .btn-play-gallery')) return;
             if (game) openGamePage(game);
         });
     });
 
     grid.querySelectorAll('.btn-play-gallery').forEach(btn => {
         btn.addEventListener('click', e => { e.stopPropagation(); launchGame(Number(btn.dataset.id)); });
+    });
+
+    grid.querySelectorAll('.btn-gallery-playlist').forEach(btn => {
+        btn.addEventListener('click', e => { e.stopPropagation(); openPlaylistPicker(Number(btn.dataset.id)); });
     });
 
     grid.querySelectorAll('.btn-gallery-fav, .btn-gallery-want').forEach(btn => {
@@ -2366,6 +2391,8 @@ function wireUI() {
 
     // Gallery search
     document.getElementById('gallery-search').addEventListener('input', () => renderCurrentView());
+    document.getElementById('gallery-sort').addEventListener('change', e => { currentSort = e.target.value; renderCurrentView(); });
+    document.getElementById('gallery-category').addEventListener('change', e => { currentCategory = e.target.value; renderCurrentView(); });
     document.getElementById('btn-gsearch-clear').addEventListener('click', () => {
         document.getElementById('gallery-search').value = '';
         document.getElementById('btn-gsearch-clear').style.display = 'none';
@@ -3099,48 +3126,31 @@ function wireUI() {
         document.querySelectorAll('#modal-ra-settings .ra-set-row').forEach(row => {
             row.style.display = !q || (row.dataset.label || '').includes(q) ? '' : 'none';
         });
+        // While searching, only reveal panes that actually contain a matching setting row — otherwise the
+        // non-row panes (Shaders browser, Controls, etc.) show in full and look like you jumped to them.
+        document.querySelectorAll('#modal-ra-settings .cp-pane').forEach(pane => {
+            if (!q) { pane.style.display = ''; return; }
+            const hasMatch = [...pane.querySelectorAll('.ra-set-row')].some(r => r.style.display !== 'none');
+            pane.style.display = hasMatch ? '' : 'none';
+        });
     });
 
     // ── GAMEPAGE: + PLAYLIST ─────────────────────────────────────────────────
-    document.getElementById('btn-gamepage-playlist').addEventListener('click', async () => {
-        if (!currentGame) return;
-        const gamePlaylistIds = await window.api.getGamePlaylists(currentGame.id);
-        const list = document.getElementById('playlist-picker-list');
-        if (!allPlaylists.length) {
-            list.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text_dim);">No playlists yet — create one from the sidebar.</div>`;
-        } else {
-            list.innerHTML = allPlaylists.map(p => {
-                const inList = gamePlaylistIds.includes(p.id);
-                return `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; border-radius:6px; background:rgba(0,0,0,0.2); border:1px solid var(--border);">
-                    <span style="color:var(--text_sec); font-size:13px;">${escHtml(p.name)}</span>
-                    <button class="btn-pl-toggle" data-playlist-id="${p.id}" data-in="${inList ? '1':'0'}"
-                        style="font-size:11px; padding:4px 14px; ${inList ? 'background:var(--accent); border-color:var(--accent); color:var(--bg);' : ''}">${inList ? '✓ Added' : '+ Add'}</button>
-                </div>`;
-            }).join('');
-            list.querySelectorAll('.btn-pl-toggle').forEach(btn => {
-                btn.addEventListener('click', async () => {
-                    const plId   = Number(btn.dataset.playlistId);
-                    const inList = btn.dataset.in === '1';
-                    if (inList) {
-                        await window.api.removeGameFromPlaylist(plId, currentGame.id);
-                        btn.dataset.in = '0';
-                        btn.textContent = '+ Add';
-                        btn.style.cssText = 'font-size:11px; padding:4px 14px;';
-                    } else {
-                        await window.api.addGameToPlaylist(plId, currentGame.id);
-                        btn.dataset.in = '1';
-                        btn.textContent = '✓ Added';
-                        btn.style.cssText = 'font-size:11px; padding:4px 14px; background:var(--accent); border-color:var(--accent); color:var(--bg);';
-                    }
-                    if (typeof currentFilter === 'string' && currentFilter.startsWith('playlist:')) {
-                        currentPlaylistGames = await window.api.getPlaylistGames(Number(currentFilter.split(':')[1]));
-                    }
-                });
-            });
-        }
-        openModal('modal-add-to-playlist');
-    });
+    document.getElementById('btn-gamepage-playlist').addEventListener('click', () => { if (currentGame) openPlaylistPicker(currentGame.id); });
     document.getElementById('btn-playlist-picker-close').addEventListener('click', () => closeModal('modal-add-to-playlist'));
+    document.getElementById('btn-playlist-picker-create').addEventListener('click', async () => {
+        const inp = document.getElementById('playlist-picker-new');
+        const name = inp.value.trim();
+        if (!name || _plPickerGameId == null) return;
+        const newId = await window.api.addPlaylist(name);   // returns the new playlist id
+        inp.value = '';
+        await loadPlaylists();
+        if (newId) await window.api.addGameToPlaylist(newId, _plPickerGameId);   // create & add in one step
+        await renderPlaylistPicker();
+        if (typeof currentFilter === 'string' && currentFilter.startsWith('playlist:'))
+            currentPlaylistGames = await window.api.getPlaylistGames(Number(currentFilter.split(':')[1]));
+    });
+    document.getElementById('playlist-picker-new').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('btn-playlist-picker-create').click(); });
 
     // ── MODAL: CREATE PLAYLIST ────────────────────────────────────────────────
     document.getElementById('btn-add-playlist').addEventListener('click', () => {
@@ -3390,10 +3400,46 @@ function wireUI() {
         window.api.openPath(dir);
     });
 
+    // ── DATA: CLEAN UNUSED MEDIA ─────────────────────────────────────────────
+    document.getElementById('btn-clean-media').addEventListener('click', async () => {
+        const status = document.getElementById('clean-media-status');
+        const btn = document.getElementById('btn-clean-media');
+        btn.disabled = true; status.style.color = 'var(--text_dim)'; status.textContent = 'Scanning…';
+        const scan = await window.api.cleanUnusedMedia(true);
+        btn.disabled = false;
+        if (!scan.ok) { status.textContent = scan.error || 'Scan failed.'; status.style.color = '#ef5350'; return; }
+        if (!scan.count) { status.textContent = 'No orphaned files — your library is tidy. 🎉'; status.style.color = 'var(--accent)'; return; }
+        const mb = (scan.bytes / 1048576).toFixed(1);
+        status.textContent = '';
+        if (!await showConfirm(`Found ${scan.count} unused file${scan.count !== 1 ? 's' : ''} (${mb} MB) not linked to any game.\nDelete them to free disk space?`, 'Delete', true, 'Clean Unused Media')) return;
+        btn.disabled = true; status.style.color = 'var(--text_dim)'; status.textContent = 'Deleting…';
+        const res = await window.api.cleanUnusedMedia(false);
+        btn.disabled = false;
+        status.style.color = 'var(--accent)';
+        status.textContent = res.ok ? `Deleted ${res.count} file${res.count !== 1 ? 's' : ''}, freed ${(res.bytes / 1048576).toFixed(1)} MB.` : (res.error || 'Failed.');
+    });
+
+    // ── DATA: DUPLICATE FINDER ───────────────────────────────────────────────
+    document.getElementById('btn-find-duplicates').addEventListener('click', openDuplicatesModal);
+    document.getElementById('btn-duplicates-close').addEventListener('click', () => closeModal('modal-duplicates'));
+    document.getElementById('btn-dup-remove').addEventListener('click', async () => {
+        const ids = [...document.querySelectorAll('#dup-list .dup-cb:checked')].map(cb => Number(cb.dataset.id));
+        if (!ids.length) { showAlert('Nothing selected to remove.', 'Remove Duplicates'); return; }
+        if (!await showConfirm(`Remove ${ids.length} duplicate game${ids.length !== 1 ? 's' : ''} from the library?\nROM files will NOT be deleted.`, 'Remove', true, 'Remove Duplicates')) return;
+        for (const id of ids) await window.api.deleteGame(id);
+        await loadGames();
+        closeModal('modal-duplicates');
+        renderCurrentView();
+        showLaunchToast(`Removed ${ids.length} duplicate${ids.length !== 1 ? 's' : ''}.`, null);
+    });
+
     // ── MODAL: SCRAPER PICKER ────────────────────────────────────────────────
     document.getElementById('btn-scraper-picker-cancel').addEventListener('click', () => closeModal('modal-scraper-picker'));
+    document.getElementById('btn-refine-scrape-cancel').addEventListener('click', () => closeModal('modal-refine-scrape'));
+    document.getElementById('btn-refine-scrape-go').addEventListener('click', runRefineScrape);
+    document.getElementById('refine-scrape-name').addEventListener('keydown', e => { if (e.key === 'Enter') runRefineScrape(); });
 
-    async function runScraper(scraperFn, scraperLabel) {
+    async function runScraper(scraperFn, scraperLabel, refineMeta = false) {
         if (!currentGame) return;
         const statusEl = document.getElementById('scraper-picker-status');
         const btns = document.querySelectorAll('.scraper-pick-btn');
@@ -3408,6 +3454,9 @@ function wireUI() {
             const updated = allGames.find(g => g.id === currentGame.id);
             if (updated) openGamePage(updated);
             showLaunchToast(`Scraped with ${scraperLabel}: ${result.updated?.join(', ') || 'done'}.`, null);
+        } else if (refineMeta && result.notFound) {
+            closeModal('modal-scraper-picker');                      // ScreenScraper found nothing → offer a name refine
+            openRefineScrape(currentGame.id, true, result.error);
         } else {
             statusEl.textContent = `✗ ${result.error}`;
             statusEl.style.color = '#ef5350';
@@ -3423,7 +3472,7 @@ function wireUI() {
     document.getElementById('btn-scrape-with-ss').addEventListener('click', async () => {
         if (_scraperPickerMode === 'art')   { await _pickArt('ss'); return; }
         if (_scraperPickerMode === 'batch') { closeModal('modal-scraper-picker'); scrapeAll(_scrapeAllSystemId); return; }
-        if (_scraperPickerMode === 'meta')  { runScraper(id => window.api.scrapeGameMeta(id), 'ScreenScraper'); return; }
+        if (_scraperPickerMode === 'meta')  { runScraper(id => window.api.scrapeGameMeta(id), 'ScreenScraper', true); return; }
         if (!currentGame) return;
         closeModal('modal-scraper-picker');
         scrapeGame(currentGame.id);
@@ -3821,13 +3870,132 @@ async function scrapeGame(gameId) {
     const result = await window.api.scrapeGame(gameId);
     if (btn) btn.classList.remove('working');
     if (!result.ok) {
-        showLaunchToast(result.error || 'Scrape failed', null);
+        if (result.notFound) openRefineScrape(gameId, false, result.error);   // let the user retry with a different name
+        else showLaunchToast(result.error || 'Scrape failed', null);
         return;
     }
     await loadGames();
     const updated = allGames.find(g => g.id === gameId);
     if (updated && currentGame?.id === gameId) openGamePage(updated);
     if (result.session) updateRateInfo(result.session);
+}
+
+// ── REFINE SCREENSCRAPER SEARCH BY NAME (on not-found) ────────────────────────
+let _refineGameId = null, _refineMeta = false;
+function openRefineScrape(gameId, metaOnly, why) {
+    _refineGameId = gameId; _refineMeta = !!metaOnly;
+    const game = allGames.find(g => g.id === gameId);
+    const guess = game ? (game.title || (game.rom_path || '').split('/').pop().replace(/\.[^.]+$/, '')) : '';
+    document.getElementById('refine-scrape-sub').textContent = why || `Couldn’t find this game on ScreenScraper. Try a different name:`;
+    const inp = document.getElementById('refine-scrape-name'); inp.value = guess;
+    document.getElementById('refine-scrape-status').textContent = '';
+    openModal('modal-refine-scrape');
+    setTimeout(() => { inp.focus(); inp.select(); }, 50);
+}
+async function runRefineScrape() {
+    const name = document.getElementById('refine-scrape-name').value.trim();
+    if (!name) return;
+    const status = document.getElementById('refine-scrape-status');
+    const btn = document.getElementById('btn-refine-scrape-go');
+    btn.disabled = true; status.style.color = 'var(--text_dim)'; status.textContent = 'Searching ScreenScraper…';
+    const result = await window.api.scrapeGame(_refineGameId, _refineMeta, name);
+    btn.disabled = false;
+    if (result.ok) {
+        closeModal('modal-refine-scrape');
+        await loadGames();
+        const updated = allGames.find(g => g.id === _refineGameId);
+        if (updated && currentGame?.id === _refineGameId) openGamePage(updated);
+        if (result.session) updateRateInfo(result.session);
+        showLaunchToast(`Found & scraped “${name}”.`, null);
+    } else {
+        status.style.color = '#ef5350';
+        status.textContent = result.error || 'Still not found. Try another name.';
+    }
+}
+
+// ── ADD TO PLAYLIST (shared by the game page + gallery cards) ─────────────────
+let _plPickerGameId = null;
+async function openPlaylistPicker(gameId) {
+    _plPickerGameId = gameId;
+    document.getElementById('playlist-picker-new').value = '';
+    await renderPlaylistPicker();
+    openModal('modal-add-to-playlist');
+}
+async function renderPlaylistPicker() {
+    const gameId = _plPickerGameId;
+    const list = document.getElementById('playlist-picker-list');
+    if (!allPlaylists.length) {
+        list.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text_dim);">No playlists yet — create one below.</div>`;
+        return;
+    }
+    const inIds = await window.api.getGamePlaylists(gameId);
+    list.innerHTML = allPlaylists.map(p => {
+        const inList = inIds.includes(p.id);
+        return `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; border-radius:6px; background:rgba(0,0,0,0.2); border:1px solid var(--border);">
+            <span style="color:var(--text_sec); font-size:13px;">${escHtml(p.name)}</span>
+            <button class="btn-pl-toggle" data-playlist-id="${p.id}" data-in="${inList ? '1' : '0'}"
+                style="font-size:11px; padding:4px 14px; ${inList ? 'background:var(--accent); border-color:var(--accent); color:var(--bg);' : ''}">${inList ? '✓ Added' : '+ Add'}</button>
+        </div>`;
+    }).join('');
+    list.querySelectorAll('.btn-pl-toggle').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const plId = Number(btn.dataset.playlistId);
+            const inList = btn.dataset.in === '1';
+            if (inList) {
+                await window.api.removeGameFromPlaylist(plId, gameId);
+                btn.dataset.in = '0'; btn.textContent = '+ Add'; btn.style.cssText = 'font-size:11px; padding:4px 14px;';
+            } else {
+                await window.api.addGameToPlaylist(plId, gameId);
+                btn.dataset.in = '1'; btn.textContent = '✓ Added'; btn.style.cssText = 'font-size:11px; padding:4px 14px; background:var(--accent); border-color:var(--accent); color:var(--bg);';
+            }
+            if (typeof currentFilter === 'string' && currentFilter.startsWith('playlist:'))
+                currentPlaylistGames = await window.api.getPlaylistGames(Number(currentFilter.split(':')[1]));
+        });
+    });
+}
+
+// ── DUPLICATE FINDER ──────────────────────────────────────────────────────────
+const _normDupTitle  = t => (t || '').toLowerCase().replace(/\([^)]*\)|\[[^\]]*\]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+const _completeness  = g => ['cover', 'hero', 'logo', 'screenshot', 'description', 'year', 'developer'].reduce((n, k) => n + (g[k] ? 1 : 0), 0);
+function findDuplicateGroups() {
+    const map = new Map();
+    for (const g of allGames) {
+        const norm = _normDupTitle(g.title); if (!norm) continue;
+        const key = norm + '::' + g.system_id;                  // same title on the same system = a duplicate set
+        (map.get(key) || map.set(key, []).get(key)).push(g);
+    }
+    const groups = [];
+    for (const arr of map.values()) {
+        if (arr.length < 2) continue;
+        arr.sort((a, b) => _completeness(b) - _completeness(a) || (a.id - b.id));   // most-complete first (kept), then oldest
+        groups.push(arr);
+    }
+    return groups.sort((a, b) => (a[0].title || '').localeCompare(b[0].title || ''));
+}
+function openDuplicatesModal() {
+    const groups = findDuplicateGroups();
+    const body = document.getElementById('dup-list');
+    const removeBtn = document.getElementById('btn-dup-remove');
+    if (!groups.length) {
+        body.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text_dim);">No duplicate games found. 🎉</div>`;
+        removeBtn.style.display = 'none';
+    } else {
+        removeBtn.style.display = '';
+        body.innerHTML = groups.map(grp => {
+            const sys = grp[0].system_name || grp[0].system_short || '';
+            const rows = grp.map((g, i) => {
+                const keep = i === 0;
+                const meta = `${escHtml(sys)}${g.year ? ' · ' + escHtml(g.year) : ''} · ${g.cover ? 'has art' : 'no art'}${keep ? ' · <b style="color:var(--accent)">keep</b>' : ''}`;
+                return `<label class="dup-row">
+                    <input type="checkbox" class="dup-cb" data-id="${g.id}" ${keep ? '' : 'checked'}>
+                    <span class="dup-title">${escHtml(g.title)}</span>
+                    <span class="dup-meta">${meta}</span>
+                </label>`;
+            }).join('');
+            return `<div class="dup-group"><div class="dup-group-title">${escHtml(grp[0].title)} <span style="color:var(--text_dim); font-weight:400;">— ${grp.length} copies</span></div>${rows}</div>`;
+        }).join('');
+    }
+    openModal('modal-duplicates');
 }
 
 // ── UNIFIED SCRAPE QUEUE ──────────────────────────────────────────────────────

@@ -84,9 +84,10 @@
     .gallery-system-badge { position: absolute; bottom: 6px; left: 6px; z-index: 2; background: rgba(0,0,0,0.7); color: var(--accent); font-size: 9px; font-weight: 900; letter-spacing: 1px; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; pointer-events: none; }
     .gallery-flag-btns { position: absolute; top: 7px; right: 7px; display: flex; flex-direction: column; gap: 4px; z-index: 3; opacity: 0; transition: opacity 0.15s; }
     .gallery-item:hover .gallery-flag-btns, .gallery-flag-btns.has-active { opacity: 1; }
-    .btn-gallery-fav, .btn-gallery-want { width: 26px; height: 26px; border-radius: 5px; border: none; cursor: pointer; font-size: 13px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.55); color: rgba(255,255,255,0.35); transition: color 0.15s, background 0.15s; line-height: 1; padding: 0; }
+    .btn-gallery-fav, .btn-gallery-want, .btn-gallery-playlist { width: 26px; height: 26px; border-radius: 5px; border: none; cursor: pointer; font-size: 13px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.55); color: rgba(255,255,255,0.35); transition: color 0.15s, background 0.15s; line-height: 1; padding: 0; }
     .btn-gallery-fav:hover  { background: rgba(0,0,0,0.75); color: #ffeb3b; }
     .btn-gallery-want:hover { background: rgba(0,0,0,0.75); color: #ff9800; }
+    .btn-gallery-playlist:hover { background: rgba(0,0,0,0.75); color: var(--accent); }
     .btn-gallery-fav.active  { color: #ffeb3b; background: rgba(0,0,0,0.65); }
     .btn-gallery-want.active { color: #ff9800; background: rgba(0,0,0,0.65); }
     @keyframes gallery-flag-glow { 0% { transform: scale(1); } 45% { transform: scale(1.45); box-shadow: 0 0 10px 3px currentColor; } 100% { transform: scale(1); box-shadow: none; } }
@@ -119,6 +120,9 @@
     #btn-gsearch-clear { position: absolute; right: 11px; top: 50%; transform: translateY(-50%); width: 26px; height: 26px; border-radius: 50%; border: none; background: rgba(255,255,255,0.08); color: var(--text_dim); cursor: pointer; display: none; align-items: center; justify-content: center; font-size: 11px; padding: 0; letter-spacing: 0; text-transform: none; transition: background 0.15s, color 0.15s, transform 0.15s; }
     #btn-gsearch-clear:hover { background: var(--accent); color: var(--bg); transform: translateY(-50%) scale(1.1); box-shadow: 0 0 10px var(--accent); }
     #gallery-search-count { font-size: 10px; font-weight: 900; color: var(--text_dim); letter-spacing: 1.5px; text-transform: uppercase; white-space: nowrap; flex-shrink: 0; min-width: 64px; text-align: right; transition: color 0.2s; }
+    #gallery-search-wrap .cust-sel { width: 158px; flex-shrink: 0; }
+    #gallery-search-wrap #gallery-category + .cust-sel { width: 132px; }
+    #gallery-search-wrap .cust-sel-btn { padding: 12px 12px; border-radius: 12px; font-size: 12px; font-weight: 700; }
 
     .row { display: flex; gap: 10px; }
     button { background-color: var(--bg_panel); color: var(--text_main); border: 1px solid var(--border_solid); padding: 10px 12px; font-family: 'Raleway', sans-serif; font-weight: 900; cursor: pointer; border-radius: 6px; transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; text-transform: uppercase; letter-spacing: 1px; }
@@ -299,6 +303,13 @@
     .core-dl-item button { flex-shrink: 0; white-space: nowrap; font-size: 11px; }
     .core-dl-installed { font-size: 10px; font-weight: 900; color: #66bb6a; letter-spacing: 1px; text-transform: uppercase; white-space: nowrap; flex-shrink: 0; }
     .core-dl-rec-hdr { font-size: 9px; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; color: var(--accent); margin: 2px 2px 5px; }
+    /* Duplicate finder */
+    .dup-group { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: rgba(0,0,0,0.15); }
+    .dup-group-title { font-size: 13px; font-weight: 900; color: var(--text_main); margin-bottom: 8px; }
+    .dup-row { display: flex; align-items: center; gap: 10px; padding: 6px 4px; cursor: pointer; border-radius: 4px; }
+    .dup-row:hover { background: rgba(255,255,255,0.04); }
+    .dup-row .dup-title { font-size: 13px; color: var(--text_sec); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dup-row .dup-meta { font-size: 10px; color: var(--text_dim); white-space: nowrap; flex-shrink: 0; }
     /* Shader folder browser */
     .ra-shader-crumbs { font-size: 12px; color: var(--text_dim); margin: 8px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
     .ra-shader-crumbs a { color: var(--accent); cursor: pointer; }
@@ -585,6 +596,20 @@
             <input type="text" id="gallery-search" placeholder="Search All Games…" autocomplete="off" spellcheck="false">
             <button id="btn-gsearch-clear" title="Clear search">✕</button>
           </div>
+          <select id="gallery-category" title="Show only…" aria-label="Type filter">
+            <option value="all">All Types</option>
+            <option value="console">Console</option>
+            <option value="handheld">Handheld</option>
+            <option value="arcade">Arcade</option>
+          </select>
+          <select id="gallery-sort" title="Sort by" aria-label="Sort">
+            <option value="alpha">A — Z</option>
+            <option value="played">Last Played</option>
+            <option value="favs">Favourites First</option>
+            <option value="want">Want to Play First</option>
+            <option value="added">Recently Added</option>
+            <option value="scraped">Scraped First</option>
+          </select>
           <span id="gallery-search-count"></span>
         </div>
 
@@ -1193,6 +1218,14 @@
               <div class="tool-card-title">Data</div>
               <button id="btn-settings-open-data-dir" style="width:100%;">Open Data Folder</button>
             </div>
+            <div class="tool-card" data-search="library maintenance duplicate duplicates orphan unused images videos clean disk space remove">
+              <div class="tool-card-title">Library Maintenance</div>
+              <button id="btn-find-duplicates" style="width:100%;">Find Duplicate Games…</button>
+              <div class="hint">Scans your library for repeated titles and lets you batch-remove the extras (ROM files are never deleted).</div>
+              <button id="btn-clean-media" style="width:100%; margin-top:10px;">Clean Unused Images &amp; Videos</button>
+              <div id="clean-media-status" style="font-size:11px; color:var(--text_dim); margin-top:6px;"></div>
+              <div class="hint">Deletes downloaded art &amp; trailers no longer linked to any game, to free disk space.</div>
+            </div>
           </section>
         </div>
       </div>
@@ -1391,6 +1424,25 @@
     </div>
   </div>
 
+  <!-- ── MODAL: DUPLICATE GAMES ────────────────────────────────────────────── -->
+  <div id="modal-duplicates" class="modal-overlay">
+    <div class="modal-wrapper">
+    <div class="modal-box wide tall">
+      <div class="modal-hdr">
+        <div class="modal-title">Duplicate Games</div>
+      </div>
+      <div class="ra-pane-hint">Same title on the same system. The most complete copy is kept by default — tick the ones to remove. ROM files are never deleted.</div>
+      <div id="dup-list" style="max-height:440px; overflow-y:auto; margin-top:6px; display:flex; flex-direction:column; gap:14px;"></div>
+      <div class="row" style="margin-top:12px;">
+        <button id="btn-dup-remove" class="danger" style="flex:1; font-weight:900;">Remove Selected</button>
+      </div>
+    </div>
+    <div class="modal-float-btns">
+      <button id="btn-duplicates-close" class="btn-modal-x">✕</button>
+    </div>
+    </div>
+  </div>
+
   <!-- ── MODAL: EXPRESS SHADER BROWSER ─────────────────────────────────────── -->
   <div id="modal-express-shaders" class="modal-overlay">
     <div class="modal-wrapper">
@@ -1456,6 +1508,10 @@
         </div>
       </div>
       <div id="playlist-picker-list" style="display:flex; flex-direction:column; gap:8px; max-height:350px; overflow-y:auto;"></div>
+      <div class="row" style="margin-top:12px; gap:8px;">
+        <input type="text" id="playlist-picker-new" placeholder="New playlist name…" style="flex:1;">
+        <button id="btn-playlist-picker-create" style="flex-shrink:0; white-space:nowrap; background:var(--accent); color:var(--bg); border-color:var(--accent); font-weight:900;">+ Create &amp; Add</button>
+      </div>
     </div>
   </div>
 
@@ -1525,6 +1581,28 @@
         </button>
       </div>
       <div id="scraper-picker-status" style="font-size:11px; color:var(--text_dim); min-height:16px;"></div>
+    </div>
+  </div>
+
+  <!-- ── MODAL: REFINE SCREENSCRAPER SEARCH ────────────────────────────────── -->
+  <div id="modal-refine-scrape" class="modal-overlay" style="z-index:30000;">
+    <div class="modal-box" style="width:440px;">
+      <div class="modal-hdr">
+        <div class="modal-title">Refine ScreenScraper Search</div>
+        <div class="modal-hdr-btns">
+          <button id="btn-refine-scrape-cancel" class="btn-modal-x">✕</button>
+        </div>
+      </div>
+      <div id="refine-scrape-sub" style="font-size:12px; color:var(--text_dim); margin-bottom:10px;"></div>
+      <div class="form-row" style="margin-bottom:8px;">
+        <label>Search name</label>
+        <input type="text" id="refine-scrape-name" placeholder="e.g. Mario Strikers Charged">
+        <div class="hint">Drop region tags, revisions and filename junk — just the game's title works best.</div>
+      </div>
+      <div class="row" style="margin-top:6px;">
+        <button id="btn-refine-scrape-go" style="flex:1; background:var(--accent); color:var(--bg); border-color:var(--accent); font-weight:900;">Search Again</button>
+      </div>
+      <div id="refine-scrape-status" style="font-size:11px; color:var(--text_dim); min-height:16px; margin-top:8px;"></div>
     </div>
   </div>
 

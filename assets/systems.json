@@ -43,7 +43,7 @@
     "name": "Nintendo Wii",
     "short_name": "wii",
     "extensions": "iso, rvz, wbfs, wad, wia, zip",
-    "screenscraper_id": 117,
+    "screenscraper_id": 16,
     "default_core": "dolphin_libretro.so",
     "launch_template": "retroarch -L {core} {rom}"
   },
@@ -438,5 +438,13 @@
     "screenscraper_id": null,
     "default_core": "",
     "launch_template": "{emulator} {rom}"
+  },
+  {
+    "name": "ScummVM",
+    "short_name": "scummvm",
+    "extensions": "scummvm",
+    "screenscraper_id": 123,
+    "default_core": "scummvm_libretro.so",
+    "launch_template": "retroarch -L {core} {rom}"
   }
 ]

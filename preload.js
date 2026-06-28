@@ -83,7 +83,7 @@ contextBridge.exposeInMainWorld('api', {
     readFileBase64:   (p)        => ipcRenderer.invoke('read-file-base64', p),
 
     // Screenscraper
-    scrapeGame:         (id)     => ipcRenderer.invoke('scrape-game', id),
+    scrapeGame:         (id, metaOnly, searchName) => ipcRenderer.invoke('scrape-game', id, !!metaOnly, searchName || ''),
     scrapeGameMeta:     (id)     => ipcRenderer.invoke('scrape-game', id, true),
     scrapeBatch:        (ids)    => ipcRenderer.invoke('scrape-batch', ids),
     cancelScrape:       ()       => ipcRenderer.invoke('cancel-scrape'),
@@ -158,6 +158,7 @@ contextBridge.exposeInMainWorld('api', {
     // Trailers
     checkLocalTrailer: (title)          => ipcRenderer.invoke('check-local-trailer', title),
     deleteTrailer:     (title)          => ipcRenderer.invoke('delete-trailer', title),
+    cleanUnusedMedia:  (dryRun)         => ipcRenderer.invoke('clean-unused-media', dryRun),
     searchYoutube:     (title)          => ipcRenderer.invoke('search-youtube', title),
     downloadTrailer:   (title, videoId) => ipcRenderer.invoke('download-trailer', title, videoId),
     onDownloadProgress:(cb)             => ipcRenderer.on('download-progress', (_, d) => cb(d)),
