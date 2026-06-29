@@ -4,6 +4,13 @@
 const $ = id => document.getElementById(id);
 const escHtml = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const hasArt = g => !!(g && (g.cover || g.logo || g.hero || (g.screenshot && String(g.screenshot).trim())));
+function artPlaceholderHTML(g, cta = true) {   // big/bold/stylish "no artwork" panel + optional scrape CTA
+    return `<div class="art-ph"><div class="art-ph-eyebrow">No Artwork</div>`
+         + `<div class="art-ph-title">${escHtml(g.title)}</div>`
+         + (cta ? `<div class="art-ph-cta"><span class="x">X</span> Scrape</div>` : '')
+         + `</div>`;
+}
 
 let games = [], systems = [], gamesById = new Map(), categories = [];
 let screen = 'start';
@@ -312,7 +319,7 @@ function updateListDetail(g) {   // CREMA media layers (cover backdrop + cycling
     let genre = g.genre ? String(g.genre) : '--'; if (genre.includes(',')) genre = genre.split(',')[0].trim(); $('stat-genre').textContent = genre;
     $('stat-players').textContent = g.players || '--';
     let d = g.description || '—'; if (d.length > 500) d = d.slice(0, 497) + '...'; $('game-desc').textContent = d;
-    const bg = $('cover-backdrop'), ss = $('screenshot-player'), mini = $('cover-mini');
+    const bg = $('cover-backdrop'), ss = $('screenshot-player'), mini = $('cover-mini'), noart = $('list-noart');
     bg.src = g.cover || g.hero || '';
     const shots = g.screenshot ? String(g.screenshot).split('|').map(s => s.trim()).filter(Boolean) : [];
     if (shots.length) {
@@ -320,12 +327,15 @@ function updateListDetail(g) {   // CREMA media layers (cover backdrop + cycling
         if (g.cover) { mini.src = g.cover; mini.classList.remove('hidden'); } else mini.classList.add('hidden');
         _ssTimer = setInterval(() => { k = (k + 1) % shots.length; ss.src = shots[k]; }, 4000);
     } else { ss.classList.remove('active'); ss.src = ''; mini.classList.add('hidden'); }
+    if (hasArt(g)) { noart.style.display = 'none'; noart.innerHTML = ''; }
+    else { noart.innerHTML = artPlaceholderHTML(g); noart.style.display = 'block'; }
 }
 function clearListDetail() {
     clearInterval(_ssTimer);
     ['stat-system', 'stat-release', 'stat-dev', 'stat-pub', 'stat-genre', 'stat-players'].forEach(id => $(id).textContent = '--');
     $('game-desc').textContent = '';
     $('cover-backdrop').src = ''; $('screenshot-player').classList.remove('active'); $('cover-mini').classList.add('hidden');
+    $('list-noart').style.display = 'none'; $('list-noart').innerHTML = '';
 }
 function listMove(dy) { if (dy) listSelect(listFocus + dy); }
 function listActivate() { const g = listList[listFocus]; if (g) openGamepage(g.id); }
@@ -359,7 +369,7 @@ function renderWall() {
     grid.innerHTML = galleryList.map((g, i) => {
         const coverArea = g.cover
             ? `<div class="gcell-cover-area"><img src="${g.cover}" alt="" loading="lazy" decoding="async"></div>`
-            : `<div class="gcell-cover-area"><div class="gcell-noart">${escHtml(g.title)}</div></div>`;
+            : `<div class="gcell-cover-area">${artPlaceholderHTML(g)}</div>`;
         const footer = `<div class="gcell-footer"><div class="gcell-title">${escHtml(g.title)}</div><div class="gcell-footer-row"><button class="gcell-play-btn gcell-installed-btn">▶ PLAY</button></div></div>`;
         return `<div class="gcell" id="gcell-${i}" data-id="${g.id}" data-i="${i}">${coverArea}${footer}</div>`;
     }).join('');
@@ -405,10 +415,11 @@ function openGamepage(id) {
     if (screen === 'wall' || screen === 'list') gpReturn = screen;   // B returns to whichever browse view
     const hero = g.hero || (g.screenshot ? String(g.screenshot).split('|')[0] : '') || g.cover || '';
     const heroImg = $('gp-hero-img'); heroImg.src = hero; heroImg.style.display = hero ? 'block' : 'none';
-    const logo = $('gp-logo'), title = $('gp-hero-title');
-    if (g.logo) { logo.src = g.logo; logo.style.display = 'block'; title.style.display = 'none'; }
-    else { logo.style.display = 'none'; title.style.display = 'block'; title.textContent = g.title || ''; }
-    $('gp-cover').innerHTML = g.cover ? `<img src="${g.cover}">` : `<div class="nocover">NO COVER ART</div>`;
+    const logo = $('gp-logo'), title = $('gp-hero-title'), heroPh = $('gp-hero-ph');
+    if (g.logo) { logo.src = g.logo; logo.style.display = 'block'; title.style.display = 'none'; heroPh.innerHTML = ''; }
+    else if (hero) { logo.style.display = 'none'; title.style.display = 'block'; title.textContent = g.title || ''; heroPh.innerHTML = ''; }
+    else { logo.style.display = 'none'; title.style.display = 'none'; heroPh.innerHTML = artPlaceholderHTML(g, false); }   // no art at all → stylish hero placeholder
+    $('gp-cover').innerHTML = g.cover ? `<img src="${g.cover}">` : artPlaceholderHTML(g, false);
     const ss = g.screenshot ? String(g.screenshot).split('|').filter(s => s.trim()) : [];
     if (ss.length) { $('gp-ss').style.display = 'block'; $('gp-ss').querySelector('img').src = ss[0]; } else $('gp-ss').style.display = 'none';
     $('gp-desc').textContent = g.description || 'No description available.';
@@ -419,11 +430,13 @@ function openGamepage(id) {
 }
 function buildGpActions() {
     const g = gpGame;
-    $('gp-actions').innerHTML = [
+    const acts = [
         `<button class="gp-btn play" data-act="play">▶ PLAY</button>`,
         `<button class="gp-btn${g.fav ? ' active' : ''}" data-act="fav">${g.fav ? '★ FAV' : '+ FAV'}</button>`,
         `<button class="gp-btn${g.want ? ' active' : ''}" data-act="want">${g.want ? '♥ WANT' : 'WANT TO PLAY'}</button>`,
-    ].join('');
+    ];
+    if (!hasArt(g)) acts.push(`<button class="gp-btn scrape" data-act="scrape">⟳ SCRAPE ARTWORK</button>`);
+    $('gp-actions').innerHTML = acts.join('');
     [...$('gp-actions').querySelectorAll('.gp-btn')].forEach((b, i) => b.onclick = () => { gpBtnFocus = i; updateGpFocus(); gpActivate(); });
 }
 const gpButtons = () => [...$('gp-actions').querySelectorAll('.gp-btn')];
@@ -433,6 +446,7 @@ async function gpActivate() {
     const b = gpButtons()[gpBtnFocus]; if (!b) return;
     const act = b.dataset.act;
     if (act === 'play') launch(gpGame.id);
+    else if (act === 'scrape') scrapeArtwork(gpGame.id);
     else { gpGame[act] = gpGame[act] ? 0 : 1; await window.api.setGameFlag(gpGame.id, act, gpGame[act]); buildGpActions(); updateGpFocus(); }
 }
 
@@ -456,6 +470,43 @@ function showNow(g) {
 }
 function hideNow() { $('couch-now').classList.add('hidden'); }
 function exitCouch() { window.api && window.api.exitCouch && window.api.exitCouch(); }
+
+// ── Scrape artwork (on-demand, from gallery/list/gamepage) ───────────────────
+let _scraping = false;
+async function scrapeArtwork(id) {
+    if (_scraping) return; _scraping = true;
+    const g = gamesById.get(id);
+    const n = $('couch-now');
+    n.classList.add('scraping');
+    n.querySelector('.now-label').textContent = 'SCRAPING ARTWORK…';
+    n.querySelector('.now-title').textContent = g ? g.title : '';
+    n.querySelector('.now-art').style.backgroundImage = 'none';
+    n.classList.remove('hidden');
+    let r;
+    try { r = await window.api.scrapeGame(id); } catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
+    _scraping = false;
+    if (!r || !r.ok) {   // surface the error (e.g. credentials not set) then auto-dismiss
+        n.querySelector('.now-label').textContent = (r && r.error) ? r.error : 'SCRAPE FAILED';
+        clearTimeout(_nowTimer); _nowTimer = setTimeout(() => { n.classList.remove('scraping'); hideNow(); }, 3500);
+        return;
+    }
+    // reload games so the new artwork shows everywhere, then refresh the active view
+    games = await window.api.getGames();
+    gamesById = new Map(games.map(x => [x.id, x]));
+    if (gpGame) gpGame = gamesById.get(gpGame.id) || gpGame;
+    n.classList.remove('scraping'); hideNow();
+    if (screen === 'gamepage') openGamepage(id);
+    else if (screen === 'wall') { renderWall(); focusGrid(gridFocus); }
+    else if (screen === 'list') { renderList(); listSelect(listFocus); }
+}
+function dispatchScrape() {   // X — scrape the focused/current game if it lacks artwork
+    if (oskOpen || menuOpen || _scraping) return;
+    let g = null;
+    if (screen === 'wall') g = galleryList[gridFocus];
+    else if (screen === 'list') g = listList[listFocus];
+    else if (screen === 'gamepage') g = gpGame;
+    if (g && !hasArt(g)) scrapeArtwork(g.id);
+}
 
 
 // ── Input dispatch (per active screen) ───────────────────────────────────────
@@ -506,6 +557,7 @@ document.addEventListener('keydown', e => {
         case 'Enter':      dispatchConfirm();  break;
         case 'Escape': case 'Backspace': dispatchBack(); break;
         case 'Tab': case 'y': case 'Y': dispatchAux(); e.preventDefault(); break;
+        case 'x': case 'X': dispatchScrape(); break;
         case '[': dispatchShoulder(-1); break;
         case ']': dispatchShoulder(1); break;
         case 'm': case 'M': dispatchMenu(); break;
@@ -522,6 +574,7 @@ function pollPad() {
         const edge = i => { const p = down(i); const w = _btnPrev[i]; _btnPrev[i] = p; return p && !w; };
         if (edge(0)) dispatchConfirm();      // A
         if (edge(1)) dispatchBack();         // B
+        if (edge(2)) dispatchScrape();       // X → scrape artwork
         if (edge(3)) dispatchAux();          // Y
         if (edge(4)) dispatchShoulder(-1);   // LB
         if (edge(5)) dispatchShoulder(1);    // RB

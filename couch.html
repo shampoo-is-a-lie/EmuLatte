@@ -24,7 +24,7 @@
                background: var(--bg_menu); border-top: 1px solid rgba(212,163,115,0.18); font-size: 12px; font-weight: 800; letter-spacing: 1px; color: var(--text_sec); }
     .prompts .pk { display: inline-flex; align-items: center; gap: 8px; }
     .pb { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; border-radius: 50%; font-size: 11px; font-weight: 900; color: var(--bg); }
-    .pb.a { background: #6cc24a; } .pb.b { background: #e05a4f; } .pb.y { background: #f4c430; }
+    .pb.a { background: #6cc24a; } .pb.b { background: #e05a4f; } .pb.y { background: #f4c430; } .pb.x { background: #4a90d9; }
     .pb.lr { background: var(--text_sec); border-radius: 6px; padding: 0 8px; }
 
     /* ── START: carousel ── */
@@ -81,8 +81,26 @@
     .gcell-play-btn { border: none; border-radius: 3px; font-size: 9px; font-weight: 900; padding: 2px 7px; letter-spacing: 1px; }
     .gcell-installed-btn { background: var(--accent); color: rgba(0,0,0,0.85); }
     .gcell.selected { border-color: var(--accent); transform: scale(1.10); box-shadow: 0 0 18px var(--accent), 0 8px 24px rgba(0,0,0,0.85); z-index: 10; }
-    .gcell-noart { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; color: var(--text_dim); font-size: 11px; text-align: center; padding: 8px; box-sizing: border-box; }
     .couch-empty { grid-column: 1/-1; text-align: center; padding: 80px; color: var(--text_dim); font-size: 16px; font-weight: 900; letter-spacing: 2px; }
+
+    /* ── "No artwork" placeholder (big/bold/stylish, scales to its box via container queries) ── */
+    .art-ph { container-type: size; position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4cqh; text-align: center; padding: 8% 7%; overflow: hidden;
+              background: radial-gradient(120% 90% at 50% 22%, color-mix(in srgb, var(--accent) 26%, var(--bg_panel)) 0%, var(--bg_panel) 48%, var(--bg) 100%); }
+    .art-ph::before { content: ""; position: absolute; inset: -20%; z-index: 0; opacity: 0.08; pointer-events: none;
+                      background: repeating-linear-gradient(135deg, var(--accent) 0 2px, transparent 2px 22px); }
+    .art-ph::after  { content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; box-shadow: inset 0 0 0 2px var(--border); border-radius: inherit; }
+    .art-ph > * { position: relative; z-index: 1; }
+    .art-ph-eyebrow { font-size: clamp(8px, 6cqh, 18px); font-weight: 900; letter-spacing: 0.32em; text-transform: uppercase; color: var(--accent); opacity: 0.85; }
+    .art-ph-title { font-weight: 900; line-height: 0.98; letter-spacing: -0.01em; color: var(--text_main); text-shadow: 0 3px 22px rgba(0,0,0,0.55);
+                    font-size: min(26cqh, 19cqw); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+    .art-ph-cta { display: inline-flex; align-items: center; gap: 0.5em; margin-top: 1cqh; font-size: clamp(8px, 6.5cqh, 17px); font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase;
+                  color: var(--bg); background: var(--accent); padding: 0.55em 1.1em; border-radius: 999px; box-shadow: 0 6px 20px rgba(0,0,0,0.45); }
+    .art-ph-cta .x { display: inline-flex; align-items: center; justify-content: center; min-width: 1.5em; height: 1.5em; border-radius: 50%; background: rgba(0,0,0,0.28); }
+
+    /* scrape progress overlay (reuses couch-now look) */
+    #couch-now.scraping .now-art { display: flex; align-items: center; justify-content: center; background: var(--bg_panel); }
+    #couch-now.scraping .now-art::after { content: "⟳"; font-size: 64px; color: var(--accent); animation: cn-spin 1s linear infinite; }
+    @keyframes cn-spin { to { transform: rotate(360deg); } }
 
     /* ── GAMEPAGE ── */
     #gp-hero { position: relative; height: 42vh; flex-shrink: 0; background: var(--bg_menu); overflow: hidden; }
@@ -97,9 +115,8 @@
     .gp-btn.play { background: var(--accent); color: var(--bg); border-color: var(--accent); }
     .gp-btn.play.gp-focus { box-shadow: 0 0 22px var(--accent); }
     #gp-content { flex: 1; min-height: 0; overflow-y: auto; display: flex; gap: 26px; padding: 24px 40px 30px; align-items: flex-start; }
-    #gp-cover { width: 220px; flex-shrink: 0; border-radius: 10px; overflow: hidden; border: 1px solid rgba(212,163,115,0.25); background: var(--bg_panel); }
+    #gp-cover { position: relative; width: 220px; aspect-ratio: 2/3; flex-shrink: 0; border-radius: 10px; overflow: hidden; border: 1px solid rgba(212,163,115,0.25); background: var(--bg_panel); }
     #gp-cover img { width: 100%; display: block; aspect-ratio: 2/3; object-fit: cover; }
-    #gp-cover .nocover { display: flex; align-items: center; justify-content: center; aspect-ratio: 2/3; color: var(--text_dim); font-size: 12px; font-weight: 900; letter-spacing: 2px; padding: 12px; text-align: center; }
     #gp-left { flex: 1; min-width: 0; }
     #gp-ss { position: relative; height: 200px; border-radius: 10px; overflow: hidden; border: 1px solid rgba(212,163,115,0.2); margin-bottom: 22px; display: none; }
     #gp-ss img { width: 100%; height: 100%; object-fit: cover; }
@@ -205,6 +222,7 @@
       <span class="pk"><span class="pb lr">✥</span> Move</span>
       <span class="pk"><span class="pb lr">LB / RB</span> Category</span>
       <span class="pk"><span class="pb y">Y</span> Search</span>
+      <span class="pk"><span class="pb x">X</span> Scrape</span>
     </footer>
   </div>
 
@@ -212,6 +230,7 @@
   <div id="screen-gamepage" class="screen hidden">
     <div id="gp-hero">
       <img id="gp-hero-img" src="" alt="">
+      <div id="gp-hero-ph"></div>
       <div id="gp-hero-grad"></div>
       <img id="gp-logo" src="" alt="">
       <div id="gp-hero-title"></div>
@@ -245,6 +264,7 @@
           <img id="screenshot-player" class="media-layer" src="">
           <img id="cover-backdrop" class="media-layer active" src="" style="object-fit: contain;">
           <img id="cover-mini" class="cover-art-overlay hidden" src="">
+          <div id="list-noart" style="display:none;"></div>
         </div>
         <div class="desc-box" id="game-desc"></div>
       </div>
@@ -264,6 +284,7 @@
       <span class="pk"><span class="pb lr">▲ ▼</span> Browse</span>
       <span class="pk"><span class="pb lr">LB / RB</span> Category</span>
       <span class="pk"><span class="pb y">Y</span> Search</span>
+      <span class="pk"><span class="pb x">X</span> Scrape</span>
     </footer>
   </div>
 
