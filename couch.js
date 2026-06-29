@@ -19,10 +19,12 @@ let wallFilter = 'all', wallTitle = 'ALL GAMES', wallSearch = '', gridFocus = 0;
 let browseMode = 'gallery', listFocus = 0, gpReturn = 'wall';
 let gpGame = null, gpBtnFocus = 0;
 
-const GP_LAYOUTS = {   // labels = physical button performing each action (standard Gamepad API: 0=bottom, 1=right, 3=top)
-    xbox:        { a: 'A', b: 'B', y: 'Y' },
-    playstation: { a: '✕', b: '○', y: '△' },
-    nintendo:    { a: 'B', b: 'A', y: 'X' },
+// CREMA gamepad glyphs: logical face buttons (Gamepad API positions) → per-layout icon file in assets/gamepad_icons/.
+// Fixed icons (dpad_*, L1, R1…) are used by data-btn name directly.
+const GP_GLYPHS = {
+    xbox:        { SOUTH: 'XBOX_A',        EAST: 'XBOX_B',              WEST: 'XBOX_X',          NORTH: 'XBOX_Y',             START: 'XBOX_start',        SELECT: 'XBOX_select' },
+    playstation: { SOUTH: 'playstation_X', EAST: 'playstation_circle',  WEST: 'playstation_square', NORTH: 'playstation_triangle', START: 'playstation_start', SELECT: 'playstation_select' },
+    nintendo:    { SOUTH: 'switch_b.300dpi', EAST: 'switch_a.300dpi',   WEST: 'switch_y.300dpi', NORTH: 'switch_x.300dpi',    START: 'switch_plus.300dpi', SELECT: 'switch_minus.300dpi' },
 };
 function autoDensity() {
     const h = window.screen.height || window.innerHeight || 1080;
@@ -42,11 +44,14 @@ async function init() {
     renderCarousel(); renderTiles();
     showScreen('start');
 }
-function applyGamepadLayout(layout) {
-    const L = GP_LAYOUTS[layout] || GP_LAYOUTS.xbox;
-    document.querySelectorAll('.pb.a').forEach(e => e.textContent = L.a);
-    document.querySelectorAll('.pb.b').forEach(e => e.textContent = L.b);
-    document.querySelectorAll('.pb.y').forEach(e => e.textContent = L.y);
+let gpLayout = 'xbox';
+function applyGamepadLayout(layout) {   // paint every .gp-glyph with the chosen layout's mask image
+    gpLayout = GP_GLYPHS[layout] ? layout : 'xbox';
+    const map = GP_GLYPHS[gpLayout];
+    document.querySelectorAll('.gp-glyph').forEach(el => {
+        const name = map[el.dataset.btn] || el.dataset.btn;   // mapped face button, or fixed icon name (dpad_*, L1…)
+        el.style.webkitMaskImage = `url('assets/gamepad_icons/${name}.png')`;
+    });
 }
 
 // ── Themes (ported from CafeNeurotico/CREMA; add more from CREMA's THEMES, same shape) ──
@@ -110,7 +115,7 @@ function overlayMove(dir) {
 }
 async function openMenu() {
     menuOpen = true; menuMode = 'main';
-    renderOverlay('SETTINGS', ['§APPEARANCE', 'Color Theme', 'Navigation Mode', 'Display Density', '§CONTROLS', 'Gamepad Buttons', '§SYSTEM', 'Close Menu', 'Exit Couch Mode']);
+    renderOverlay('SETTINGS', ['§APPEARANCE', 'Color Theme', 'Navigation Mode', 'Display Density', '§CONTROLS', 'Gamepad Icons', '§SYSTEM', 'Close Menu', 'Exit Couch Mode']);
 }
 function closeMenu() { menuOpen = false; $('overlay-backdrop').classList.add('hidden'); }
 async function openThemeMenu() {
@@ -123,7 +128,7 @@ async function openDensityMenu() {
 }
 async function openLayoutMenu() {
     menuMode = 'layout'; const cur = await getCfg('couch_gamepad_layout', 'xbox');
-    renderOverlay('GAMEPAD BUTTONS', ['§GAMEPAD BUTTONS', ...LAYOUT_OPTS.map(([l, v]) => v === cur ? '★ ' + l : l), 'Back']);
+    renderOverlay('GAMEPAD ICONS', ['§GAMEPAD ICONS', ...LAYOUT_OPTS.map(([l, v]) => v === cur ? '★ ' + l : l), 'Back']);
 }
 function openNavMenu() {
     menuMode = 'navmode';
@@ -136,7 +141,7 @@ function overlayConfirm() {
         if (raw === 'Color Theme') openThemeMenu();
         else if (raw === 'Navigation Mode') openNavMenu();
         else if (raw === 'Display Density') openDensityMenu();
-        else if (raw === 'Gamepad Buttons') openLayoutMenu();
+        else if (raw === 'Gamepad Icons') openLayoutMenu();
         else if (raw === 'Close Menu') closeMenu();
         else if (raw === 'Exit Couch Mode') exitCouch();
         return;

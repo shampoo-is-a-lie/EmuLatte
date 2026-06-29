@@ -26,6 +26,9 @@
     .pb { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; border-radius: 50%; font-size: 11px; font-weight: 900; color: var(--bg); }
     .pb.a { background: #6cc24a; } .pb.b { background: #e05a4f; } .pb.y { background: #f4c430; } .pb.x { background: #4a90d9; }
     .pb.lr { background: var(--text_sec); border-radius: 6px; padding: 0 8px; }
+    /* masked gamepad glyphs (CREMA assets/gamepad_icons, layout-switchable + theme-tinted) */
+    .gp-glyph { display: inline-block; width: 1.6em; height: 1.6em; vertical-align: middle; margin: 0 1px; background-color: var(--accent);
+                -webkit-mask-size: contain; -webkit-mask-position: center; -webkit-mask-repeat: no-repeat; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.5)); }
 
     /* ── START: carousel ── */
     #screen-start { background: var(--bg); }
@@ -193,10 +196,10 @@
     </div>
     <div id="cz-tiles" style="display:none;"></div>
     <footer class="prompts">
-      <span class="pk"><span class="pb a">A</span> Open</span>
-      <span class="pk"><span class="pb b">B</span> Exit</span>
-      <span class="pk"><span class="pb y">Y</span> Carousel / Tiles</span>
-      <span class="pk"><span class="pb lr">◄ ►</span> Browse</span>
+      <span class="pk"><span class="gp-glyph" data-btn="SOUTH"></span> Open</span>
+      <span class="pk"><span class="gp-glyph" data-btn="EAST"></span> Exit</span>
+      <span class="pk"><span class="gp-glyph" data-btn="NORTH"></span> Carousel / Tiles</span>
+      <span class="pk"><span class="gp-glyph" data-btn="dpad_left"></span><span class="gp-glyph" data-btn="dpad_right"></span> Browse</span>
     </footer>
   </div>
 
@@ -217,12 +220,12 @@
     </div>
     <div id="gallery-scroll"><div id="gallery-grid"></div></div>
     <footer class="prompts">
-      <span class="pk"><span class="pb a">A</span> Open</span>
-      <span class="pk"><span class="pb b">B</span> Back</span>
-      <span class="pk"><span class="pb lr">✥</span> Move</span>
-      <span class="pk"><span class="pb lr">LB / RB</span> Category</span>
-      <span class="pk"><span class="pb y">Y</span> Search</span>
-      <span class="pk"><span class="pb x">X</span> Scrape</span>
+      <span class="pk"><span class="gp-glyph" data-btn="dpad_up"></span><span class="gp-glyph" data-btn="dpad_down"></span><span class="gp-glyph" data-btn="dpad_left"></span><span class="gp-glyph" data-btn="dpad_right"></span> Move</span>
+      <span class="pk"><span class="gp-glyph" data-btn="L1"></span><span class="gp-glyph" data-btn="R1"></span> Category</span>
+      <span class="pk"><span class="gp-glyph" data-btn="SOUTH"></span> Open</span>
+      <span class="pk"><span class="gp-glyph" data-btn="EAST"></span> Back</span>
+      <span class="pk"><span class="gp-glyph" data-btn="NORTH"></span> Search</span>
+      <span class="pk"><span class="gp-glyph" data-btn="WEST"></span> Scrape</span>
     </footer>
   </div>
 
@@ -245,9 +248,9 @@
       <div id="gp-right"></div>
     </div>
     <footer class="prompts">
-      <span class="pk"><span class="pb a">A</span> Select</span>
-      <span class="pk"><span class="pb b">B</span> Back</span>
-      <span class="pk"><span class="pb lr">◄ ►</span> Actions</span>
+      <span class="pk"><span class="gp-glyph" data-btn="SOUTH"></span> Select</span>
+      <span class="pk"><span class="gp-glyph" data-btn="EAST"></span> Back</span>
+      <span class="pk"><span class="gp-glyph" data-btn="dpad_left"></span><span class="gp-glyph" data-btn="dpad_right"></span> Actions</span>
     </footer>
   </div>
 
@@ -275,16 +278,16 @@
         <div class="stat-box"><div class="stat-title">PUBLISHER</div><div class="stat-val" id="stat-pub">--</div></div>
         <div class="stat-box"><div class="stat-title">GENRE</div><div class="stat-val" id="stat-genre">--</div></div>
         <div class="stat-box"><div class="stat-title">PLAYERS</div><div class="stat-val" id="stat-players">--</div></div>
-        <div class="mini-dock" id="mini-dock"><div id="mini-prompt" class="mini-prompt">▶ A — PLAY</div></div>
+        <div class="mini-dock" id="mini-dock"><div id="mini-prompt" class="mini-prompt"><span class="gp-glyph" data-btn="SOUTH"></span> PLAY</div></div>
       </div>
     </div>
     <footer class="prompts">
-      <span class="pk"><span class="pb a">A</span> Play</span>
-      <span class="pk"><span class="pb b">B</span> Back</span>
-      <span class="pk"><span class="pb lr">▲ ▼</span> Browse</span>
-      <span class="pk"><span class="pb lr">LB / RB</span> Category</span>
-      <span class="pk"><span class="pb y">Y</span> Search</span>
-      <span class="pk"><span class="pb x">X</span> Scrape</span>
+      <span class="pk"><span class="gp-glyph" data-btn="dpad_up"></span><span class="gp-glyph" data-btn="dpad_down"></span> Browse</span>
+      <span class="pk"><span class="gp-glyph" data-btn="L1"></span><span class="gp-glyph" data-btn="R1"></span> Category</span>
+      <span class="pk"><span class="gp-glyph" data-btn="SOUTH"></span> Play</span>
+      <span class="pk"><span class="gp-glyph" data-btn="EAST"></span> Back</span>
+      <span class="pk"><span class="gp-glyph" data-btn="NORTH"></span> Search</span>
+      <span class="pk"><span class="gp-glyph" data-btn="WEST"></span> Scrape</span>
     </footer>
   </div>
 
