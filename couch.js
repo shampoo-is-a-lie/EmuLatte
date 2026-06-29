@@ -55,6 +55,7 @@ async function init() {
     applyGamepadLayout((await window.api.getSetting('couch_gamepad_layout')) || 'xbox');
     browseMode = (await window.api.getSetting('couch_browse_mode')) || 'gallery';
     couchSort = (await window.api.getSetting('couch_sort')) || 'alpha';
+    heroShow = (await window.api.getSetting('couch_hero_show')) || 'both';
     [games, systems] = await Promise.all([window.api.getGames(), window.api.getSystems()]);
     gamesById = new Map(games.map(g => [g.id, g]));
     await loadPlaylists();
@@ -107,7 +108,8 @@ const DENSITY_OPTS = [['Auto', 'auto'], ['Comfortable', '1.0'], ['Large', '1.5']
 const LAYOUT_OPTS  = [['Xbox', 'xbox'], ['PlayStation', 'playstation'], ['Nintendo', 'nintendo']];
 const NAV_OPTS     = [['Gallery', 'gallery'], ['List', 'list']];
 const SORT_OPTS    = [['A — Z', 'alpha'], ['Last Played', 'played'], ['Favourites First', 'favs'], ['Want to Play First', 'want'], ['Recently Added', 'added'], ['Scraped First', 'scraped']];
-let couchSort = 'alpha';
+const HERO_OPTS    = [['Logo & Name', 'both'], ['Logo Only', 'logo'], ['Name Only', 'name']];
+let couchSort = 'alpha', heroShow = 'both';
 const getCfg = async (k, d) => (await window.api.getSetting(k)) || d;
 
 function renderOverlay(title, items, hint) {
@@ -135,7 +137,7 @@ function overlayMove(dir) {
 }
 async function openMenu() {
     menuOpen = true; menuMode = 'main';
-    renderOverlay('SETTINGS', ['§APPEARANCE', 'Color Theme', 'Navigation Mode', 'Display Density', '§CONTROLS', 'Gamepad Icons', '§SYSTEM', 'Close Menu', 'Exit Couch Mode']);
+    renderOverlay('SETTINGS', ['§APPEARANCE', 'Color Theme', 'Carousel Label', 'Navigation Mode', 'Display Density', '§CONTROLS', 'Gamepad Icons', '§SYSTEM', 'Close Menu', 'Exit Couch Mode']);
 }
 function closeMenu() { menuOpen = false; $('overlay-backdrop').classList.add('hidden'); }
 async function openThemeMenu() {
@@ -153,6 +155,10 @@ async function openLayoutMenu() {
 function openNavMenu() {
     menuMode = 'navmode';
     renderOverlay('NAVIGATION MODE', ['§NAVIGATION MODE', ...NAV_OPTS.map(([l, v]) => v === browseMode ? '★ ' + l : l), 'Back'], 'Gallery = cover wall · List = list + details.');
+}
+function openHeroMenu() {
+    menuMode = 'hero';
+    renderOverlay('CAROUSEL LABEL', ['§CAROUSEL LABEL', ...HERO_OPTS.map(([l, v]) => v === heroShow ? '★ ' + l : l), 'Back'], 'What the start carousel shows for each system.');
 }
 function openSortMenu() {   // opened with SELECT from gallery/list — same options as EmuLatte's gallery sort
     menuOpen = true; menuMode = 'sort';
@@ -189,6 +195,7 @@ function overlayConfirm() {
     const raw = String(overlayItems[overlayIndex] || '').replace('★ ', '');
     if (menuMode === 'main') {
         if (raw === 'Color Theme') openThemeMenu();
+        else if (raw === 'Carousel Label') openHeroMenu();
         else if (raw === 'Navigation Mode') openNavMenu();
         else if (raw === 'Display Density') openDensityMenu();
         else if (raw === 'Gamepad Icons') openLayoutMenu();
@@ -218,6 +225,10 @@ function overlayConfirm() {
     else if (menuMode === 'sort') {
         const o = SORT_OPTS.find(([l]) => l === raw);
         if (o) { couchSort = o[1]; window.api.setSetting('couch_sort', o[1]); closeMenu(); resortActive(); }
+    }
+    else if (menuMode === 'hero') {
+        const o = HERO_OPTS.find(([l]) => l === raw);
+        if (o) { heroShow = o[1]; window.api.setSetting('couch_hero_show', o[1]); if (startMode === 'carousel') selectedHero(); openHeroMenu(); }
     }
 }
 function overlayBack() { if (menuMode === 'main' || menuMode === 'sort' || menuMode === 'playlists') closeMenu(); else openMenu(); }
@@ -335,9 +346,12 @@ function fillMosaic(key) {
 function categoryCount(c) { const n = c.count || 0; return `${n.toLocaleString()} ${n === 1 ? 'GAME' : 'GAMES'}`; }
 function selectedHero() {   // category name + stylish subtitle (Playlist tag + game count) over the cover mosaic
     const c = categories[catIndex];
-    const logoEl = $('cz-hero-logo');   // system logo above the name (systems only)
-    if (c.logo) { logoEl.src = c.logo; logoEl.style.display = 'block'; } else { logoEl.removeAttribute('src'); logoEl.style.display = 'none'; }
-    $('cz-hero-name').textContent = c.label;
+    const logoEl = $('cz-hero-logo'), nameEl = $('cz-hero-name');
+    const showLogo = !!c.logo && heroShow !== 'name';
+    const showName = heroShow === 'both' || heroShow === 'name' || !showLogo;   // always fall back to the name when no logo
+    if (showLogo) { logoEl.src = c.logo; logoEl.style.display = 'block'; } else { logoEl.removeAttribute('src'); logoEl.style.display = 'none'; }
+    nameEl.style.display = showName ? 'block' : 'none';
+    nameEl.textContent = c.label;
     const tag = $('cz-hero-tag');
     if (c.type === 'playlist') { tag.style.display = 'inline-block'; tag.textContent = 'Playlist'; } else tag.style.display = 'none';
     $('cz-hero-sub').textContent = categoryCount(c);
