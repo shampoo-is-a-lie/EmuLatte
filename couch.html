@@ -59,6 +59,7 @@
 
     /* ── GALLERY (CREMA gallery-screen, exact CSS, kept fluid) ── */
     #screen-wall { padding: 0; }
+    #screen-wall > .prompts { position: relative; z-index: 2; }   /* sit above #gallery-bg-grad (z1) */
     #gallery-bg { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
     #gallery-bg-img { display: none; }
     #gallery-bg-grad { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.78) 35%, rgba(0,0,0,0.97) 100%); z-index: 1; pointer-events: none; }
@@ -230,6 +231,7 @@
       <span class="pk"><span class="gp-glyph" data-btn="EAST"></span> Back</span>
       <span class="pk"><span class="gp-glyph" data-btn="NORTH"></span> Search</span>
       <span class="pk"><span class="gp-glyph" data-btn="WEST"></span> Scrape</span>
+      <span class="pk"><span class="gp-glyph" data-btn="SELECT"></span> Sort</span>
     </footer>
   </div>
 
@@ -294,6 +296,7 @@
       <span class="pk"><span class="gp-glyph" data-btn="EAST"></span> Back</span>
       <span class="pk"><span class="gp-glyph" data-btn="NORTH"></span> Search</span>
       <span class="pk"><span class="gp-glyph" data-btn="WEST"></span> Scrape</span>
+      <span class="pk"><span class="gp-glyph" data-btn="SELECT"></span> Sort</span>
     </footer>
   </div>
 

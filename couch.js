@@ -6,7 +6,7 @@ const escHtml = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const hasArt = g => !!(g && (g.cover || g.logo || g.hero || (g.screenshot && String(g.screenshot).trim())));
 const BLANK_IMG = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';   // 1×1 transparent — avoids the broken-image glyph
-function setImg(el, src) { if (!el) return; if (src) { el.src = src; el.style.display = ''; } else { el.src = BLANK_IMG; el.style.display = 'none'; } }
+function setImg(el, src) { if (!el) return; if (src) { el.src = src; el.style.display = 'block'; } else { el.src = BLANK_IMG; el.style.display = 'none'; } }
 function artPlaceholderHTML(g, cta = true) {   // big/bold/stylish "no artwork" panel + optional scrape CTA
     return `<div class="art-ph"><div class="art-ph-eyebrow">No Artwork</div>`
          + `<div class="art-ph-title">${escHtml(g.title)}</div>`
@@ -48,6 +48,7 @@ async function init() {
     if ((await window.api.getSetting('couch_hide_cursor')) === '1') document.body.style.cursor = 'none';
     applyGamepadLayout((await window.api.getSetting('couch_gamepad_layout')) || 'xbox');
     browseMode = (await window.api.getSetting('couch_browse_mode')) || 'gallery';
+    couchSort = (await window.api.getSetting('couch_sort')) || 'alpha';
     [games, systems] = await Promise.all([window.api.getGames(), window.api.getSystems()]);
     gamesById = new Map(games.map(g => [g.id, g]));
     buildCategories();
@@ -98,6 +99,8 @@ let menuOpen = false, menuMode = 'main', overlayItems = [], overlayIndex = 0;
 const DENSITY_OPTS = [['Auto', 'auto'], ['Comfortable', '1.0'], ['Large', '1.5'], ['Extra-Large', '2.0'], ['CRT (low-res)', '2.5']];
 const LAYOUT_OPTS  = [['Xbox', 'xbox'], ['PlayStation', 'playstation'], ['Nintendo', 'nintendo']];
 const NAV_OPTS     = [['Gallery', 'gallery'], ['List', 'list']];
+const SORT_OPTS    = [['A — Z', 'alpha'], ['Last Played', 'played'], ['Favourites First', 'favs'], ['Want to Play First', 'want'], ['Recently Added', 'added'], ['Scraped First', 'scraped']];
+let couchSort = 'alpha';
 const getCfg = async (k, d) => (await window.api.getSetting(k)) || d;
 
 function renderOverlay(title, items, hint) {
@@ -144,6 +147,11 @@ function openNavMenu() {
     menuMode = 'navmode';
     renderOverlay('NAVIGATION MODE', ['§NAVIGATION MODE', ...NAV_OPTS.map(([l, v]) => v === browseMode ? '★ ' + l : l), 'Back'], 'Gallery = cover wall · List = list + details.');
 }
+function openSortMenu() {   // opened with SELECT from gallery/list — same options as EmuLatte's gallery sort
+    menuOpen = true; menuMode = 'sort';
+    renderOverlay('SORT BY', ['§SORT BY', ...SORT_OPTS.map(([l, v]) => v === couchSort ? '★ ' + l : l)]);
+}
+function resortActive() { if (screen === 'wall') { renderWall(); focusGrid(0); } else if (screen === 'list') { renderList(); listSelect(0); } }
 function applyDensity(v) { const d = v === 'auto' ? autoDensity() : (parseFloat(v) || 1); if (window.api.setZoom) window.api.setZoom(d); }
 function overlayConfirm() {
     const raw = String(overlayItems[overlayIndex] || '').replace('★ ', '');
@@ -168,9 +176,14 @@ function overlayConfirm() {
             openNavMenu();
         }
     }
+    else if (menuMode === 'sort') {
+        const o = SORT_OPTS.find(([l]) => l === raw);
+        if (o) { couchSort = o[1]; window.api.setSetting('couch_sort', o[1]); closeMenu(); resortActive(); }
+    }
 }
-function overlayBack() { if (menuMode === 'main') closeMenu(); else openMenu(); }
+function overlayBack() { if (menuMode === 'main' || menuMode === 'sort') closeMenu(); else openMenu(); }
 function dispatchMenu() { if (menuOpen) closeMenu(); else openMenu(); }
+function dispatchSort() { if (oskOpen || menuOpen || _scraping) return; if (screen === 'wall' || screen === 'list') openSortMenu(); }
 
 // ── OSK search (CREMA on-screen keyboard) ────────────────────────────────────
 const OSK_COLS = 7, OSK_ROWS = 6;
@@ -382,8 +395,20 @@ function enterWall() {
 function wallGamesList() {
     let list = gamesInCategory(wallFilter);
     if (wallSearch) { const q = wallSearch.toLowerCase(); list = list.filter(g => (g.title || '').toLowerCase().includes(q)); }
-    if (wallFilter !== 'recent') list = [...list].sort((a, b) => (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' }));
-    return list;
+    return sortCouch(list);
+}
+const _isScraped = g => !!(g.cover || g.logo || g.screenshot || g.description);   // mirrors renderer isScraped
+function sortCouch(list) {   // same sort options as EmuLatte's gallery (currentSort)
+    const byTitle = (a, b) => (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' });
+    const arr = [...list];
+    switch (couchSort) {
+        case 'played':  return arr.sort((a, b) => (b.last_played || 0) - (a.last_played || 0) || byTitle(a, b));
+        case 'favs':    return arr.sort((a, b) => (b.fav ? 1 : 0) - (a.fav ? 1 : 0) || byTitle(a, b));
+        case 'want':    return arr.sort((a, b) => (b.want ? 1 : 0) - (a.want ? 1 : 0) || byTitle(a, b));
+        case 'added':   return arr.sort((a, b) => (b.id || 0) - (a.id || 0));
+        case 'scraped': return arr.sort((a, b) => (_isScraped(b) ? 1 : 0) - (_isScraped(a) ? 1 : 0) || byTitle(a, b));
+        default:        return arr.sort(byTitle);   // 'alpha'
+    }
 }
 function renderWall() {
     const grid = $('gallery-grid'); galleryList = wallGamesList();
@@ -582,6 +607,7 @@ document.addEventListener('keydown', e => {
         case 'Escape': case 'Backspace': dispatchBack(); break;
         case 'Tab': case 'y': case 'Y': dispatchAux(); e.preventDefault(); break;
         case 'x': case 'X': dispatchScrape(); break;
+        case 's': case 'S': dispatchSort(); break;
         case '[': dispatchShoulder(-1); break;
         case ']': dispatchShoulder(1); break;
         case 'm': case 'M': dispatchMenu(); break;
@@ -602,6 +628,7 @@ function pollPad() {
         if (edge(3)) dispatchAux();          // Y
         if (edge(4)) dispatchShoulder(-1);   // LB
         if (edge(5)) dispatchShoulder(1);    // RB
+        if (edge(8)) dispatchSort();         // Select → sort
         if (edge(9)) dispatchMenu();         // Start → settings menu
         const ax = gp.axes[0] || 0, ay = gp.axes[1] || 0, DZ = 0.5; let dx = 0, dy = 0;
         if (down(14) || ax < -DZ) dx = -1; else if (down(15) || ax > DZ) dx = 1;
