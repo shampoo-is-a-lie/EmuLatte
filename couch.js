@@ -5,11 +5,21 @@ const $ = id => document.getElementById(id);
 const escHtml = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const hasArt = g => !!(g && (g.cover || g.logo || g.hero || (g.screenshot && String(g.screenshot).trim())));
+const BLANK_IMG = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';   // 1×1 transparent — avoids the broken-image glyph
+function setImg(el, src) { if (!el) return; if (src) { el.src = src; el.style.display = ''; } else { el.src = BLANK_IMG; el.style.display = 'none'; } }
 function artPlaceholderHTML(g, cta = true) {   // big/bold/stylish "no artwork" panel + optional scrape CTA
     return `<div class="art-ph"><div class="art-ph-eyebrow">No Artwork</div>`
          + `<div class="art-ph-title">${escHtml(g.title)}</div>`
          + (cta ? `<div class="art-ph-cta"><span class="x">X</span> Scrape</div>` : '')
          + `</div>`;
+}
+function gcellMedia(g) {   // gallery card: screenshot background + logo on top (falls back to cover, then placeholder)
+    const shot = g.screenshot ? String(g.screenshot).split('|').map(s => s.trim()).filter(Boolean)[0] : '';
+    const bg = shot || g.cover || '';
+    if (!bg) return artPlaceholderHTML(g);
+    let html = `<img src="${bg}" alt="" loading="lazy" decoding="async">`;
+    if (g.logo) html += `<div class="gcell-shot-grad"></div><img class="gcell-logo" src="${g.logo}" alt="" loading="lazy" decoding="async">`;
+    return html;
 }
 
 let games = [], systems = [], gamesById = new Map(), categories = [];
@@ -324,14 +334,22 @@ function updateListDetail(g) {   // CREMA media layers (cover backdrop + cycling
     let genre = g.genre ? String(g.genre) : '--'; if (genre.includes(',')) genre = genre.split(',')[0].trim(); $('stat-genre').textContent = genre;
     $('stat-players').textContent = g.players || '--';
     let d = g.description || '—'; if (d.length > 500) d = d.slice(0, 497) + '...'; $('game-desc').textContent = d;
-    const bg = $('cover-backdrop'), ss = $('screenshot-player'), mini = $('cover-mini'), noart = $('list-noart');
-    bg.src = g.cover || g.hero || '';
+    const bg = $('cover-backdrop'), ss = $('screenshot-player'), mini = $('cover-mini'), logo = $('list-logo'), topgrad = $('list-media-topgrad'), noart = $('list-noart');
     const shots = g.screenshot ? String(g.screenshot).split('|').map(s => s.trim()).filter(Boolean) : [];
+    // Main media: a screenshot (cycling if several); fall back to hero/cover when there's none.
     if (shots.length) {
-        let k = 0; ss.src = shots[0]; ss.classList.add('active');
-        if (g.cover) { mini.src = g.cover; mini.classList.remove('hidden'); } else mini.classList.add('hidden');
-        _ssTimer = setInterval(() => { k = (k + 1) % shots.length; ss.src = shots[k]; }, 4000);
-    } else { ss.classList.remove('active'); ss.src = ''; mini.classList.add('hidden'); }
+        let k = 0; setImg(ss, shots[0]); ss.classList.add('active');
+        setImg(bg, ''); bg.classList.remove('active');
+        if (shots.length > 1) _ssTimer = setInterval(() => { k = (k + 1) % shots.length; ss.src = shots[k]; }, 4000);
+    } else {
+        setImg(ss, ''); ss.classList.remove('active');
+        const fb = g.hero || g.cover || '';
+        setImg(bg, fb); bg.classList.toggle('active', !!fb);
+    }
+    // Logo on top (over a gradient for legibility)
+    setImg(logo, g.logo || ''); topgrad.style.display = g.logo ? 'block' : 'none';
+    // Box art (the small cover) — keep
+    if (g.cover) { setImg(mini, g.cover); mini.classList.remove('hidden'); } else { setImg(mini, ''); mini.classList.add('hidden'); }
     if (hasArt(g)) { noart.style.display = 'none'; noart.innerHTML = ''; }
     else { noart.innerHTML = artPlaceholderHTML(g); noart.style.display = 'block'; }
 }
@@ -339,7 +357,10 @@ function clearListDetail() {
     clearInterval(_ssTimer);
     ['stat-system', 'stat-release', 'stat-dev', 'stat-pub', 'stat-genre', 'stat-players'].forEach(id => $(id).textContent = '--');
     $('game-desc').textContent = '';
-    $('cover-backdrop').src = ''; $('screenshot-player').classList.remove('active'); $('cover-mini').classList.add('hidden');
+    setImg($('cover-backdrop'), ''); $('cover-backdrop').classList.remove('active');
+    setImg($('screenshot-player'), ''); $('screenshot-player').classList.remove('active');
+    setImg($('list-logo'), ''); $('list-media-topgrad').style.display = 'none';
+    setImg($('cover-mini'), ''); $('cover-mini').classList.add('hidden');
     $('list-noart').style.display = 'none'; $('list-noart').innerHTML = '';
 }
 function listMove(dy) { if (dy) listSelect(listFocus + dy); }
@@ -372,9 +393,7 @@ function renderWall() {
     $('gallery-count').textContent = `${galleryList.length} GAMES`;
     if (!galleryList.length) { grid.innerHTML = '<div class="couch-empty">NO GAMES</div>'; updateGalleryBg(null); return; }
     grid.innerHTML = galleryList.map((g, i) => {
-        const coverArea = g.cover
-            ? `<div class="gcell-cover-area"><img src="${g.cover}" alt="" loading="lazy" decoding="async"></div>`
-            : `<div class="gcell-cover-area">${artPlaceholderHTML(g)}</div>`;
+        const coverArea = `<div class="gcell-cover-area">${gcellMedia(g)}</div>`;
         const footer = `<div class="gcell-footer"><div class="gcell-title">${escHtml(g.title)}</div><div class="gcell-footer-row"><button class="gcell-play-btn gcell-installed-btn">▶ PLAY</button></div></div>`;
         return `<div class="gcell" id="gcell-${i}" data-id="${g.id}" data-i="${i}">${coverArea}${footer}</div>`;
     }).join('');

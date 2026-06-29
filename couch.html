@@ -78,6 +78,8 @@
     .gcell { display: flex; flex-direction: column; height: 295px; border-radius: 8px; overflow: hidden; border: 3px solid transparent; transition: transform 0.13s ease, border-color 0.13s ease, box-shadow 0.13s ease; background: var(--bg_panel); cursor: pointer; content-visibility: auto; contain-intrinsic-size: auto 295px; }
     .gcell-cover-area { flex: 1; min-height: 0; position: relative; overflow: hidden; }
     .gcell-cover-area img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .gcell-shot-grad { position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(0,0,0,0.42) 0%, transparent 68%), linear-gradient(to top, rgba(0,0,0,0.5), transparent 55%); }
+    .gcell-cover-area img.gcell-logo { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 84%; height: 62%; object-fit: contain; filter: drop-shadow(0 3px 12px rgba(0,0,0,0.92)); }
     .gcell-footer { height: 46px; flex-shrink: 0; padding: 5px 8px; display: flex; flex-direction: column; justify-content: center; gap: 3px; background: var(--bg_panel); }
     .gcell-title { font-size: 11px; font-weight: bold; color: var(--text_sec); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .gcell-footer-row { display: flex; align-items: center; justify-content: space-between; }
@@ -146,6 +148,8 @@
     .media-layer.active { opacity: 1; }
     .cover-art-overlay { position: absolute; bottom: 20px; left: 20px; width: 140px; height: 210px; border: 3px solid var(--accent); border-radius: 4px; object-fit: cover; box-shadow: 0 10px 20px rgba(0,0,0,0.8); z-index: 10; transition: opacity 0.5s ease; opacity: 1; }
     .cover-art-overlay.hidden { opacity: 0; }
+    #list-media-topgrad { position: absolute; top: 0; left: 0; right: 0; height: 46%; z-index: 4; pointer-events: none; display: none; background: linear-gradient(to bottom, rgba(0,0,0,0.78) 0%, transparent 100%); }
+    #list-logo { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); max-width: 64%; max-height: 34%; object-fit: contain; z-index: 5; display: none; filter: drop-shadow(0 3px 14px rgba(0,0,0,0.92)); }
     .desc-box { font-size: 24px; color: var(--text_sec); line-height: 1.5; overflow: hidden; flex-shrink: 0; max-height: 33%; }
     .stats-view { flex: 2; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
     .stat-box { background-color: var(--bg_panel); border: 1px solid var(--border); border-radius: 12px; padding: 10px; text-align: center; display: flex; flex-direction: column; justify-content: center; min-width: 0; overflow: hidden; }
@@ -264,9 +268,11 @@
       <div class="list-view" id="game-list"></div>
       <div class="details-view">
         <div class="image-container" id="media-container">
-          <img id="screenshot-player" class="media-layer" src="">
-          <img id="cover-backdrop" class="media-layer active" src="" style="object-fit: contain;">
-          <img id="cover-mini" class="cover-art-overlay hidden" src="">
+          <img id="screenshot-player" class="media-layer" alt="">
+          <img id="cover-backdrop" class="media-layer" alt="">
+          <div id="list-media-topgrad"></div>
+          <img id="list-logo" alt="">
+          <img id="cover-mini" class="cover-art-overlay hidden" alt="">
           <div id="list-noart" style="display:none;"></div>
         </div>
         <div class="desc-box" id="game-desc"></div>
