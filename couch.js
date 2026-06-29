@@ -21,6 +21,7 @@ function autoDensity() {
     if (h <= 540) return 2.4; if (h <= 768) return 1.7; if (h <= 1080) return 1.25; return 1.0;
 }
 async function init() {
+    applyTheme((await window.api.getSetting('couch_theme')) || 'CREMA (DEFAULT)');
     const dRaw = (await window.api.getSetting('couch_density')) || 'auto';
     const density = dRaw === 'auto' ? autoDensity() : (parseFloat(dRaw) || 1);
     if (window.api.setZoom && density !== 1) window.api.setZoom(density);
@@ -38,6 +39,100 @@ function applyGamepadLayout(layout) {
     document.querySelectorAll('.pb.b').forEach(e => e.textContent = L.b);
     document.querySelectorAll('.pb.y').forEach(e => e.textContent = L.y);
 }
+
+// ── Themes (ported from CafeNeurotico/CREMA; add more from CREMA's THEMES, same shape) ──
+const THEMES = {
+    "CREMA (DEFAULT)": { bg: "#2C1E16", bg_panel: "rgba(67,40,24,0.6)", bg_menu: "#432818", accent: "#D4A373", text_main: "#FFE6A7", text_sec: "#E6CC98", text_dim: "#A47148", border: "rgba(212,163,115,0.2)", border_solid: "#8B5A2B" },
+    "DARK GRAY": { bg: "#141414", bg_panel: "rgba(0,0,0,0.5)", bg_menu: "#222222", accent: "#ffffff", text_main: "#ffffff", text_sec: "#bbbbbb", text_dim: "#777777", border: "rgba(255,255,255,0.1)", border_solid: "#555555" },
+    "CYBERPUNK": { bg: "#09090b", bg_panel: "rgba(26,26,46,0.7)", bg_menu: "#1a1a2e", accent: "#f3e600", text_main: "#00ffcc", text_sec: "#e0e0e0", text_dim: "#ff003c", border: "rgba(243,230,0,0.2)", border_solid: "#ff003c" },
+    "VAPOUR OS": { bg: "#171a21", bg_panel: "rgba(27,40,56,0.7)", bg_menu: "#1b2838", accent: "#66c0f4", text_main: "#c7d5e0", text_sec: "#8f98a0", text_dim: "#556b82", border: "rgba(102,192,244,0.2)", border_solid: "#2a475e" },
+    "MOVIESFLIX": { bg: "#141414", bg_panel: "rgba(255,255,255,0.07)", bg_menu: "#000000", accent: "#e50914", text_main: "#ffffff", text_sec: "#b3b3b3", text_dim: "#6d6d6d", border: "rgba(229,9,20,0.30)", border_solid: "#404040" },
+    "GREEN BOX": { bg: "#0e0e0e", bg_panel: "rgba(82,176,67,0.10)", bg_menu: "#111111", accent: "#52b043", text_main: "#ffffff", text_sec: "#a8d8a4", text_dim: "#3d8030", border: "rgba(82,176,67,0.22)", border_solid: "#1a3d1a" },
+    "SNOW": { bg: "#0a1628", bg_panel: "rgba(32,68,110,0.65)", bg_menu: "#0f2040", accent: "#93d0f0", text_main: "#e8f4ff", text_sec: "#8bbbd8", text_dim: "#4a7898", border: "rgba(147,208,240,0.18)", border_solid: "#1c4060" },
+    "GAME BOY DMG": { bg: "#0f380f", bg_panel: "rgba(48,98,48,0.70)", bg_menu: "#1a4a1a", accent: "#9bbc0f", text_main: "#9bbc0f", text_sec: "#8bac0f", text_dim: "#306230", border: "rgba(155,188,15,0.25)", border_solid: "#306230" },
+    "PIP BOY": { bg: "#000000", bg_panel: "rgba(0,20,0,0.7)", bg_menu: "#001100", accent: "#14ff00", text_main: "#14ff00", text_sec: "#0ea000", text_dim: "#0a6000", border: "rgba(20,255,0,0.2)", border_solid: "#0ea000" },
+    "DRACULA": { bg: "#282a36", bg_panel: "rgba(68,71,90,0.7)", bg_menu: "#44475a", accent: "#bd93f9", text_main: "#f8f8f2", text_sec: "#8be9fd", text_dim: "#8290bc", border: "rgba(189,147,249,0.2)", border_solid: "#8290bc" },
+    "GRUVBOX": { bg: "#282828", bg_panel: "rgba(60,56,54,0.8)", bg_menu: "#3c3836", accent: "#fabd2f", text_main: "#ebdbb2", text_sec: "#b8bb26", text_dim: "#a89984", border: "rgba(250,189,47,0.2)", border_solid: "#504945" },
+    "NORD": { bg: "#2e3440", bg_panel: "rgba(59,66,82,0.8)", bg_menu: "#3b4252", accent: "#88c0d0", text_main: "#eceff4", text_sec: "#e5e9f0", text_dim: "#7a8ba0", border: "rgba(136,192,208,0.2)", border_solid: "#5e6f84" },
+    "CATPPUCCIN MOCHA": { bg: "#1e1e2e", bg_panel: "rgba(30,30,46,0.8)", bg_menu: "#181825", accent: "#cba6f7", text_main: "#cdd6f4", text_sec: "#bac2de", text_dim: "#6c7086", border: "rgba(203,166,247,0.2)", border_solid: "#313244" },
+    "TOKYO NIGHT": { bg: "#1a1b26", bg_panel: "rgba(36,40,59,0.8)", bg_menu: "#16161e", accent: "#7aa2f7", text_main: "#c0caf5", text_sec: "#a9b1d6", text_dim: "#7885ac", border: "rgba(122,162,247,0.2)", border_solid: "#3d4468" },
+    "ROSÉ PINE": { bg: "#191724", bg_panel: "rgba(31,29,46,0.8)", bg_menu: "#1f1d2e", accent: "#c4a7e7", text_main: "#e0def4", text_sec: "#9ccfd8", text_dim: "#6e6a86", border: "rgba(196,167,231,0.2)", border_solid: "#26233a" },
+    "NES": { bg: "#18181A", bg_panel: "rgba(40,38,42,0.85)", bg_menu: "#222024", accent: "#C42020", text_main: "#F0F0F0", text_sec: "#C0B8C0", text_dim: "#706870", border: "rgba(196,32,32,0.22)", border_solid: "#3C3A3E" },
+    "SNES": { bg: "#1E1828", bg_panel: "rgba(50,42,80,0.72)", bg_menu: "#160E20", accent: "#8060C8", text_main: "#E8E0F0", text_sec: "#A890C8", text_dim: "#605090", border: "rgba(128,96,200,0.22)", border_solid: "#302050" },
+    "BLOODBORNE": { bg: "#0a0606", bg_panel: "rgba(60,20,10,0.78)", bg_menu: "#150808", accent: "#c0952a", text_main: "#e8d8b0", text_sec: "#b09070", text_dim: "#604830", border: "rgba(192,149,42,0.22)", border_solid: "#4a1818" },
+    "TRON LEGACY": { bg: "#000000", bg_panel: "rgba(0,200,255,0.08)", bg_menu: "#000508", accent: "#00c8ff", text_main: "#ffffff", text_sec: "#80d8ff", text_dim: "#204858", border: "rgba(0,200,255,0.28)", border_solid: "#0a1a20" },
+    "VAPORWAVE": { bg: "#0d0221", bg_panel: "rgba(80,10,100,0.65)", bg_menu: "#150330", accent: "#ff71ce", text_main: "#f0e0ff", text_sec: "#c080ff", text_dim: "#6030a0", border: "rgba(255,113,206,0.25)", border_solid: "#35005a" },
+};
+function applyTheme(name) {
+    const t = THEMES[name] || THEMES["CREMA (DEFAULT)"];
+    const r = document.documentElement;
+    Object.keys(t).forEach(k => r.style.setProperty('--' + k, t[k]));
+}
+
+// ── Settings menu (CREMA-style overlay) ──────────────────────────────────────
+let menuOpen = false, menuMode = 'main', overlayItems = [], overlayIndex = 0;
+const DENSITY_OPTS = [['Auto', 'auto'], ['Comfortable', '1.0'], ['Large', '1.5'], ['Extra-Large', '2.0'], ['CRT (low-res)', '2.5']];
+const LAYOUT_OPTS  = [['Xbox', 'xbox'], ['PlayStation', 'playstation'], ['Nintendo', 'nintendo']];
+const getCfg = async (k, d) => (await window.api.getSetting(k)) || d;
+
+function renderOverlay(title, items, hint) {
+    overlayItems = items;
+    const list = $('overlay-list'); $('overlay-title').textContent = title; list.innerHTML = '';
+    items.forEach((it, i) => {
+        const d = document.createElement('div');
+        if (it[0] === '§') { d.className = 'overlay-section'; d.textContent = it.slice(1); }
+        else { d.className = 'overlay-item'; d.id = 'ov-' + i; d.textContent = it; d.onclick = () => { overlayIndex = i; overlayConfirm(); }; }
+        list.appendChild(d);
+    });
+    overlayIndex = items.findIndex(it => it[0] !== '§'); if (overlayIndex < 0) overlayIndex = 0;
+    const he = $('overlay-hint'); if (hint) { he.textContent = hint; he.style.display = 'block'; } else he.style.display = 'none';
+    highlightOverlay();
+    $('overlay-backdrop').classList.remove('hidden');
+}
+function highlightOverlay() {
+    $('overlay-list').querySelectorAll('.overlay-item').forEach(e => e.classList.remove('selected'));
+    const el = $('ov-' + overlayIndex); if (el) { el.classList.add('selected'); el.scrollIntoView({ block: 'nearest' }); }
+}
+function overlayMove(dir) {
+    const sel = overlayItems.map((it, i) => it[0] !== '§' ? i : -1).filter(i => i >= 0);
+    let p = sel.indexOf(overlayIndex); if (p < 0) p = 0;
+    overlayIndex = sel[(p + dir + sel.length) % sel.length]; highlightOverlay();
+}
+async function openMenu() {
+    menuOpen = true; menuMode = 'main';
+    renderOverlay('SETTINGS', ['§APPEARANCE', 'Color Theme', 'Display Density', '§CONTROLS', 'Gamepad Buttons', '§SYSTEM', 'Close Menu', 'Exit Couch Mode']);
+}
+function closeMenu() { menuOpen = false; $('overlay-backdrop').classList.add('hidden'); }
+async function openThemeMenu() {
+    menuMode = 'theme'; const cur = await getCfg('couch_theme', 'CREMA (DEFAULT)');
+    renderOverlay('COLOR THEME', ['§COLOR THEME', ...Object.keys(THEMES).map(n => n === cur ? '★ ' + n : n), 'Back']);
+}
+async function openDensityMenu() {
+    menuMode = 'density'; const cur = await getCfg('couch_density', 'auto');
+    renderOverlay('DISPLAY DENSITY', ['§DISPLAY DENSITY', ...DENSITY_OPTS.map(([l, v]) => v === cur ? '★ ' + l : l), 'Back'], 'Scales the interface for TVs / CRTs. Works in 4:3 and 16:9.');
+}
+async function openLayoutMenu() {
+    menuMode = 'layout'; const cur = await getCfg('couch_gamepad_layout', 'xbox');
+    renderOverlay('GAMEPAD BUTTONS', ['§GAMEPAD BUTTONS', ...LAYOUT_OPTS.map(([l, v]) => v === cur ? '★ ' + l : l), 'Back']);
+}
+function applyDensity(v) { const d = v === 'auto' ? autoDensity() : (parseFloat(v) || 1); if (window.api.setZoom) window.api.setZoom(d); }
+function overlayConfirm() {
+    const raw = String(overlayItems[overlayIndex] || '').replace('★ ', '');
+    if (menuMode === 'main') {
+        if (raw === 'Color Theme') openThemeMenu();
+        else if (raw === 'Display Density') openDensityMenu();
+        else if (raw === 'Gamepad Buttons') openLayoutMenu();
+        else if (raw === 'Close Menu') closeMenu();
+        else if (raw === 'Exit Couch Mode') exitCouch();
+        return;
+    }
+    if (raw === 'Back') { openMenu(); return; }
+    if (menuMode === 'theme') { applyTheme(raw); window.api.setSetting('couch_theme', raw); openThemeMenu(); }
+    else if (menuMode === 'density') { const o = DENSITY_OPTS.find(([l]) => l === raw); if (o) { window.api.setSetting('couch_density', o[1]); applyDensity(o[1]); openDensityMenu(); } }
+    else if (menuMode === 'layout') { const o = LAYOUT_OPTS.find(([l]) => l === raw); if (o) { window.api.setSetting('couch_gamepad_layout', o[1]); applyGamepadLayout(o[1]); openLayoutMenu(); } }
+}
+function overlayBack() { if (menuMode === 'main') closeMenu(); else openMenu(); }
+function dispatchMenu() { if (menuOpen) closeMenu(); else openMenu(); }
 
 // ── Categories / media ───────────────────────────────────────────────────────
 function buildCategories() {
@@ -225,19 +320,21 @@ $('wall-search').addEventListener('input', e => { wallSearch = e.target.value.tr
 
 // ── Input dispatch (per active screen) ───────────────────────────────────────
 function dispatchNav(dx, dy) {
+    if (menuOpen) { if (dy) overlayMove(dy); return; }
     if (screen === 'start') { if (startMode === 'carousel') { if (dx) carouselMove(dx); } else tilesMove(dx, dy); }
     else if (screen === 'wall') wallMove(dx, dy);
     else if (screen === 'gamepage') { if (dx) gpMove(dx); }
 }
-function dispatchConfirm() { if (screen === 'start') selectCategory(); else if (screen === 'wall') wallActivate(); else gpActivate(); }
+function dispatchConfirm() { if (menuOpen) { overlayConfirm(); return; } if (screen === 'start') selectCategory(); else if (screen === 'wall') wallActivate(); else gpActivate(); }
 function dispatchBack() {
+    if (menuOpen) { overlayBack(); return; }
     if (!$('couch-now').classList.contains('hidden')) { hideNow(); return; }
     if (screen === 'gamepage') enterWall();
     else if (screen === 'wall') showScreen('start');
     else exitCouch();
 }
-function dispatchAux() { if (screen === 'start') toggleStartMode(); }
-function dispatchShoulder(dir) { if (screen === 'wall') wallCycleCategory(dir); }
+function dispatchAux() { if (menuOpen) return; if (screen === 'start') toggleStartMode(); }
+function dispatchShoulder(dir) { if (menuOpen) return; if (screen === 'wall') wallCycleCategory(dir); }
 
 document.addEventListener('keydown', e => {
     if (e.key === 'F11') { exitCouch(); return; }
@@ -252,6 +349,7 @@ document.addEventListener('keydown', e => {
         case 'Tab': case 'y': case 'Y': dispatchAux(); e.preventDefault(); break;
         case '[': dispatchShoulder(-1); break;
         case ']': dispatchShoulder(1); break;
+        case 'm': case 'M': dispatchMenu(); break;
     }
 });
 
@@ -268,6 +366,7 @@ function pollPad() {
         if (edge(3)) dispatchAux();          // Y
         if (edge(4)) dispatchShoulder(-1);   // LB
         if (edge(5)) dispatchShoulder(1);    // RB
+        if (edge(9)) dispatchMenu();         // Start → settings menu
         const ax = gp.axes[0] || 0, ay = gp.axes[1] || 0, DZ = 0.5; let dx = 0, dy = 0;
         if (down(14) || ax < -DZ) dx = -1; else if (down(15) || ax > DZ) dx = 1;
         if (down(12) || ay < -DZ) dy = -1; else if (down(13) || ay > DZ) dy = 1;
