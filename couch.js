@@ -295,9 +295,8 @@ const SYS_LOGOS = {
     ngpc: 'Neo_Geo_Pocket_Color_logo.svg', n64: 'Nintendo_64_wordmark.svg', nds: 'Nintendo_DS_Logo.svg',
     nes: 'NES.png', gc: 'nintendo gamecube.png', wii: 'Wii.svg',
     scummvm: 'ScummVM__Modern_Remastered__Logo.svg', segacd: 'Sega_CD_Logo.svg', dc: 'Dreamcast_logo_NTSC.svg',
-    sms: 'Master_System_Logo.svg', saturn: 'sega saturn.png',
+    sms: 'Master_System_Logo.svg', genesis: 'segagenesis.png', saturn: 'sega saturn.png',
     ps1: 'PlayStation_logo_and_wordmark.svg', ps2: 'PlayStation_2_logo.svg', snes: 'Super_Nintendo_Entertainment_System_logo.svg',
-    // genesis (Sega Mega Drive / Genesis): logo file was removed — add one to assets/logos/ and map it here.
 };
 const sysLogo = short => SYS_LOGOS[short] ? encodeURI('assets/logos/' + SYS_LOGOS[short]) : '';   // encodeURI handles spaces in filenames
 function buildCategories() {
