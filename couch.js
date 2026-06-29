@@ -57,12 +57,14 @@ async function init() {
     couchSort = (await window.api.getSetting('couch_sort')) || 'alpha';
     heroShow = (await window.api.getSetting('couch_hero_show')) || 'both';
     retroOn = (await window.api.getSetting('couch_retro')) === '1'; document.body.classList.toggle('retro', retroOn);
+    saverDelayMin = Number((await window.api.getSetting('couch_screensaver')) ?? '3') || 0;
     [games, systems] = await Promise.all([window.api.getGames(), window.api.getSystems()]);
     gamesById = new Map(games.map(g => [g.id, g]));
     await loadPlaylists();
     buildCategories();
     renderCarousel(); renderTiles();
     showScreen('start');
+    resetIdle();
 }
 let gpLayout = 'xbox';
 function applyGamepadLayout(layout) {   // paint every .gp-glyph with the chosen layout's mask image
@@ -158,6 +160,7 @@ const NAV_OPTS     = [['Gallery', 'gallery'], ['List', 'list']];
 const SORT_OPTS    = [['A — Z', 'alpha'], ['Last Played', 'played'], ['Favourites First', 'favs'], ['Want to Play First', 'want'], ['Recently Added', 'added'], ['Scraped First', 'scraped']];
 const HERO_OPTS    = [['Logo & Name', 'both'], ['Logo Only', 'logo'], ['Name Only', 'name']];
 const RETRO_OPTS   = [['Off', '0'], ['On', '1']];
+const SAVER_OPTS   = [['Off', '0'], ['1 min', '1'], ['3 min', '3'], ['5 min', '5'], ['10 min', '10']];
 let couchSort = 'alpha', heroShow = 'both', retroOn = false;
 const getCfg = async (k, d) => (await window.api.getSetting(k)) || d;
 
@@ -186,7 +189,7 @@ function overlayMove(dir) {
 }
 async function openMenu() {
     menuOpen = true; menuMode = 'main';
-    renderOverlay('SETTINGS', ['§APPEARANCE', 'Color Theme', 'Full-Retro', 'Carousel Label', 'Navigation Mode', 'Display Density', '§CONTROLS', 'Gamepad Icons', '§SYSTEM', 'Close Menu', 'Exit Couch Mode']);
+    renderOverlay('SETTINGS', ['§APPEARANCE', 'Color Theme', 'Full-Retro', 'Carousel Label', 'Navigation Mode', 'Display Density', 'Screensaver', '§CONTROLS', 'Gamepad Icons', '§SYSTEM', 'Close Menu', 'Exit Couch Mode']);
 }
 function closeMenu() { menuOpen = false; $('overlay-backdrop').classList.add('hidden'); }
 let _themeCat = null;
@@ -217,6 +220,10 @@ function openHeroMenu() {
 function openRetroMenu() {
     menuMode = 'retro';
     renderOverlay('FULL-RETRO', ['§FULL-RETRO', ...RETRO_OPTS.map(([l, v]) => (v === '1') === retroOn ? '★ ' + l : l), 'Back'], '8-bit pixel font for the interface.');
+}
+function openSaverMenu() {
+    menuMode = 'saver';
+    renderOverlay('SCREENSAVER', ['§AFTER IDLE', ...SAVER_OPTS.map(([l, v]) => Number(v) === saverDelayMin ? '★ ' + l : l), 'Back'], 'Shows a screenshot slideshow + clock when idle.');
 }
 function openSortMenu() {   // opened with SELECT from gallery/list — same options as EmuLatte's gallery sort
     menuOpen = true; menuMode = 'sort';
@@ -257,6 +264,7 @@ function overlayConfirm() {
         else if (raw === 'Carousel Label') openHeroMenu();
         else if (raw === 'Navigation Mode') openNavMenu();
         else if (raw === 'Display Density') openDensityMenu();
+        else if (raw === 'Screensaver') openSaverMenu();
         else if (raw === 'Gamepad Icons') openLayoutMenu();
         else if (raw === 'Close Menu') closeMenu();
         else if (raw === 'Exit Couch Mode') exitCouch();
@@ -298,6 +306,10 @@ function overlayConfirm() {
     else if (menuMode === 'retro') {
         const o = RETRO_OPTS.find(([l]) => l === raw);
         if (o) { retroOn = o[1] === '1'; window.api.setSetting('couch_retro', o[1]); document.body.classList.toggle('retro', retroOn); openRetroMenu(); }
+    }
+    else if (menuMode === 'saver') {
+        const o = SAVER_OPTS.find(([l]) => l === raw);
+        if (o) { saverDelayMin = Number(o[1]); window.api.setSetting('couch_screensaver', o[1]); resetIdle(); openSaverMenu(); }
     }
 }
 function overlayBack() {
@@ -670,6 +682,7 @@ async function launch(id) {   // opening a game: offer save states (resume vs fr
 }
 async function doLaunch(id, opts) {
     const g = gamesById.get(id); if (!g) return;
+    clearTimeout(saverTimer);   // pause the screensaver while a game is running (resumes on next input)
     showNow(g);
     const r = await window.api.launchGameEx(id, opts);
     clearTimeout(_nowTimer);
@@ -711,6 +724,44 @@ function ssActivate() {
     if (idx === 0) doLaunch(id, { fresh: true });
     else doLaunch(id, { slot: ssStates[idx - 1].slot });
 }
+
+// ── Screensaver (idle → fullscreen screenshot slideshow + clock) ─────────────
+let saverDelayMin = 3, saverTimer = null, saverActive = false, saverPool = [], saverIdx = 0, saverCycle = null, saverClock = null;
+function buildSaverPool() {
+    const pool = [];
+    for (const g of games) {
+        const shots = g.screenshot ? String(g.screenshot).split('|').map(s => s.trim()).filter(Boolean) : [];
+        const img = shots[0] || g.hero || g.cover || '';
+        if (img) pool.push({ img, title: g.title || '' });
+    }
+    for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+    return pool;
+}
+const saverClockText = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+function startSaver() {
+    if (saverActive || ssOpen) return;
+    if (!saverPool.length) saverPool = buildSaverPool();
+    if (!saverPool.length) return;
+    saverActive = true; saverIdx = 0; showSaverFrame();
+    $('saver').classList.remove('hidden');
+    saverCycle = setInterval(nextSaver, 9000);
+    $('saver-clock').textContent = saverClockText();
+    saverClock = setInterval(() => $('saver-clock').textContent = saverClockText(), 15000);
+}
+function showSaverFrame() {
+    const it = saverPool[saverIdx % saverPool.length];
+    const img = $('saver-img'); img.style.animation = 'none'; void img.offsetWidth; img.style.animation = '';   // restart Ken-Burns pan
+    img.src = it.img; $('saver-game').textContent = it.title;
+}
+function nextSaver() { saverIdx = (saverIdx + 1) % saverPool.length; showSaverFrame(); }
+function stopSaver() { saverActive = false; clearInterval(saverCycle); clearInterval(saverClock); $('saver').classList.add('hidden'); }
+function resetIdle() {
+    clearTimeout(saverTimer);
+    if (saverActive) stopSaver();
+    if (saverDelayMin > 0) saverTimer = setTimeout(startSaver, saverDelayMin * 60000);
+}
+// Returns true if the input was consumed waking the screensaver (caller should not act on it).
+function wokeSaver() { if (saverActive) { stopSaver(); resetIdle(); return true; } return false; }
 function showNow(g) {
     const n = $('couch-now');
     n.querySelector('.now-label').textContent = 'NOW LAUNCHING';
@@ -799,6 +850,8 @@ function dispatchShoulder(dir) { if (ssOpen || oskOpen || menuOpen) return; if (
 
 document.addEventListener('keydown', e => {
     if (e.key === 'F11') { exitCouch(); return; }
+    if (wokeSaver()) { e.preventDefault(); return; }   // any key wakes the screensaver (and is swallowed)
+    resetIdle();
     // While the OSK is open, type directly on a physical keyboard (CREMA parity)
     if (oskOpen) {
         if (e.key === 'Backspace') { oskBackspace(); e.preventDefault(); return; }
@@ -827,6 +880,8 @@ function pollPad() {
     const gp = firstPad();
     if (gp) {
         const down = i => !!(gp.buttons[i] && gp.buttons[i].pressed);
+        const anyAct = gp.buttons.some(b => b && b.pressed) || (gp.axes || []).some(a => Math.abs(a) > 0.5);
+        if (anyAct) { resetIdle(); if (wokeSaver()) { _btnPrev = {}; _navHeld = null; requestAnimationFrame(pollPad); return; } }
         const edge = i => { const p = down(i); const w = _btnPrev[i]; _btnPrev[i] = p; return p && !w; };
         if (edge(0)) dispatchConfirm();      // A
         if (edge(1)) dispatchBack();         // B
@@ -848,5 +903,6 @@ function pollPad() {
 requestAnimationFrame(pollPad);
 
 // The hero IS the carousel (controller/keyboard nav); a mouse click opens the shown category.
-$('cz-hero').addEventListener('click', () => selectCategory());
+$('cz-hero').addEventListener('click', () => { if (!wokeSaver()) selectCategory(); });
+document.addEventListener('mousemove', () => { if (!wokeSaver()) resetIdle(); });
 init();

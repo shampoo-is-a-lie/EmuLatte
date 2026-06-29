@@ -191,6 +191,15 @@
     .osk-key.sel { background: var(--accent); color: var(--bg); transform: scale(1.1); box-shadow: 0 0 15px var(--accent); }
     #osk-hint { margin-top: 20px; color: var(--text_dim); font-size: 18px; }
 
+    /* ── Screensaver ── */
+    #saver { position: absolute; inset: 0; z-index: 90; background: #000; overflow: hidden; }
+    #saver.hidden { display: none; }
+    #saver-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; animation: saver-pan 20s ease-in-out infinite alternate; }
+    @keyframes saver-pan { from { transform: scale(1.04) translate(-1%, -1%); } to { transform: scale(1.16) translate(1.5%, 1.5%); } }
+    #saver-grad { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.85), transparent 35%, transparent 75%, rgba(0,0,0,0.5)); }
+    #saver-clock { position: absolute; top: 40px; right: 54px; font-size: 64px; font-weight: 900; color: #fff; text-shadow: 0 4px 18px rgba(0,0,0,0.9); }
+    #saver-game { position: absolute; bottom: 48px; left: 60px; right: 60px; font-size: 40px; font-weight: 900; color: #fff; text-shadow: 0 4px 18px rgba(0,0,0,0.95); }
+
     /* ── Save-states modal ── */
     #ss-backdrop { position: absolute; inset: 0; z-index: 75; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.62); backdrop-filter: blur(6px); }
     #ss-backdrop.hidden { display: none; }
@@ -378,6 +387,14 @@
       <div id="osk-grid"></div>
       <div id="osk-hint">Press <strong>Y</strong> to clear · <strong>B</strong> to close</div>
     </div>
+  </div>
+
+  <!-- ── SCREENSAVER ── -->
+  <div id="saver" class="hidden">
+    <img id="saver-img" alt="">
+    <div id="saver-grad"></div>
+    <div id="saver-clock">--:--</div>
+    <div id="saver-game"></div>
   </div>
 
   <!-- ── SAVE-STATES modal (resume vs fresh) ── -->
