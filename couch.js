@@ -288,17 +288,18 @@ function oskBackspace() { oskSet(oskGet().slice(0, -1)); }
 // ── Categories / media ───────────────────────────────────────────────────────
 // System logos keyed by the (stable) short_name, files in assets/logos/ (mostly SVG, a few PNG).
 const SYS_LOGOS = {
-    '3do': '3DO_Logo.svg', fbn: 'fbneo.png', mame: 'MAMELogo.svg',
+    '3do': '3DO-Logo.png', fbn: 'fbneo.png', mame: 'MAMELogo.svg',
     a2600: 'Atari_2600_logo-01-04.svg', jaguar: 'Atari_Jaguar_logo.svg', lynx: 'Atari_Lynx_logo.svg',
     fds: 'Family_Computer_Disk_System_logo.svg', gb: 'Nintendo_Game_Boy_Logo.svg', gba: 'Game_Boy_Advance_logo.svg',
     gbc: 'Game_Boy_Color_logo.svg', pce: 'PC_engine_logo_red.svg', neogeo: 'Neogeo-logo.svg',
     ngpc: 'Neo_Geo_Pocket_Color_logo.svg', n64: 'Nintendo_64_wordmark.svg', nds: 'Nintendo_DS_Logo.svg',
-    nes: 'NES_logo.svg', gc: 'Nintendo_GameCube_Official_Logo.svg', wii: 'Wii.svg',
+    nes: 'NES.png', gc: 'nintendo gamecube.png', wii: 'Wii.svg',
     scummvm: 'ScummVM__Modern_Remastered__Logo.svg', segacd: 'Sega_CD_Logo.svg', dc: 'Dreamcast_logo_NTSC.svg',
-    sms: 'Master_System_Logo.svg', genesis: 'Sega_genesis_logo.svg', saturn: 'Sega_Saturn_Black_Logo.svg',
+    sms: 'Master_System_Logo.svg', saturn: 'sega saturn.png',
     ps1: 'PlayStation_logo_and_wordmark.svg', ps2: 'PlayStation_2_logo.svg', snes: 'Super_Nintendo_Entertainment_System_logo.svg',
+    // genesis (Sega Mega Drive / Genesis): logo file was removed — add one to assets/logos/ and map it here.
 };
-const sysLogo = short => SYS_LOGOS[short] ? 'assets/logos/' + SYS_LOGOS[short] : '';
+const sysLogo = short => SYS_LOGOS[short] ? encodeURI('assets/logos/' + SYS_LOGOS[short]) : '';   // encodeURI handles spaces in filenames
 function buildCategories() {
     const counts = {}; games.forEach(g => counts[g.system_id] = (counts[g.system_id] || 0) + 1);
     const sys = systems.filter(s => counts[s.id]).map(s => ({ key: 'sys:' + s.id, label: s.name, count: counts[s.id], logo: sysLogo(s.short_name) }))

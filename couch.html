@@ -35,9 +35,9 @@
     #cz-hero { flex: 1; position: relative; overflow: hidden; perspective: 1200px; }
     #cz-hero-fallback { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: clamp(40px,8vw,96px); font-weight: 900; letter-spacing: 4px; color: rgba(212,163,115,0.18); display: none; }
     #cz-hero-title { position: absolute; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; pointer-events: none; padding: 0 6%; }
-    /* fixed height = uniform size across systems; brightness(0) invert(1) = white silhouette (any logo, light or dark) + drop shadow */
+    /* fixed height = uniform size across systems; natural colors (logos pre-edited for dark bg) + drop shadow */
     #cz-hero-logo { display: none; height: clamp(76px, 13vh, 150px); width: auto; max-width: 72%; object-fit: contain; margin-bottom: 6px;
-                    filter: brightness(0) invert(1) drop-shadow(0 4px 14px rgba(0,0,0,0.85)); }
+                    filter: drop-shadow(0 4px 14px rgba(0,0,0,0.85)); }
     #cz-hero-name { font-size: clamp(40px, 7vw, 108px); font-weight: 900; letter-spacing: 4px; color: #fff; text-align: center; line-height: 1.02;
                     text-shadow: 0 4px 30px rgba(0,0,0,0.95), 0 0 70px rgba(0,0,0,0.85); }
     #cz-hero-tag { display: none; font-size: clamp(12px, 1.4vw, 18px); font-weight: 900; letter-spacing: 4px; text-transform: uppercase; color: var(--bg);
