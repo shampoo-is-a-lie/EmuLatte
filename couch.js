@@ -23,6 +23,12 @@ function gcellMedia(g) {   // gallery card: screenshot background + logo on top 
 }
 
 let games = [], systems = [], gamesById = new Map(), categories = [];
+let playlists = [], playlistGames = {};   // playlistGames[id] = [gameId,…]
+async function loadPlaylists() {
+    playlists = (await window.api.getPlaylists()) || [];
+    playlistGames = {};
+    for (const p of playlists) playlistGames[p.id] = (await window.api.getPlaylistGames(p.id)).map(g => g.id);
+}
 let screen = 'start';
 let catIndex = 0, startMode = 'carousel';
 let wallFilter = 'all', wallTitle = 'ALL GAMES', wallSearch = '', gridFocus = 0;
@@ -51,6 +57,7 @@ async function init() {
     couchSort = (await window.api.getSetting('couch_sort')) || 'alpha';
     [games, systems] = await Promise.all([window.api.getGames(), window.api.getSystems()]);
     gamesById = new Map(games.map(g => [g.id, g]));
+    await loadPlaylists();
     buildCategories();
     renderCarousel(); renderTiles();
     showScreen('start');
@@ -152,6 +159,31 @@ function openSortMenu() {   // opened with SELECT from gallery/list — same opt
     renderOverlay('SORT BY', ['§SORT BY', ...SORT_OPTS.map(([l, v]) => v === couchSort ? '★ ' + l : l)]);
 }
 function resortActive() { if (screen === 'wall') { renderWall(); focusGrid(0); } else if (screen === 'list') { renderList(); listSelect(0); } }
+
+// ── Playlists (gamepage: add/remove this game) ───────────────────────────────
+let _plGame = null;
+async function openPlaylistsMenu(keepIdx) {
+    _plGame = gpGame; if (!_plGame) return;
+    const inIds = new Set(await window.api.getGamePlaylists(_plGame.id));
+    menuOpen = true; menuMode = 'playlists';
+    const items = playlists.map(p => (inIds.has(p.id) ? '★ ' : '○ ') + p.name);
+    renderOverlay('PLAYLISTS', ['§' + (_plGame.title || '').toUpperCase(), ...items, '✛ New Playlist…', 'Back'],
+                  'A toggles · ★ in playlist · ○ not in playlist');
+    if (keepIdx != null) { overlayIndex = Math.min(keepIdx, overlayItems.length - 1); highlightOverlay(); }
+}
+async function togglePlaylistForGame(name, keepIdx) {
+    const p = playlists.find(pl => pl.name === name); if (!p || !_plGame) return;
+    const inIds = new Set(playlistGames[p.id] || []);
+    if (inIds.has(_plGame.id)) await window.api.removeGameFromPlaylist(p.id, _plGame.id);
+    else await window.api.addGameToPlaylist(p.id, _plGame.id);
+    await loadPlaylists(); buildCategories();
+    openPlaylistsMenu(keepIdx);
+}
+async function createPlaylistForGame(name) {
+    name = (name || '').trim();
+    if (name && _plGame) { const id = await window.api.addPlaylist(name); if (id) await window.api.addGameToPlaylist(id, _plGame.id); await loadPlaylists(); buildCategories(); }
+    openPlaylistsMenu();
+}
 function applyDensity(v) { const d = v === 'auto' ? autoDensity() : (parseFloat(v) || 1); if (window.api.setZoom) window.api.setZoom(d); }
 function overlayConfirm() {
     const raw = String(overlayItems[overlayIndex] || '').replace('★ ', '');
@@ -162,6 +194,13 @@ function overlayConfirm() {
         else if (raw === 'Gamepad Icons') openLayoutMenu();
         else if (raw === 'Close Menu') closeMenu();
         else if (raw === 'Exit Couch Mode') exitCouch();
+        return;
+    }
+    if (menuMode === 'playlists') {
+        const name = String(overlayItems[overlayIndex] || '').replace(/^[★○] /, '');
+        if (name === 'Back') { closeMenu(); return; }
+        if (name === '✛ New Playlist…') { openOSK({ mode: 'text', title: 'NEW PLAYLIST', onDone: createPlaylistForGame }); return; }
+        togglePlaylistForGame(name, overlayIndex);
         return;
     }
     if (raw === 'Back') { openMenu(); return; }
@@ -181,7 +220,7 @@ function overlayConfirm() {
         if (o) { couchSort = o[1]; window.api.setSetting('couch_sort', o[1]); closeMenu(); resortActive(); }
     }
 }
-function overlayBack() { if (menuMode === 'main' || menuMode === 'sort') closeMenu(); else openMenu(); }
+function overlayBack() { if (menuMode === 'main' || menuMode === 'sort' || menuMode === 'playlists') closeMenu(); else openMenu(); }
 function dispatchMenu() { if (menuOpen) closeMenu(); else openMenu(); }
 function dispatchSort() { if (oskOpen || menuOpen || _scraping) return; if (screen === 'wall' || screen === 'list') openSortMenu(); }
 
@@ -195,14 +234,18 @@ const OSK_KEYS = [
     ['2', '3', '4', '5', '6', '7', '8'],
     ['9', 'SPACE', 'BKSP', 'CLEAR', 'DONE', '.', '-'],
 ];
-let oskOpen = false, oskR = 0, oskC = 0;
-function openOSK() {
+let oskOpen = false, oskR = 0, oskC = 0, oskMode = 'search', oskBuf = '', oskDone = null;
+function openOSK(opts = {}) {   // mode 'search' (live-filters) or 'text' (buffer + onDone callback)
+    oskMode = opts.mode || 'search'; oskBuf = opts.initial || ''; oskDone = opts.onDone || null;
+    $('osk-title').textContent = opts.title || 'SEARCH';
     oskOpen = true; oskR = 0; oskC = 0;
     $('osk-backdrop').classList.remove('hidden'); renderOSK();
 }
-function closeOSK() { oskOpen = false; $('osk-backdrop').classList.add('hidden'); }
+function closeOSK() { oskOpen = false; oskDone = null; $('osk-backdrop').classList.add('hidden'); }
+function oskGet() { return oskMode === 'search' ? wallSearch : oskBuf; }
+function oskSet(v) { if (oskMode === 'search') { wallSearch = v; applySearchLive(); } else oskBuf = v; renderOSK(); }
 function renderOSK() {
-    $('osk-query').textContent = wallSearch + (wallSearch.length < 50 ? '_' : '');
+    const s = oskGet(); $('osk-query').textContent = s + (s.length < 50 ? '_' : '');
     const grid = $('osk-grid'); grid.innerHTML = '';
     for (let r = 0; r < OSK_ROWS; r++) for (let c = 0; c < OSK_COLS; c++) {
         const d = document.createElement('div');
@@ -219,17 +262,17 @@ function oskNav(dx, dy) {
     renderOSK();
 }
 function oskActivate() {
-    const key = OSK_KEYS[oskR][oskC];
-    if (key === 'SPACE') wallSearch += ' ';
-    else if (key === 'BKSP') wallSearch = wallSearch.slice(0, -1);
-    else if (key === 'CLEAR') wallSearch = '';
-    else if (key === 'DONE') { closeOSK(); return; }
-    else wallSearch += key;
-    renderOSK(); applySearchLive();
+    const key = OSK_KEYS[oskR][oskC]; let s = oskGet();
+    if (key === 'SPACE') s += ' ';
+    else if (key === 'BKSP') s = s.slice(0, -1);
+    else if (key === 'CLEAR') s = '';
+    else if (key === 'DONE') { const fn = oskDone, val = oskGet(); closeOSK(); if (fn) fn(val); return; }
+    else s += key;
+    oskSet(s);
 }
-function oskClear() { wallSearch = ''; renderOSK(); applySearchLive(); }
-function oskTypeChar(ch) { wallSearch += ch; renderOSK(); applySearchLive(); }
-function oskBackspace() { wallSearch = wallSearch.slice(0, -1); renderOSK(); applySearchLive(); }
+function oskClear() { oskSet(''); }
+function oskTypeChar(ch) { oskSet(oskGet() + ch); }
+function oskBackspace() { oskSet(oskGet().slice(0, -1)); }
 
 // ── Categories / media ───────────────────────────────────────────────────────
 function buildCategories() {
@@ -241,11 +284,15 @@ function buildCategories() {
     if (favs) categories.push({ key: 'favs', label: 'FAVOURITES', count: favs });
     categories.push({ key: 'recent', label: 'RECENT', count: Math.min(games.filter(g => g.last_played).length, 60) });
     categories = categories.concat(sys);
+    // Playlists last (so a left-wrap from the first item lands on them) — tagged for the "Playlist" subtitle
+    const pls = playlists.map(p => ({ key: 'pl:' + p.id, label: p.name, count: (playlistGames[p.id] || []).length, type: 'playlist', plId: p.id }));
+    categories = categories.concat(pls);
 }
 function gamesInCategory(key) {
     if (key === 'favs')   return games.filter(g => g.fav);
     if (key === 'recent') return [...games].sort((a, b) => (b.last_played || 0) - (a.last_played || 0)).slice(0, 60);
     if (key.startsWith('sys:')) { const id = Number(key.slice(4)); return games.filter(g => g.system_id === id); }
+    if (key.startsWith('pl:'))  { const ids = new Set(playlistGames[Number(key.slice(3))] || []); return games.filter(g => ids.has(g.id)); }
     return games;
 }
 function mediaForCategory(key) {
@@ -272,15 +319,19 @@ function fillMosaic(key) {
         }
     } else { m.style.display = 'none'; fb.style.display = 'block'; }
 }
-function selectedHero() {   // category name overlaid on the hero pictures + the cover mosaic
+function categoryCount(c) { const n = c.count || 0; return `${n.toLocaleString()} ${n === 1 ? 'GAME' : 'GAMES'}`; }
+function selectedHero() {   // category name + stylish subtitle (Playlist tag + game count) over the cover mosaic
     const c = categories[catIndex];
-    $('cz-hero-title').textContent = c.label;
+    $('cz-hero-name').textContent = c.label;
+    const tag = $('cz-hero-tag');
+    if (c.type === 'playlist') { tag.style.display = 'inline-block'; tag.textContent = 'Playlist'; } else tag.style.display = 'none';
+    $('cz-hero-sub').textContent = categoryCount(c);
     fillMosaic(c.key);
 }
 
 // ── START: carousel (full-screen hero per category; nav with ◄ ►) ────────────
 function renderCarousel() { selectedHero(); }
-function carouselMove(dir) { catIndex = clamp(catIndex + dir, 0, categories.length - 1); selectedHero(); }
+function carouselMove(dir) { const n = categories.length; catIndex = (catIndex + dir + n) % n; selectedHero(); }   // infinite roll (wraps)
 
 // ── START: tiles ─────────────────────────────────────────────────────────────
 function renderTiles() {
@@ -489,6 +540,7 @@ function buildGpActions() {
         `<button class="gp-btn play" data-act="play">▶ PLAY</button>`,
         `<button class="gp-btn${g.fav ? ' active' : ''}" data-act="fav">${g.fav ? '★ FAV' : '+ FAV'}</button>`,
         `<button class="gp-btn${g.want ? ' active' : ''}" data-act="want">${g.want ? '♥ WANT' : 'WANT TO PLAY'}</button>`,
+        `<button class="gp-btn" data-act="playlists">≡ PLAYLISTS</button>`,
     ];
     if (!hasArt(g)) acts.push(`<button class="gp-btn scrape" data-act="scrape">⟳ SCRAPE ARTWORK</button>`);
     $('gp-actions').innerHTML = acts.join('');
@@ -502,6 +554,7 @@ async function gpActivate() {
     const act = b.dataset.act;
     if (act === 'play') launch(gpGame.id);
     else if (act === 'scrape') scrapeArtwork(gpGame.id);
+    else if (act === 'playlists') openPlaylistsMenu();
     else { gpGame[act] = gpGame[act] ? 0 : 1; await window.api.setGameFlag(gpGame.id, act, gpGame[act]); buildGpActions(); updateGpFocus(); }
 }
 

@@ -34,9 +34,13 @@
     #screen-start { background: var(--bg); }
     #cz-hero { flex: 1; position: relative; overflow: hidden; perspective: 1200px; }
     #cz-hero-fallback { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: clamp(40px,8vw,96px); font-weight: 900; letter-spacing: 4px; color: rgba(212,163,115,0.18); display: none; }
-    #cz-hero-title { position: absolute; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; pointer-events: none;
-                     font-size: clamp(40px, 7vw, 108px); font-weight: 900; letter-spacing: 4px; color: #fff; text-align: center; padding: 0 6%;
-                     text-shadow: 0 4px 30px rgba(0,0,0,0.95), 0 0 70px rgba(0,0,0,0.85); }
+    #cz-hero-title { position: absolute; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; pointer-events: none; padding: 0 6%; }
+    #cz-hero-name { font-size: clamp(40px, 7vw, 108px); font-weight: 900; letter-spacing: 4px; color: #fff; text-align: center; line-height: 1.02;
+                    text-shadow: 0 4px 30px rgba(0,0,0,0.95), 0 0 70px rgba(0,0,0,0.85); }
+    #cz-hero-tag { display: none; font-size: clamp(12px, 1.4vw, 18px); font-weight: 900; letter-spacing: 4px; text-transform: uppercase; color: var(--bg);
+                   background: var(--accent); padding: 5px 18px; border-radius: 999px; box-shadow: 0 6px 22px rgba(0,0,0,0.55); }
+    #cz-hero-sub { font-size: clamp(14px, 1.9vw, 26px); font-weight: 900; letter-spacing: 5px; color: var(--accent); text-transform: uppercase;
+                   text-shadow: 0 2px 14px rgba(0,0,0,0.95); }
     .hero-mosaic { position: absolute; inset: 0; display: none; }
     .mosaic-img { position: absolute; border-radius: 12px; border: 3px solid rgba(212,163,115,0.5); box-shadow: 0 20px 30px rgba(0,0,0,0.8); object-fit: cover; opacity: 0; transition: all 0.6s cubic-bezier(0.2,0.8,0.2,1); }
     .mosaic-img.show { opacity: 1; }
@@ -198,7 +202,11 @@
     <div id="cz-hero">
       <div id="cz-hero-fallback">EMULATTE</div>
       <div class="hero-mosaic" id="cz-mosaic"></div>
-      <div id="cz-hero-title"></div>
+      <div id="cz-hero-title">
+        <div id="cz-hero-name"></div>
+        <div id="cz-hero-tag"></div>
+        <div id="cz-hero-sub"></div>
+      </div>
     </div>
     <div id="cz-tiles" style="display:none;"></div>
     <footer class="prompts">
