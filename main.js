@@ -65,7 +65,7 @@ function createWindow() {
         }
     });
     win.setMenu(null);
-    win.loadFile('index.html');
+    if (shouldStartCouch()) enterCouch(win); else win.loadFile('index.html');
 
     win.on('close', () => {
         if (!win.isMaximized() && !win.isMinimized() && !win.isFullScreen()) {   // don't persist couch-mode fullscreen bounds
@@ -232,21 +232,30 @@ ipcMain.on('window-maximize', e => {
 ipcMain.on('window-close', e => BrowserWindow.fromWebContents(e.sender)?.close());
 
 // ── COUCH MODE (fullscreen play-only face) ───────────────────────────────────
-// Phase 0: fullscreen on the window's CURRENT output (works natively on every platform).
-// Chosen-screen targeting + the Wayland→XWayland relaunch path arrive in Phase 4
-// (see docs/couch-mode-plan.md §3). couch.html/couch.js are the lean gamepad-first renderer.
-ipcMain.handle('enter-couch-mode', e => {
-    const win = BrowserWindow.fromWebContents(e.sender); if (!win) return { ok: false };
+// Fullscreens on the chosen display. A specific Target Screen is honoured on Windows / macOS / X11.
+// On Wayland the compositor controls window placement (an app can't move itself to another output),
+// so "Current screen" is the reliable path — optionally drag EmuLatte onto the target TV/CRT first,
+// then Go Fullscreen (Wayland DOES fullscreen on the window's current output). We deliberately do
+// NOT auto-relaunch under XWayland — that proved fragile with the AppImage runtime. See the plan §3.
+const couchSetting = (k, d) => db?.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value ?? d;
+function couchDisplayIndex() {
+    const arg = process.argv.find(a => a.startsWith('--couch-display='));
+    if (arg) return Number(arg.split('=')[1]) || 0;
+    return Number(couchSetting('couch_display', '0')) || 0;   // 0 = current/primary
+}
+function couchDisplay(idx) { if (!idx) return null; try { return require('electron').screen.getAllDisplays()[idx - 1] || null; } catch { return null; } }
+function enterCouch(win) {
+    if (!win) return;
+    const target = couchDisplay(couchDisplayIndex());
+    if (target) { win.setFullScreen(false); win.setBounds(target.bounds); }   // move first (honoured on X11/Win/macOS)
     win.setFullScreen(true);
     win.loadFile('couch.html');
-    return { ok: true };
-});
-ipcMain.handle('exit-couch-mode', e => {
-    const win = BrowserWindow.fromWebContents(e.sender); if (!win) return { ok: false };
-    win.setFullScreen(false);
-    win.loadFile('index.html');
-    return { ok: true };
-});
+    win.show();   // couch.js doesn't send 'renderer-ready'; show immediately (esp. start-in-couch)
+}
+function exitCouch(win) { if (win) { win.setFullScreen(false); win.loadFile('index.html'); } }
+const shouldStartCouch = () => process.argv.includes('--couch') || couchSetting('couch_start_on_launch', '') === '1';
+ipcMain.handle('enter-couch-mode', e => { enterCouch(BrowserWindow.fromWebContents(e.sender)); return { ok: true }; });
+ipcMain.handle('exit-couch-mode', e => { exitCouch(BrowserWindow.fromWebContents(e.sender)); return { ok: true }; });
 
 // ── SYSTEMS ──────────────────────────────────────────────────────────────────
 ipcMain.handle('get-systems', () => {

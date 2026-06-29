@@ -68,6 +68,17 @@ async function loadPlaylists() {
     renderPlaylistFilters();
 }
 
+async function loadCouchSettings() {
+    const dispSel = document.getElementById('couch-display-sel');
+    let mons = []; try { mons = await window.api.getMonitors(); } catch {}
+    dispSel.innerHTML = `<option value="0">Current screen</option>` + mons.map(m => `<option value="${m.index}">Screen ${m.index}</option>`).join('');
+    dispSel.value          = (await window.api.getSetting('couch_display'))        || '0';
+    document.getElementById('couch-density-sel').value = (await window.api.getSetting('couch_density'))        || 'auto';
+    document.getElementById('couch-layout-sel').value  = (await window.api.getSetting('couch_gamepad_layout')) || 'xbox';
+    document.getElementById('couch-start-chk').checked  = (await window.api.getSetting('couch_start_on_launch')) === '1';
+    document.getElementById('couch-cursor-chk').checked = (await window.api.getSetting('couch_hide_cursor'))     === '1';
+}
+
 async function loadCores() {
     allCores = await window.api.getCores();
 }
@@ -2486,6 +2497,7 @@ function wireUI() {
         coresEl.textContent = allCores.length ? `${allCores.length} core${allCores.length !== 1 ? 's' : ''} scanned.` : '';
         document.getElementById('ra-config-status').textContent = '';
         refreshRaConfigInfo();
+        await loadCouchSettings();
         openModal('modal-settings');
     });
 
@@ -3397,6 +3409,14 @@ function wireUI() {
         const dir = await window.api.getConfigDir();
         window.api.openPath(dir);
     });
+
+    // ── COUCH MODE settings ──────────────────────────────────────────────────
+    document.getElementById('couch-display-sel').addEventListener('change', e => window.api.setSetting('couch_display', e.target.value));
+    document.getElementById('couch-density-sel').addEventListener('change', e => window.api.setSetting('couch_density', e.target.value));
+    document.getElementById('couch-layout-sel').addEventListener('change', e => window.api.setSetting('couch_gamepad_layout', e.target.value));
+    document.getElementById('couch-start-chk').addEventListener('change', e => window.api.setSetting('couch_start_on_launch', e.target.checked ? '1' : ''));
+    document.getElementById('couch-cursor-chk').addEventListener('change', e => window.api.setSetting('couch_hide_cursor', e.target.checked ? '1' : ''));
+    document.getElementById('btn-enter-couch').addEventListener('click', () => { closeModal('modal-settings'); window.api.enterCouch(); });
 
     // ── DATA: BACKUP / RESTORE ───────────────────────────────────────────────
     const runBackup = async (scope, label) => {

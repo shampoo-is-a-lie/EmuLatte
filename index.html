@@ -1089,6 +1089,38 @@
                 </div>
               </div>
             </div>
+            <div class="tool-card" data-search="couch fullscreen tv crt gamepad controller play mode display screen density big picture 4:3 16:9">
+              <div class="tool-card-title">Couch Mode (Fullscreen)</div>
+              <div class="hint" style="margin-top:0;">A gamepad-first, play-only fullscreen face for a TV or CRT. Open it any time with <b>▶ GO FULLSCREEN</b> in the top bar.</div>
+              <div class="form-row">
+                <label>Target Screen</label>
+                <select id="couch-display-sel"><option value="0">Current screen</option></select>
+                <div class="hint">Which display couch mode opens on (Windows / macOS / X11). On <b>Wayland</b> apps can't pick the output — leave this on <b>Current screen</b> and drag EmuLatte onto your TV/CRT first, then Go Fullscreen.</div>
+              </div>
+              <div class="form-row">
+                <label>Display Density (CRT / TV)</label>
+                <select id="couch-density-sel">
+                  <option value="auto">Auto (by resolution)</option>
+                  <option value="1.0">Comfortable</option>
+                  <option value="1.5">Large</option>
+                  <option value="2.0">Extra-Large</option>
+                  <option value="2.5">CRT (low-res)</option>
+                </select>
+                <div class="hint">Scales the whole interface bigger for low-res TVs/CRTs. Works in both 4:3 and 16:9.</div>
+              </div>
+              <div class="form-row">
+                <label>Gamepad Buttons</label>
+                <select id="couch-layout-sel">
+                  <option value="xbox">Xbox (A / B)</option>
+                  <option value="playstation">PlayStation (✕ / ○)</option>
+                  <option value="nintendo">Nintendo (B / A)</option>
+                </select>
+                <div class="hint">Only changes the on-screen button labels.</div>
+              </div>
+              <label class="core-all-toggle" style="margin-top:6px;"><input type="checkbox" id="couch-start-chk"> Start in Couch Mode on launch</label>
+              <label class="core-all-toggle"><input type="checkbox" id="couch-cursor-chk"> Hide mouse cursor in Couch Mode</label>
+              <button id="btn-enter-couch" style="width:100%; margin-top:10px; background:var(--accent); color:var(--bg); border-color:var(--accent); font-weight:900;">▶ Enter Couch Mode</button>
+            </div>
           </section>
 
           <section class="cp-pane" data-pane="systems">

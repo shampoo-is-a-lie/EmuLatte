@@ -11,14 +11,32 @@ let catIndex = 0, startMode = 'carousel';
 let wallFilter = 'all', wallTitle = 'ALL GAMES', wallSearch = '', gridFocus = 0;
 let gpGame = null, gpBtnFocus = 0;
 
+const GP_LAYOUTS = {   // labels = physical button performing each action (standard Gamepad API: 0=bottom, 1=right, 3=top)
+    xbox:        { a: 'A', b: 'B', y: 'Y' },
+    playstation: { a: '✕', b: '○', y: '△' },
+    nintendo:    { a: 'B', b: 'A', y: 'X' },
+};
+function autoDensity() {
+    const h = window.screen.height || window.innerHeight || 1080;
+    if (h <= 540) return 2.4; if (h <= 768) return 1.7; if (h <= 1080) return 1.25; return 1.0;
+}
 async function init() {
-    const density = parseFloat(await window.api.getSetting('couch_density')) || 1;
+    const dRaw = (await window.api.getSetting('couch_density')) || 'auto';
+    const density = dRaw === 'auto' ? autoDensity() : (parseFloat(dRaw) || 1);
     if (window.api.setZoom && density !== 1) window.api.setZoom(density);
+    if ((await window.api.getSetting('couch_hide_cursor')) === '1') document.body.style.cursor = 'none';
+    applyGamepadLayout((await window.api.getSetting('couch_gamepad_layout')) || 'xbox');
     [games, systems] = await Promise.all([window.api.getGames(), window.api.getSystems()]);
     gamesById = new Map(games.map(g => [g.id, g]));
     buildCategories();
     renderCarousel(); renderTiles();
     showScreen('start');
+}
+function applyGamepadLayout(layout) {
+    const L = GP_LAYOUTS[layout] || GP_LAYOUTS.xbox;
+    document.querySelectorAll('.pb.a').forEach(e => e.textContent = L.a);
+    document.querySelectorAll('.pb.b').forEach(e => e.textContent = L.b);
+    document.querySelectorAll('.pb.y').forEach(e => e.textContent = L.y);
 }
 
 // ── Categories / media ───────────────────────────────────────────────────────
@@ -62,24 +80,15 @@ function fillMosaic(key) {
         }
     } else { m.style.display = 'none'; fb.style.display = 'block'; }
 }
+function selectedHero() {   // category name overlaid on the hero pictures + the cover mosaic
+    const c = categories[catIndex];
+    $('cz-hero-title').textContent = c.label;
+    fillMosaic(c.key);
+}
 
-// ── START: carousel ──────────────────────────────────────────────────────────
-const CZ_ITEM_W = 220;
-function renderCarousel() {
-    $('cz-track').innerHTML = categories.map(c =>
-        `<div class="cz-item"><div class="cz-label">${escHtml(c.label)}</div><div class="cz-count">${c.count}</div></div>`).join('');
-    [...$('cz-track').children].forEach((el, i) => el.onclick = () => { catIndex = i; updateCarousel(true); fillMosaic(categories[i].key); selectCategory(); });
-    updateCarousel(false); fillMosaic(categories[catIndex].key);
-}
-function updateCarousel(animated) {
-    const track = $('cz-track'); if (!track) return;
-    if (!animated) { track.style.transition = 'none'; void track.offsetWidth; }
-    const centerX = window.innerWidth / 2 - CZ_ITEM_W / 2;
-    track.style.transform = `translateX(${centerX - catIndex * CZ_ITEM_W}px)`;
-    if (!animated) { void track.offsetWidth; track.style.transition = ''; }
-    [...track.children].forEach((el, i) => { el.classList.remove('sel', 'near'); const d = Math.abs(i - catIndex); if (i === catIndex) el.classList.add('sel'); else if (d <= 2) el.classList.add('near'); });
-}
-function carouselMove(dir) { catIndex = clamp(catIndex + dir, 0, categories.length - 1); updateCarousel(true); fillMosaic(categories[catIndex].key); }
+// ── START: carousel (full-screen hero per category; nav with ◄ ►) ────────────
+function renderCarousel() { selectedHero(); }
+function carouselMove(dir) { catIndex = clamp(catIndex + dir, 0, categories.length - 1); selectedHero(); }
 
 // ── START: tiles ─────────────────────────────────────────────────────────────
 function renderTiles() {
@@ -105,9 +114,8 @@ function tilesMove(dx, dy) {
 function toggleStartMode() {
     startMode = startMode === 'carousel' ? 'tiles' : 'carousel';
     $('cz-hero').style.display = startMode === 'carousel' ? 'block' : 'none';
-    $('cz-track-outer').style.display = startMode === 'carousel' ? 'flex' : 'none';
     $('cz-tiles').style.display = startMode === 'tiles' ? 'grid' : 'none';
-    if (startMode === 'carousel') { updateCarousel(false); fillMosaic(categories[catIndex].key); } else updateTiles();
+    if (startMode === 'carousel') selectedHero(); else updateTiles();
 }
 function selectCategory() {
     const c = categories[catIndex];
@@ -131,10 +139,13 @@ function renderWall() {
     $('wall-count').textContent = `${list.length} GAME${list.length !== 1 ? 'S' : ''}`;
     if (!list.length) { grid.innerHTML = '<div class="couch-empty">NO GAMES</div>'; return; }
     grid.innerHTML = list.map(g => {
-        const art = g.cover
-            ? `<img class="cc-img" src="${g.cover}" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><div class="cc-fallback">${escHtml(g.title)}</div>`
-            : `<div class="cc-fallback" style="display:flex">${escHtml(g.title)}</div>`;
-        return `<button class="couch-card" data-id="${g.id}"><div class="cc-slot">${art}</div><div class="cc-title">${escHtml(g.title)}</div></button>`;
+        const ss = g.screenshot ? String(g.screenshot).split('|').map(s => s.trim()).filter(Boolean)[0] : '';
+        const bg = ss || g.cover || '';   // prefer a screenshot, fall back to cover, then a plain panel
+        const inner = bg
+            ? `<img class="cc-ss" src="${bg}" loading="lazy" decoding="async" onerror="this.style.display='none'"><div class="cc-grad"></div>`
+              + (g.logo ? `<img class="cc-logo" src="${g.logo}" loading="lazy" decoding="async">` : `<div class="cc-name">${escHtml(g.title)}</div>`)
+            : `<div class="cc-fallback">${escHtml(g.title)}</div>`;
+        return `<button class="couch-card" data-id="${g.id}"><div class="cc-slot">${inner}</div></button>`;
     }).join('');
 }
 const wallCards = () => [...$('couch-grid').querySelectorAll('.couch-card')];
@@ -268,5 +279,6 @@ function pollPad() {
 }
 requestAnimationFrame(pollPad);
 
-window.addEventListener('resize', () => { if (screen === 'start' && startMode === 'carousel') updateCarousel(false); });
+// The hero IS the carousel (controller/keyboard nav); a mouse click opens the shown category.
+$('cz-hero').addEventListener('click', () => selectCategory());
 init();
