@@ -177,7 +177,7 @@ function mediaForCategory(key) {
 }
 
 // ── Screen router ────────────────────────────────────────────────────────────
-function showScreen(s) { screen = s; ['start', 'wall', 'list', 'gamepage'].forEach(id => $('screen-' + id).classList.toggle('hidden', id !== s)); }
+function showScreen(s) { if (s !== 'list') clearInterval(_ssTimer); screen = s; ['start', 'wall', 'list', 'gamepage'].forEach(id => $('screen-' + id).classList.toggle('hidden', id !== s)); }
 
 // ── START: hero mosaic ───────────────────────────────────────────────────────
 function fillMosaic(key) {
@@ -235,47 +235,66 @@ function selectCategory() {
 }
 
 // ── LIST VIEW (CREMA main-screen style: list + media/details + stats) ────────
-function enterList() {
-    $('list-title').textContent = wallTitle;
-    renderList(); showScreen('list'); listSelect(0);
+let listList = [], _ssTimer = null;   // cached current category list + screenshot cycler
+function enterList() { renderList(); showScreen('list'); listSelect(0); }
+function renderList() {   // CREMA renderGameList
+    const l = $('game-list'); listList = wallGamesList();
+    $('list-cat-name').textContent = wallTitle;
+    $('list-count').textContent = `${listList.length} GAMES`;
+    if (!listList.length) { l.innerHTML = '<div class="couch-empty">NO GAMES</div>'; clearListDetail(); return; }
+    l.innerHTML = listList.map((g, i) => {
+        let p = ''; if (g.fav) p += '★ '; if (g.want) p += '♥ ';
+        return `<div class="game-item" id="game-${i}" data-i="${i}" data-id="${g.id}"><span class="list-install-dot">●</span>${p}${escHtml(g.title)}</div>`;
+    }).join('');
+    [...l.querySelectorAll('.game-item')].forEach(el => el.onclick = () => { listSelect(Number(el.dataset.i)); openGamepage(Number(el.dataset.id)); });
 }
-const listGamesList = () => wallGamesList();   // same category filter + sort as the gallery
-function renderList() {
-    const rows = $('list-rows'); const list = listGamesList();
-    $('list-count').textContent = `${list.length} GAME${list.length !== 1 ? 'S' : ''}`;
-    rows.innerHTML = list.length
-        ? list.map((g, i) => `<div class="list-row" data-i="${i}" data-id="${g.id}">${escHtml(g.title)}</div>`).join('')
-        : '<div class="couch-empty">NO GAMES</div>';
-    [...rows.querySelectorAll('.list-row')].forEach(el => el.onclick = () => { listSelect(Number(el.dataset.i)); openGamepage(Number(el.dataset.id)); });
+function listSelect(i) {   // CREMA updateGameSelection: selection + scroll + media/stats
+    if (!listList.length) return;
+    listFocus = clamp(i, 0, listList.length - 1);
+    const items = [...$('game-list').querySelectorAll('.game-item')];
+    items.forEach((el, j) => el.classList.toggle('selected', j === listFocus));
+    if (items[listFocus]) items[listFocus].scrollIntoView({ block: 'nearest' });
+    updateListDetail(listList[listFocus]);
 }
-function listSelect(i) {
-    const list = listGamesList(); if (!list.length) return;
-    listFocus = clamp(i, 0, list.length - 1);
-    const rows = [...$('list-rows').querySelectorAll('.list-row')];
-    rows.forEach((el, j) => el.classList.toggle('gp-focus', j === listFocus));
-    if (rows[listFocus]) rows[listFocus].scrollIntoView({ block: 'nearest' });
-    updateListDetail(list[listFocus]);
-}
-function updateListDetail(g) {
+function updateListDetail(g) {   // CREMA media layers (cover backdrop + cycling screenshots + cover-mini) + stats
+    clearInterval(_ssTimer);
     if (!g) return;
-    const media = g.hero || (g.screenshot ? String(g.screenshot).split('|')[0] : '') || g.cover || '';
-    const mi = $('list-media-img'); mi.src = media; mi.style.display = media ? 'block' : 'none';
-    const logo = $('list-logo'); if (g.logo) { logo.src = g.logo; logo.style.display = 'block'; } else logo.style.display = 'none';
-    $('list-desc').textContent = g.description || '';
-    const stats = [['SYSTEM', g.system_name], ['YEAR', g.year], ['GENRE', g.genre], ['DEVELOPER', g.developer], ['PLAYERS', g.players], ['RATING', g.rating]].filter(([, v]) => v);
-    $('list-stats').innerHTML = stats.map(([k, v]) => `<div class="list-stat"><span class="k">${k}</span><span class="v">${escHtml(v)}</span></div>`).join('');
+    $('stat-system').textContent = g.system_name || '--';
+    $('stat-release').textContent = g.year || '--';
+    $('stat-dev').textContent = g.developer || '--';
+    $('stat-pub').textContent = g.publisher || '--';
+    let genre = g.genre ? String(g.genre) : '--'; if (genre.includes(',')) genre = genre.split(',')[0].trim(); $('stat-genre').textContent = genre;
+    $('stat-players').textContent = g.players || '--';
+    let d = g.description || '—'; if (d.length > 500) d = d.slice(0, 497) + '...'; $('game-desc').textContent = d;
+    const bg = $('cover-backdrop'), ss = $('screenshot-player'), mini = $('cover-mini');
+    bg.src = g.cover || g.hero || '';
+    const shots = g.screenshot ? String(g.screenshot).split('|').map(s => s.trim()).filter(Boolean) : [];
+    if (shots.length) {
+        let k = 0; ss.src = shots[0]; ss.classList.add('active');
+        if (g.cover) { mini.src = g.cover; mini.classList.remove('hidden'); } else mini.classList.add('hidden');
+        _ssTimer = setInterval(() => { k = (k + 1) % shots.length; ss.src = shots[k]; }, 4000);
+    } else { ss.classList.remove('active'); ss.src = ''; mini.classList.add('hidden'); }
+}
+function clearListDetail() {
+    clearInterval(_ssTimer);
+    ['stat-system', 'stat-release', 'stat-dev', 'stat-pub', 'stat-genre', 'stat-players'].forEach(id => $(id).textContent = '--');
+    $('game-desc').textContent = '';
+    $('cover-backdrop').src = ''; $('screenshot-player').classList.remove('active'); $('cover-mini').classList.add('hidden');
 }
 function listMove(dy) { if (dy) listSelect(listFocus + dy); }
-function listActivate() { const g = listGamesList()[listFocus]; if (g) openGamepage(g.id); }
+function listActivate() { const g = listList[listFocus]; if (g) openGamepage(g.id); }
 function listCycleCategory(dir) {
     catIndex = clamp(catIndex + dir, 0, categories.length - 1);
     const c = categories[catIndex]; wallFilter = c.key; wallTitle = c.label;
-    $('list-title').textContent = wallTitle; renderList(); listSelect(0);
+    renderList(); listSelect(0);
 }
 
 // ── WALL ─────────────────────────────────────────────────────────────────────
+// ── GALLERY (CREMA gallery-screen: hero banner + 9-col grid, ported) ──────────
+const GALLERY_COLS = 9;
+let galleryList = [];   // cached current category list (avoids re-filter/sort on every nav)
 function enterWall() {
-    $('wall-title').textContent = wallTitle; $('wall-search').value = ''; wallSearch = '';
+    wallSearch = '';
     renderWall(); showScreen('wall'); focusGrid(0);
 }
 function wallGamesList() {
@@ -285,31 +304,53 @@ function wallGamesList() {
     return list;
 }
 function renderWall() {
-    const grid = $('couch-grid'); const list = wallGamesList();
-    $('wall-count').textContent = `${list.length} GAME${list.length !== 1 ? 'S' : ''}`;
-    if (!list.length) { grid.innerHTML = '<div class="couch-empty">NO GAMES</div>'; return; }
-    grid.innerHTML = list.map(g => {
-        const ss = g.screenshot ? String(g.screenshot).split('|').map(s => s.trim()).filter(Boolean)[0] : '';
-        const bg = ss || g.cover || '';   // prefer a screenshot, fall back to cover, then a plain panel
-        const inner = bg
-            ? `<img class="cc-ss" src="${bg}" loading="lazy" decoding="async" onerror="this.style.display='none'"><div class="cc-grad"></div>`
-              + (g.logo ? `<img class="cc-logo" src="${g.logo}" loading="lazy" decoding="async">` : `<div class="cc-name">${escHtml(g.title)}</div>`)
-            : `<div class="cc-fallback">${escHtml(g.title)}</div>`;
-        return `<button class="couch-card" data-id="${g.id}"><div class="cc-slot">${inner}</div></button>`;
+    const grid = $('gallery-grid'); galleryList = wallGamesList();
+    $('gallery-cat-name').textContent = wallTitle;
+    const tag = $('gallery-search-tag');
+    if (wallSearch) { tag.style.display = 'block'; tag.textContent = `"${wallSearch}"`; } else tag.style.display = 'none';
+    $('gallery-count').textContent = `${galleryList.length} GAMES`;
+    if (!galleryList.length) { grid.innerHTML = '<div class="couch-empty">NO GAMES</div>'; updateGalleryBg(null); return; }
+    grid.innerHTML = galleryList.map((g, i) => {
+        const coverArea = g.cover
+            ? `<div class="gcell-cover-area"><img src="${g.cover}" alt="" loading="lazy" decoding="async"></div>`
+            : `<div class="gcell-cover-area"><div class="gcell-noart">${escHtml(g.title)}</div></div>`;
+        const footer = `<div class="gcell-footer"><div class="gcell-title">${escHtml(g.title)}</div><div class="gcell-footer-row"><button class="gcell-play-btn gcell-installed-btn">▶ PLAY</button></div></div>`;
+        return `<div class="gcell" id="gcell-${i}" data-id="${g.id}" data-i="${i}">${coverArea}${footer}</div>`;
     }).join('');
+    [...grid.querySelectorAll('.gcell')].forEach(el => el.onclick = () => { gridFocus = Number(el.dataset.i); openGamepage(Number(el.dataset.id)); });
 }
-const wallCards = () => [...$('couch-grid').querySelectorAll('.couch-card')];
-function wallCols() { const c = wallCards(); if (c.length < 2) return 1; const t0 = c[0].offsetTop; let n = 1; for (let i = 1; i < c.length; i++) { if (c[i].offsetTop === t0) n++; else break; } return n; }
-function focusGrid(i) {
-    const c = wallCards(); $('couch-grid').querySelectorAll('.gp-focus').forEach(e => e.classList.remove('gp-focus'));
-    if (!c.length) return; gridFocus = clamp(i, 0, c.length - 1); c[gridFocus].classList.add('gp-focus'); c[gridFocus].scrollIntoView({ block: 'nearest' });
+function focusGrid(i) {   // CREMA updateGallerySelection: toggle .selected + keep centered + hero
+    if (!galleryList.length) { updateGalleryBg(null); return; }
+    gridFocus = clamp(i, 0, galleryList.length - 1);
+    $('gallery-grid').querySelectorAll('.gcell').forEach((el, j) => el.classList.toggle('selected', j === gridFocus));
+    const scroller = $('gallery-scroll'); const sel = $('gcell-' + gridFocus);
+    if (scroller && sel) {
+        if (gridFocus === 0) scroller.scrollTo({ top: 0, behavior: 'smooth' });
+        else { const target = Math.max(0, sel.offsetTop - scroller.clientHeight / 2 + sel.offsetHeight / 2); scroller.scrollTo({ top: target, behavior: 'smooth' }); }
+    }
+    updateGalleryBg(galleryList[gridFocus]);
 }
-function wallMove(dx, dy) { const c = wallCards(); if (!c.length) return; const cols = wallCols(); if (dy < 0) focusGrid(gridFocus - cols); else if (dy > 0) focusGrid(Math.min(gridFocus + cols, c.length - 1)); else { const n = gridFocus + dx; if (n >= 0 && n < c.length) focusGrid(n); } }
-function wallActivate() { const el = wallCards()[gridFocus]; if (el) openGamepage(Number(el.dataset.id)); }
+function updateGalleryBg(g) {   // CREMA updateGalleryBg: hero img + name + logo
+    const img = $('gallery-hero-img'), name = $('gallery-hero-game-name'), logo = $('gallery-hero-logo');
+    if (!g) { img.src = ''; img.style.display = 'none'; logo.src = ''; logo.style.display = 'none'; name.textContent = ''; return; }
+    const src = g.hero || (g.screenshot ? String(g.screenshot).split('|')[0] : '') || g.cover || '';
+    img.src = src; img.style.display = src ? 'block' : 'none';
+    name.textContent = g.title || '';
+    if (g.logo) { logo.src = g.logo; logo.style.display = 'block'; } else { logo.src = ''; logo.style.display = 'none'; }
+}
+function wallMove(dx, dy) {   // CREMA navigateGallery (9-col grid)
+    const N = galleryList.length; if (!N) return; let idx = gridFocus;
+    if (dx > 0) idx = (idx + 1) % N;
+    else if (dx < 0) idx = (idx - 1 + N) % N;
+    else if (dy > 0) { const next = idx + GALLERY_COLS; if (next < N) idx = next; }
+    else if (dy < 0) { const prev = idx - GALLERY_COLS; if (prev >= 0) idx = prev; }
+    if (idx !== gridFocus) focusGrid(idx);
+}
+function wallActivate() { const g = galleryList[gridFocus]; if (g) openGamepage(g.id); }
 function wallCycleCategory(dir) {
     catIndex = clamp(catIndex + dir, 0, categories.length - 1);
     const c = categories[catIndex]; wallFilter = c.key; wallTitle = c.label;
-    $('wall-title').textContent = wallTitle; renderWall(); focusGrid(0);
+    wallSearch = ''; renderWall(); focusGrid(0);
 }
 
 // ── GAMEPAGE ─────────────────────────────────────────────────────────────────
@@ -350,7 +391,6 @@ async function gpActivate() {
 }
 
 // ── Launch + Now Playing ─────────────────────────────────────────────────────
-$('couch-grid').addEventListener('click', e => { const c = e.target.closest('.couch-card'); if (c) { focusGrid(wallCards().indexOf(c)); openGamepage(Number(c.dataset.id)); } });
 let _nowTimer;
 async function launch(id) {
     const g = gamesById.get(id); if (!g) return;
@@ -371,8 +411,6 @@ function showNow(g) {
 function hideNow() { $('couch-now').classList.add('hidden'); }
 function exitCouch() { window.api && window.api.exitCouch && window.api.exitCouch(); }
 
-// ── Wall search ──────────────────────────────────────────────────────────────
-$('wall-search').addEventListener('input', e => { wallSearch = e.target.value.trim(); renderWall(); focusGrid(0); });
 
 // ── Input dispatch (per active screen) ───────────────────────────────────────
 function dispatchNav(dx, dy) {
@@ -401,7 +439,6 @@ function dispatchShoulder(dir) { if (menuOpen) return; if (screen === 'wall') wa
 
 document.addEventListener('keydown', e => {
     if (e.key === 'F11') { exitCouch(); return; }
-    if (document.activeElement === $('wall-search')) { if (e.key === 'Enter' || e.key === 'Escape') { $('wall-search').blur(); focusGrid(0); } return; }
     switch (e.key) {
         case 'ArrowUp':    dispatchNav(0, -1); e.preventDefault(); break;
         case 'ArrowDown':  dispatchNav(0, 1);  e.preventDefault(); break;

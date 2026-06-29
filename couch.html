@@ -50,25 +50,34 @@
     .cz-tile-label { position: absolute; bottom: 12px; left: 14px; right: 14px; font-size: 17px; font-weight: 900; letter-spacing: 1px; color: #fff; text-shadow: 0 2px 6px #000; }
     .cz-tile-count { position: absolute; top: 10px; right: 12px; font-size: 11px; font-weight: 900; color: var(--accent); background: rgba(0,0,0,0.6); padding: 3px 8px; border-radius: 10px; }
 
-    /* ── WALL ── */
-    #wall-header { flex-shrink: 0; display: flex; align-items: center; gap: 18px; padding: 14px 26px; background: var(--bg_menu); border-bottom: 1px solid rgba(212,163,115,0.18); }
-    .wall-title { font-size: 15px; font-weight: 900; letter-spacing: 4px; color: var(--accent); white-space: nowrap; }
-    #wall-search { flex: 1; max-width: 380px; background: rgba(0,0,0,0.35); border: 1.5px solid rgba(212,163,115,0.3); border-radius: 12px; color: var(--text_main); font-size: 15px; font-weight: 700; padding: 11px 16px; }
-    #wall-search::placeholder { color: var(--text_dim); font-weight: 400; font-style: italic; }
-    #wall-search:focus { outline: none; border-color: var(--accent); }
-    #wall-count { font-size: 11px; font-weight: 900; letter-spacing: 1.5px; color: var(--text_dim); white-space: nowrap; margin-left: auto; }
-    /* covers sized in vw so the column count (~6) stays consistent regardless of the density zoom */
-    #couch-grid { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(15vw, 1fr)); grid-auto-rows: max-content; gap: 18px; padding: 24px; align-content: start; }
-    .couch-card { background: var(--bg_panel); border: 2px solid transparent; border-radius: 10px; overflow: hidden; padding: 0; color: inherit; text-align: center; display: flex; flex-direction: column;
-                  transition: border-color .12s, transform .12s, box-shadow .12s; content-visibility: auto; contain-intrinsic-width: auto 240px; contain-intrinsic-height: auto 200px; }
-    .couch-card:hover { border-color: var(--accent); transform: scale(1.05); box-shadow: 0 10px 28px rgba(0,0,0,0.55), 0 0 22px rgba(212,163,115,0.25); }
-    .couch-card.gp-focus { border-color: #fff; transform: scale(1.11); box-shadow: 0 16px 40px rgba(0,0,0,0.65), 0 0 32px rgba(212,163,115,0.55); z-index: 5; }
-    .cc-slot { position: relative; width: 100%; aspect-ratio: 4 / 3; background: var(--bg); overflow: hidden; flex-shrink: 0; }
-    .cc-ss { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .cc-grad { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.6), transparent 55%); }
-    .cc-logo { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); max-width: 80%; max-height: 64%; object-fit: contain; filter: drop-shadow(0 3px 12px rgba(0,0,0,0.95)); }
-    .cc-name { position: absolute; left: 10px; right: 10px; bottom: 9px; font-size: 13px; font-weight: 800; color: #fff; text-align: center; text-shadow: 0 2px 7px #000; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-    .cc-fallback { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 10px; font-size: 13px; font-weight: 900; letter-spacing: 1px; color: var(--text_dim); text-align: center; }
+    /* ── GALLERY (CREMA gallery-screen, exact CSS, kept fluid) ── */
+    #screen-wall { padding: 0; }
+    #gallery-bg { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+    #gallery-bg-img { display: none; }
+    #gallery-bg-grad { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.78) 35%, rgba(0,0,0,0.97) 100%); z-index: 1; pointer-events: none; }
+    #gallery-hero { position: relative; z-index: 2; height: 265px; flex-shrink: 0; overflow: hidden; margin: 20px 70px 14px; border-radius: 12px; border: 1px solid var(--border_solid); background: var(--bg_panel); }
+    #gallery-hero-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    #gallery-hero-grad { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.15) 45%, rgba(0,0,0,0.92) 100%); z-index: 1; pointer-events: none; }
+    #gallery-header { position: absolute; top: 0; left: 0; right: 0; z-index: 2; display: flex; align-items: center; gap: 16px; padding: 18px 22px 10px; }
+    #gallery-cat-name { font-size: 26px; font-weight: 900; color: var(--accent); letter-spacing: 3px; text-transform: uppercase; text-shadow: 0 2px 8px rgba(0,0,0,1); }
+    #gallery-search-tag { font-size: 16px; color: rgba(255,255,255,0.75); font-style: italic; text-shadow: 0 1px 4px rgba(0,0,0,0.9); }
+    #gallery-count { position: absolute; bottom: 16px; left: 22px; z-index: 2; font-size: 14px; font-weight: 900; color: var(--text_dim); letter-spacing: 2px; text-shadow: 0 2px 8px rgba(0,0,0,1); }
+    #gallery-hero-game-name { position: absolute; bottom: 16px; right: 22px; z-index: 2; font-size: 26px; font-weight: 900; color: #fff; text-shadow: 0 2px 14px rgba(0,0,0,1); text-align: right; max-width: 60%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #gallery-hero-logo { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 2; max-width: 55%; max-height: 50%; object-fit: contain; display: none; filter: drop-shadow(0 4px 24px rgba(0,0,0,0.95)); }
+    #gallery-scroll { position: relative; z-index: 2; flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+    #gallery-scroll::-webkit-scrollbar { width: 0; }
+    #gallery-grid { display: grid; grid-template-columns: repeat(9, 1fr); grid-auto-rows: auto; gap: 16px; padding: 22px 70px; align-content: start; }
+    .gallery-section-header { grid-column: 1 / -1; font-size: 12px; font-weight: 900; letter-spacing: 3px; padding: 6px 10px; border-radius: 4px; min-height: 30px; display: flex; align-items: center; background: var(--bg_panel); color: var(--text_dim); border: 1px solid var(--border_solid); }
+    .gcell { display: flex; flex-direction: column; height: 295px; border-radius: 8px; overflow: hidden; border: 3px solid transparent; transition: transform 0.13s ease, border-color 0.13s ease, box-shadow 0.13s ease; background: var(--bg_panel); cursor: pointer; content-visibility: auto; contain-intrinsic-size: auto 295px; }
+    .gcell-cover-area { flex: 1; min-height: 0; position: relative; overflow: hidden; }
+    .gcell-cover-area img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .gcell-footer { height: 46px; flex-shrink: 0; padding: 5px 8px; display: flex; flex-direction: column; justify-content: center; gap: 3px; background: var(--bg_panel); }
+    .gcell-title { font-size: 11px; font-weight: bold; color: var(--text_sec); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .gcell-footer-row { display: flex; align-items: center; justify-content: space-between; }
+    .gcell-play-btn { border: none; border-radius: 3px; font-size: 9px; font-weight: 900; padding: 2px 7px; letter-spacing: 1px; }
+    .gcell-installed-btn { background: var(--accent); color: rgba(0,0,0,0.85); }
+    .gcell.selected { border-color: var(--accent); transform: scale(1.10); box-shadow: 0 0 18px var(--accent), 0 8px 24px rgba(0,0,0,0.85); z-index: 10; }
+    .gcell-noart { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; color: var(--text_dim); font-size: 11px; text-align: center; padding: 8px; box-sizing: border-box; }
     .couch-empty { grid-column: 1/-1; text-align: center; padding: 80px; color: var(--text_dim); font-size: 16px; font-weight: 900; letter-spacing: 2px; }
 
     /* ── GAMEPAGE ── */
@@ -96,24 +105,30 @@
     .gp-stat .k { color: var(--text_dim); font-weight: 800; letter-spacing: 1px; }
     .gp-stat .v { color: var(--text_main); font-weight: 700; text-align: right; }
 
-    /* ── LIST VIEW (CREMA main-screen style) ── */
-    #list-header { flex-shrink: 0; display: flex; align-items: center; gap: 18px; padding: 14px 26px; background: var(--bg_menu); border-bottom: 1px solid var(--border); }
-    #list-title { font-size: 15px; font-weight: 900; letter-spacing: 4px; color: var(--accent); white-space: nowrap; }
-    #list-count { margin-left: auto; font-size: 11px; font-weight: 900; letter-spacing: 1.5px; color: var(--text_dim); }
-    #list-body { flex: 1; min-height: 0; display: flex; }
-    #list-rows { width: 40%; max-width: 540px; min-width: 280px; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 3px; }
-    .list-row { padding: 13px 18px; border-radius: 8px; font-size: 18px; font-weight: 700; color: var(--text_sec); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .list-row.gp-focus { background: var(--accent); color: var(--bg); font-weight: 900; }
-    #list-detail { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 22px 26px 22px 12px; gap: 16px; overflow: hidden; }
-    #list-media { position: relative; flex: 1; min-height: 0; border-radius: 14px; overflow: hidden; background: var(--bg); border: 1px solid var(--border); }
-    #list-media-img { width: 100%; height: 100%; object-fit: cover; }
-    #list-media-grad { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.8), transparent 55%); }
-    #list-logo { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); max-width: 62%; max-height: 56%; object-fit: contain; filter: drop-shadow(0 4px 18px rgba(0,0,0,0.92)); display: none; }
-    #list-desc { font-size: 15px; line-height: 1.6; color: var(--text_sec); max-height: 24%; overflow: hidden; }
-    #list-stats { display: flex; flex-wrap: wrap; gap: 8px; }
-    .list-stat { font-size: 12px; padding: 7px 12px; background: rgba(0,0,0,0.25); border: 1px solid var(--border); border-radius: 7px; }
-    .list-stat .k { color: var(--text_dim); font-weight: 800; letter-spacing: 1px; margin-right: 6px; }
-    .list-stat .v { color: var(--text_main); font-weight: 700; }
+    /* ── LIST VIEW (CREMA main-screen, exact CSS, kept fluid) ── */
+    #screen-list { padding: 40px; }
+    .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid var(--border); padding-bottom: 18px; margin-bottom: 18px; flex-shrink: 0; }
+    .header-title { display: flex; align-items: center; gap: 20px; font-size: 44px; font-weight: bold; margin: 0; color: var(--text_main); }
+    .header-brand { color: var(--text_dim); font-size: 14px; font-weight: bold; letter-spacing: 2px; }
+    .main-container { display: flex; flex: 1; min-height: 0; gap: 36px; overflow: hidden; }
+    .list-view { flex: 3; display: flex; flex-direction: column; overflow-y: scroll; scrollbar-width: none; }
+    .list-view::-webkit-scrollbar { display: none; }
+    .game-item { padding: 14px 20px; font-size: 26px; color: var(--text_sec); border-radius: 8px; margin-bottom: 5px; transition: all 0.1s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; line-height: 1.2; }
+    .game-item.selected { background-color: var(--border); color: var(--text_main); font-weight: bold; border-left: 8px solid var(--accent); }
+    .list-install-dot { font-size: 9px; margin-right: 6px; color: #66bb6a; }
+    .details-view { flex: 5; display: flex; flex-direction: column; gap: 20px; min-height: 0; }
+    .image-container { flex: 1; min-height: 0; background-color: var(--bg_panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; position: relative; display: flex; justify-content: center; align-items: center; }
+    .media-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; transition: opacity 0.5s ease; opacity: 0; pointer-events: none; }
+    .media-layer.active { opacity: 1; }
+    .cover-art-overlay { position: absolute; bottom: 20px; left: 20px; width: 140px; height: 210px; border: 3px solid var(--accent); border-radius: 4px; object-fit: cover; box-shadow: 0 10px 20px rgba(0,0,0,0.8); z-index: 10; transition: opacity 0.5s ease; opacity: 1; }
+    .cover-art-overlay.hidden { opacity: 0; }
+    .desc-box { font-size: 24px; color: var(--text_sec); line-height: 1.5; overflow: hidden; flex-shrink: 0; max-height: 33%; }
+    .stats-view { flex: 2; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+    .stat-box { background-color: var(--bg_panel); border: 1px solid var(--border); border-radius: 12px; padding: 10px; text-align: center; display: flex; flex-direction: column; justify-content: center; min-width: 0; overflow: hidden; }
+    .stat-title { color: var(--text_dim); font-size: 16px; font-weight: bold; letter-spacing: 1px; margin-bottom: 2px; }
+    .stat-val { color: var(--text_main); font-size: 20px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mini-dock { flex: 1; background-color: var(--bg_panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; position: relative; display: flex; justify-content: center; align-items: center; min-height: 90px; }
+    .mini-prompt { color: var(--text_dim); font-size: 20px; font-weight: bold; text-align: center; padding: 20px; }
 
     /* ── Settings menu overlay (CREMA-style) ── */
     #overlay-backdrop { position: absolute; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.55); backdrop-filter: blur(4px); }
@@ -154,16 +169,25 @@
 
   <!-- ── WALL ── -->
   <div id="screen-wall" class="screen hidden">
-    <header id="wall-header">
-      <div class="wall-title" id="wall-title">ALL GAMES</div>
-      <input id="wall-search" placeholder="Search games…" autocomplete="off" spellcheck="false">
-      <div id="wall-count"></div>
-    </header>
-    <main id="couch-grid"></main>
+    <div id="gallery-bg"><img id="gallery-bg-img" src="" alt=""></div>
+    <div id="gallery-bg-grad"></div>
+    <div id="gallery-hero">
+      <img id="gallery-hero-img" src="" alt="">
+      <div id="gallery-hero-grad"></div>
+      <div id="gallery-header">
+        <div id="gallery-cat-name"></div>
+        <div id="gallery-search-tag"></div>
+      </div>
+      <img id="gallery-hero-logo" src="" alt="">
+      <div id="gallery-count"></div>
+      <div id="gallery-hero-game-name"></div>
+    </div>
+    <div id="gallery-scroll"><div id="gallery-grid"></div></div>
     <footer class="prompts">
-      <span class="pk"><span class="pb a">A</span> Details</span>
+      <span class="pk"><span class="pb a">A</span> Open</span>
       <span class="pk"><span class="pb b">B</span> Back</span>
       <span class="pk"><span class="pb lr">✥</span> Move</span>
+      <span class="pk"><span class="pb lr">LB / RB</span> Category</span>
     </footer>
   </div>
 
@@ -193,24 +217,32 @@
 
   <!-- ── LIST VIEW ── -->
   <div id="screen-list" class="screen hidden">
-    <header id="list-header">
-      <div id="list-title">ALL GAMES</div>
-      <div id="list-count"></div>
-    </header>
-    <div id="list-body">
-      <div id="list-rows"></div>
-      <div id="list-detail">
-        <div id="list-media">
-          <img id="list-media-img" src="" alt="">
-          <div id="list-media-grad"></div>
-          <img id="list-logo" src="" alt="">
+    <div class="header">
+      <h1 class="header-title" id="list-cat-name">ALL GAMES</h1>
+      <div class="header-brand" id="list-count"></div>
+    </div>
+    <div class="main-container">
+      <div class="list-view" id="game-list"></div>
+      <div class="details-view">
+        <div class="image-container" id="media-container">
+          <img id="screenshot-player" class="media-layer" src="">
+          <img id="cover-backdrop" class="media-layer active" src="" style="object-fit: contain;">
+          <img id="cover-mini" class="cover-art-overlay hidden" src="">
         </div>
-        <div id="list-desc"></div>
-        <div id="list-stats"></div>
+        <div class="desc-box" id="game-desc"></div>
+      </div>
+      <div class="stats-view">
+        <div class="stat-box"><div class="stat-title">SYSTEM</div><div class="stat-val" id="stat-system">--</div></div>
+        <div class="stat-box"><div class="stat-title">RELEASED</div><div class="stat-val" id="stat-release">--</div></div>
+        <div class="stat-box"><div class="stat-title">DEVELOPER</div><div class="stat-val" id="stat-dev">--</div></div>
+        <div class="stat-box"><div class="stat-title">PUBLISHER</div><div class="stat-val" id="stat-pub">--</div></div>
+        <div class="stat-box"><div class="stat-title">GENRE</div><div class="stat-val" id="stat-genre">--</div></div>
+        <div class="stat-box"><div class="stat-title">PLAYERS</div><div class="stat-val" id="stat-players">--</div></div>
+        <div class="mini-dock" id="mini-dock"><div id="mini-prompt" class="mini-prompt">▶ A — PLAY</div></div>
       </div>
     </div>
     <footer class="prompts">
-      <span class="pk"><span class="pb a">A</span> Details</span>
+      <span class="pk"><span class="pb a">A</span> Play</span>
       <span class="pk"><span class="pb b">B</span> Back</span>
       <span class="pk"><span class="pb lr">▲ ▼</span> Browse</span>
       <span class="pk"><span class="pb lr">LB / RB</span> Category</span>
