@@ -385,9 +385,15 @@ function listCycleCategory(dir) {
 }
 
 // ── WALL ─────────────────────────────────────────────────────────────────────
-// ── GALLERY (CREMA gallery-screen: hero banner + 9-col grid, ported) ──────────
-const GALLERY_COLS = 9;
+// ── GALLERY (CREMA gallery-screen: hero banner + responsive auto-fill grid) ──
 let galleryList = [];   // cached current category list (avoids re-filter/sort on every nav)
+function galleryCols() {   // actual columns in the responsive grid (cells sharing the first row's offsetTop)
+    const cells = $('gallery-grid').querySelectorAll('.gcell');
+    if (cells.length < 2) return 1;
+    const top0 = cells[0].offsetTop; let c = 1;
+    for (let i = 1; i < cells.length; i++) { if (cells[i].offsetTop === top0) c++; else break; }
+    return c;
+}
 function enterWall() {
     wallSearch = '';
     renderWall(); showScreen('wall'); focusGrid(0);
@@ -443,12 +449,12 @@ function updateGalleryBg(g) {   // CREMA updateGalleryBg: hero img + name + logo
     name.textContent = g.title || '';
     if (g.logo) { logo.src = g.logo; logo.style.display = 'block'; } else { logo.src = ''; logo.style.display = 'none'; }
 }
-function wallMove(dx, dy) {   // CREMA navigateGallery (9-col grid)
-    const N = galleryList.length; if (!N) return; let idx = gridFocus;
+function wallMove(dx, dy) {   // CREMA navigateGallery, responsive column count
+    const N = galleryList.length; if (!N) return; let idx = gridFocus; const cols = galleryCols();
     if (dx > 0) idx = (idx + 1) % N;
     else if (dx < 0) idx = (idx - 1 + N) % N;
-    else if (dy > 0) { const next = idx + GALLERY_COLS; if (next < N) idx = next; }
-    else if (dy < 0) { const prev = idx - GALLERY_COLS; if (prev >= 0) idx = prev; }
+    else if (dy > 0) { const next = idx + cols; if (next < N) idx = next; }
+    else if (dy < 0) { const prev = idx - cols; if (prev >= 0) idx = prev; }
     if (idx !== gridFocus) focusGrid(idx);
 }
 function wallActivate() { const g = galleryList[gridFocus]; if (g) openGamepage(g.id); }

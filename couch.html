@@ -74,10 +74,11 @@
     #gallery-hero-logo { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 2; max-width: 55%; max-height: 50%; object-fit: contain; display: none; filter: drop-shadow(0 4px 24px rgba(0,0,0,0.95)); }
     #gallery-scroll { position: relative; z-index: 2; flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
     #gallery-scroll::-webkit-scrollbar { width: 0; }
-    #gallery-grid { display: grid; grid-template-columns: repeat(9, 1fr); grid-auto-rows: auto; gap: 16px; padding: 22px 70px; align-content: start; }
+    /* auto-fill columns so the count adapts to the window (≈9 on large screens, ≈5 on smaller); cards keep a square cover */
+    #gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(185px, 1fr)); grid-auto-rows: max-content; gap: 16px; padding: 22px 70px; align-content: start; }
     .gallery-section-header { grid-column: 1 / -1; font-size: 12px; font-weight: 900; letter-spacing: 3px; padding: 6px 10px; border-radius: 4px; min-height: 30px; display: flex; align-items: center; background: var(--bg_panel); color: var(--text_dim); border: 1px solid var(--border_solid); }
-    .gcell { display: flex; flex-direction: column; height: 295px; border-radius: 8px; overflow: hidden; border: 3px solid transparent; transition: transform 0.13s ease, border-color 0.13s ease, box-shadow 0.13s ease; background: var(--bg_panel); cursor: pointer; content-visibility: auto; contain-intrinsic-size: auto 295px; }
-    .gcell-cover-area { flex: 1; min-height: 0; position: relative; overflow: hidden; }
+    .gcell { display: flex; flex-direction: column; border-radius: 8px; overflow: hidden; border: 3px solid transparent; transition: transform 0.13s ease, border-color 0.13s ease, box-shadow 0.13s ease; background: var(--bg_panel); cursor: pointer; content-visibility: auto; contain-intrinsic-size: auto 230px; }
+    .gcell-cover-area { width: 100%; aspect-ratio: 1 / 1; flex: none; position: relative; overflow: hidden; }   /* fixed square, never squished */
     .gcell-cover-area img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .gcell-shot-grad { position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(0,0,0,0.42) 0%, transparent 68%), linear-gradient(to top, rgba(0,0,0,0.5), transparent 55%); }
     .gcell-cover-area img.gcell-logo { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 84%; height: 62%; object-fit: contain; filter: drop-shadow(0 3px 12px rgba(0,0,0,0.92)); }
