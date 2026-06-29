@@ -305,8 +305,8 @@ function overlayBack() {
     else if (menuMode === 'theme') openThemeMenu();   // back to theme categories
     else openMenu();
 }
-function dispatchMenu() { if (menuOpen) closeMenu(); else openMenu(); }
-function dispatchSort() { if (oskOpen || menuOpen || _scraping) return; if (screen === 'wall' || screen === 'list') openSortMenu(); }
+function dispatchMenu() { if (ssOpen) return; if (menuOpen) closeMenu(); else openMenu(); }
+function dispatchSort() { if (ssOpen || oskOpen || menuOpen || _scraping) return; if (screen === 'wall' || screen === 'list') openSortMenu(); }
 
 // ── OSK search (CREMA on-screen keyboard) ────────────────────────────────────
 const OSK_COLS = 7, OSK_ROWS = 6;
@@ -662,13 +662,54 @@ async function gpActivate() {
 
 // ── Launch + Now Playing ─────────────────────────────────────────────────────
 let _nowTimer;
-async function launch(id) {
+async function launch(id) {   // opening a game: offer save states (resume vs fresh) if any exist
+    let states = []; try { states = await window.api.listSaveStates(id); } catch {}
+    const g = gamesById.get(id);
+    if (states.length && g) openSaveStates(id, g, states);
+    else doLaunch(id, {});
+}
+async function doLaunch(id, opts) {
     const g = gamesById.get(id); if (!g) return;
     showNow(g);
-    const r = await window.api.launchGame(id);
+    const r = await window.api.launchGameEx(id, opts);
     clearTimeout(_nowTimer);
     if (!r || !r.ok) { $('couch-now').querySelector('.now-label').textContent = 'COULD NOT LAUNCH'; _nowTimer = setTimeout(hideNow, 2500); }
     else _nowTimer = setTimeout(hideNow, 4500);
+}
+
+// ── Save-states modal (resume vs fresh) ──────────────────────────────────────
+let ssOpen = false, ssIndex = 0, ssStates = [], ssGameId = null;
+function relTime(ms) {
+    const m = Math.floor((Date.now() - ms) / 60000);
+    if (m < 1) return 'just now'; if (m < 60) return m + 'm ago';
+    const h = Math.floor(m / 60); if (h < 24) return h + 'h ago';
+    const d = Math.floor(h / 24); if (d < 30) return d + 'd ago';
+    return new Date(ms).toLocaleDateString();
+}
+function openSaveStates(id, g, states) {
+    ssOpen = true; ssGameId = id; ssStates = states; ssIndex = 0;
+    $('ss-subtitle').textContent = g.title || '';
+    const cards = ['<div class="ss-card" data-i="0"><div class="ss-fresh">▶</div><div class="ss-meta"><div class="ss-slot">START FRESH</div><div class="ss-time">New game</div></div></div>'];
+    states.forEach((s, i) => {
+        const thumb = s.thumb ? `<img class="ss-thumb" src="${s.thumb}">` : `<div class="ss-fresh" style="font-size:26px">SAVE</div>`;
+        const name = s.label || (s.slot === 'auto' ? 'AUTO SAVE' : 'SLOT ' + s.slot);
+        cards.push(`<div class="ss-card" data-i="${i + 1}">${thumb}<div class="ss-meta"><div class="ss-slot">${escHtml(name)}</div><div class="ss-time">${relTime(s.mtime)}</div></div></div>`);
+    });
+    $('ss-cards').innerHTML = cards.join('');
+    [...$('ss-cards').querySelectorAll('.ss-card')].forEach(el => el.onclick = () => { ssIndex = Number(el.dataset.i); ssHighlight(); ssActivate(); });
+    $('ss-backdrop').classList.remove('hidden'); ssHighlight();
+}
+function ssHighlight() {
+    const cs = [...$('ss-cards').querySelectorAll('.ss-card')];
+    cs.forEach((el, i) => el.classList.toggle('sel', i === ssIndex));
+    if (cs[ssIndex]) cs[ssIndex].scrollIntoView({ inline: 'center', block: 'nearest' });
+}
+function ssMove(d) { const n = ssStates.length + 1; ssIndex = (ssIndex + d + n) % n; ssHighlight(); }
+function ssClose() { ssOpen = false; $('ss-backdrop').classList.add('hidden'); }
+function ssActivate() {
+    const id = ssGameId, idx = ssIndex; ssClose();
+    if (idx === 0) doLaunch(id, { fresh: true });
+    else doLaunch(id, { slot: ssStates[idx - 1].slot });
 }
 function showNow(g) {
     const n = $('couch-now');
@@ -710,7 +751,7 @@ async function scrapeArtwork(id) {
     else if (screen === 'list') { renderList(); listSelect(listFocus); }
 }
 function dispatchScrape() {   // X — scrape the focused/current game if it lacks artwork
-    if (oskOpen || menuOpen || _scraping) return;
+    if (ssOpen || oskOpen || menuOpen || _scraping) return;
     let g = null;
     if (screen === 'wall') g = galleryList[gridFocus];
     else if (screen === 'list') g = listList[listFocus];
@@ -721,6 +762,7 @@ function dispatchScrape() {   // X — scrape the focused/current game if it lac
 
 // ── Input dispatch (per active screen) ───────────────────────────────────────
 function dispatchNav(dx, dy) {
+    if (ssOpen) { if (dx) ssMove(dx); return; }
     if (oskOpen) { oskNav(dx, dy); return; }
     if (menuOpen) { if (dy) overlayMove(dy); return; }
     if (screen === 'start') { if (startMode === 'carousel') { if (dx) carouselMove(dx); } else tilesMove(dx, dy); }
@@ -729,6 +771,7 @@ function dispatchNav(dx, dy) {
     else if (screen === 'gamepage') { if (dx) gpMove(dx); }
 }
 function dispatchConfirm() {
+    if (ssOpen) { ssActivate(); return; }
     if (oskOpen) { oskActivate(); return; }
     if (menuOpen) { overlayConfirm(); return; }
     if (screen === 'start') selectCategory();
@@ -737,6 +780,7 @@ function dispatchConfirm() {
     else gpActivate();
 }
 function dispatchBack() {
+    if (ssOpen) { ssClose(); return; }
     if (oskOpen) { closeOSK(); return; }
     if (menuOpen) { overlayBack(); return; }
     if (!$('couch-now').classList.contains('hidden')) { hideNow(); return; }
@@ -745,12 +789,13 @@ function dispatchBack() {
     else exitCouch();
 }
 function dispatchAux() {   // Y
+    if (ssOpen) return;
     if (oskOpen) { oskClear(); return; }
     if (menuOpen) return;
     if (screen === 'start') toggleStartMode();
     else if (screen === 'wall' || screen === 'list') openOSK();   // CREMA: Y opens search
 }
-function dispatchShoulder(dir) { if (oskOpen || menuOpen) return; if (screen === 'wall') wallCycleCategory(dir); else if (screen === 'list') listCycleCategory(dir); }
+function dispatchShoulder(dir) { if (ssOpen || oskOpen || menuOpen) return; if (screen === 'wall') wallCycleCategory(dir); else if (screen === 'list') listCycleCategory(dir); }
 
 document.addEventListener('keydown', e => {
     if (e.key === 'F11') { exitCouch(); return; }
