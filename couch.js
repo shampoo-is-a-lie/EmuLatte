@@ -9,6 +9,7 @@ let games = [], systems = [], gamesById = new Map(), categories = [];
 let screen = 'start';
 let catIndex = 0, startMode = 'carousel';
 let wallFilter = 'all', wallTitle = 'ALL GAMES', wallSearch = '', gridFocus = 0;
+let browseMode = 'gallery', listFocus = 0, gpReturn = 'wall';
 let gpGame = null, gpBtnFocus = 0;
 
 const GP_LAYOUTS = {   // labels = physical button performing each action (standard Gamepad API: 0=bottom, 1=right, 3=top)
@@ -27,6 +28,7 @@ async function init() {
     if (window.api.setZoom && density !== 1) window.api.setZoom(density);
     if ((await window.api.getSetting('couch_hide_cursor')) === '1') document.body.style.cursor = 'none';
     applyGamepadLayout((await window.api.getSetting('couch_gamepad_layout')) || 'xbox');
+    browseMode = (await window.api.getSetting('couch_browse_mode')) || 'gallery';
     [games, systems] = await Promise.all([window.api.getGames(), window.api.getSystems()]);
     gamesById = new Map(games.map(g => [g.id, g]));
     buildCategories();
@@ -73,6 +75,7 @@ function applyTheme(name) {
 let menuOpen = false, menuMode = 'main', overlayItems = [], overlayIndex = 0;
 const DENSITY_OPTS = [['Auto', 'auto'], ['Comfortable', '1.0'], ['Large', '1.5'], ['Extra-Large', '2.0'], ['CRT (low-res)', '2.5']];
 const LAYOUT_OPTS  = [['Xbox', 'xbox'], ['PlayStation', 'playstation'], ['Nintendo', 'nintendo']];
+const NAV_OPTS     = [['Gallery', 'gallery'], ['List', 'list']];
 const getCfg = async (k, d) => (await window.api.getSetting(k)) || d;
 
 function renderOverlay(title, items, hint) {
@@ -100,7 +103,7 @@ function overlayMove(dir) {
 }
 async function openMenu() {
     menuOpen = true; menuMode = 'main';
-    renderOverlay('SETTINGS', ['§APPEARANCE', 'Color Theme', 'Display Density', '§CONTROLS', 'Gamepad Buttons', '§SYSTEM', 'Close Menu', 'Exit Couch Mode']);
+    renderOverlay('SETTINGS', ['§APPEARANCE', 'Color Theme', 'Navigation Mode', 'Display Density', '§CONTROLS', 'Gamepad Buttons', '§SYSTEM', 'Close Menu', 'Exit Couch Mode']);
 }
 function closeMenu() { menuOpen = false; $('overlay-backdrop').classList.add('hidden'); }
 async function openThemeMenu() {
@@ -115,11 +118,16 @@ async function openLayoutMenu() {
     menuMode = 'layout'; const cur = await getCfg('couch_gamepad_layout', 'xbox');
     renderOverlay('GAMEPAD BUTTONS', ['§GAMEPAD BUTTONS', ...LAYOUT_OPTS.map(([l, v]) => v === cur ? '★ ' + l : l), 'Back']);
 }
+function openNavMenu() {
+    menuMode = 'navmode';
+    renderOverlay('NAVIGATION MODE', ['§NAVIGATION MODE', ...NAV_OPTS.map(([l, v]) => v === browseMode ? '★ ' + l : l), 'Back'], 'Gallery = cover wall · List = list + details.');
+}
 function applyDensity(v) { const d = v === 'auto' ? autoDensity() : (parseFloat(v) || 1); if (window.api.setZoom) window.api.setZoom(d); }
 function overlayConfirm() {
     const raw = String(overlayItems[overlayIndex] || '').replace('★ ', '');
     if (menuMode === 'main') {
         if (raw === 'Color Theme') openThemeMenu();
+        else if (raw === 'Navigation Mode') openNavMenu();
         else if (raw === 'Display Density') openDensityMenu();
         else if (raw === 'Gamepad Buttons') openLayoutMenu();
         else if (raw === 'Close Menu') closeMenu();
@@ -130,6 +138,14 @@ function overlayConfirm() {
     if (menuMode === 'theme') { applyTheme(raw); window.api.setSetting('couch_theme', raw); openThemeMenu(); }
     else if (menuMode === 'density') { const o = DENSITY_OPTS.find(([l]) => l === raw); if (o) { window.api.setSetting('couch_density', o[1]); applyDensity(o[1]); openDensityMenu(); } }
     else if (menuMode === 'layout') { const o = LAYOUT_OPTS.find(([l]) => l === raw); if (o) { window.api.setSetting('couch_gamepad_layout', o[1]); applyGamepadLayout(o[1]); openLayoutMenu(); } }
+    else if (menuMode === 'navmode') {
+        const o = NAV_OPTS.find(([l]) => l === raw);
+        if (o) {
+            browseMode = o[1]; window.api.setSetting('couch_browse_mode', o[1]);
+            if (screen === 'wall' || screen === 'list') (o[1] === 'list' ? enterList : enterWall)();   // switch the current category live
+            openNavMenu();
+        }
+    }
 }
 function overlayBack() { if (menuMode === 'main') closeMenu(); else openMenu(); }
 function dispatchMenu() { if (menuOpen) closeMenu(); else openMenu(); }
@@ -161,7 +177,7 @@ function mediaForCategory(key) {
 }
 
 // ── Screen router ────────────────────────────────────────────────────────────
-function showScreen(s) { screen = s; ['start', 'wall', 'gamepage'].forEach(id => $('screen-' + id).classList.toggle('hidden', id !== s)); }
+function showScreen(s) { screen = s; ['start', 'wall', 'list', 'gamepage'].forEach(id => $('screen-' + id).classList.toggle('hidden', id !== s)); }
 
 // ── START: hero mosaic ───────────────────────────────────────────────────────
 function fillMosaic(key) {
@@ -215,7 +231,46 @@ function toggleStartMode() {
 function selectCategory() {
     const c = categories[catIndex];
     wallFilter = c.key; wallTitle = c.label;
-    enterWall();
+    if (browseMode === 'list') enterList(); else enterWall();
+}
+
+// ── LIST VIEW (CREMA main-screen style: list + media/details + stats) ────────
+function enterList() {
+    $('list-title').textContent = wallTitle;
+    renderList(); showScreen('list'); listSelect(0);
+}
+const listGamesList = () => wallGamesList();   // same category filter + sort as the gallery
+function renderList() {
+    const rows = $('list-rows'); const list = listGamesList();
+    $('list-count').textContent = `${list.length} GAME${list.length !== 1 ? 'S' : ''}`;
+    rows.innerHTML = list.length
+        ? list.map((g, i) => `<div class="list-row" data-i="${i}" data-id="${g.id}">${escHtml(g.title)}</div>`).join('')
+        : '<div class="couch-empty">NO GAMES</div>';
+    [...rows.querySelectorAll('.list-row')].forEach(el => el.onclick = () => { listSelect(Number(el.dataset.i)); openGamepage(Number(el.dataset.id)); });
+}
+function listSelect(i) {
+    const list = listGamesList(); if (!list.length) return;
+    listFocus = clamp(i, 0, list.length - 1);
+    const rows = [...$('list-rows').querySelectorAll('.list-row')];
+    rows.forEach((el, j) => el.classList.toggle('gp-focus', j === listFocus));
+    if (rows[listFocus]) rows[listFocus].scrollIntoView({ block: 'nearest' });
+    updateListDetail(list[listFocus]);
+}
+function updateListDetail(g) {
+    if (!g) return;
+    const media = g.hero || (g.screenshot ? String(g.screenshot).split('|')[0] : '') || g.cover || '';
+    const mi = $('list-media-img'); mi.src = media; mi.style.display = media ? 'block' : 'none';
+    const logo = $('list-logo'); if (g.logo) { logo.src = g.logo; logo.style.display = 'block'; } else logo.style.display = 'none';
+    $('list-desc').textContent = g.description || '';
+    const stats = [['SYSTEM', g.system_name], ['YEAR', g.year], ['GENRE', g.genre], ['DEVELOPER', g.developer], ['PLAYERS', g.players], ['RATING', g.rating]].filter(([, v]) => v);
+    $('list-stats').innerHTML = stats.map(([k, v]) => `<div class="list-stat"><span class="k">${k}</span><span class="v">${escHtml(v)}</span></div>`).join('');
+}
+function listMove(dy) { if (dy) listSelect(listFocus + dy); }
+function listActivate() { const g = listGamesList()[listFocus]; if (g) openGamepage(g.id); }
+function listCycleCategory(dir) {
+    catIndex = clamp(catIndex + dir, 0, categories.length - 1);
+    const c = categories[catIndex]; wallFilter = c.key; wallTitle = c.label;
+    $('list-title').textContent = wallTitle; renderList(); listSelect(0);
 }
 
 // ── WALL ─────────────────────────────────────────────────────────────────────
@@ -260,6 +315,7 @@ function wallCycleCategory(dir) {
 // ── GAMEPAGE ─────────────────────────────────────────────────────────────────
 function openGamepage(id) {
     const g = gamesById.get(id); if (!g) return; gpGame = g;
+    if (screen === 'wall' || screen === 'list') gpReturn = screen;   // B returns to whichever browse view
     const hero = g.hero || (g.screenshot ? String(g.screenshot).split('|')[0] : '') || g.cover || '';
     const heroImg = $('gp-hero-img'); heroImg.src = hero; heroImg.style.display = hero ? 'block' : 'none';
     const logo = $('gp-logo'), title = $('gp-hero-title');
@@ -323,18 +379,25 @@ function dispatchNav(dx, dy) {
     if (menuOpen) { if (dy) overlayMove(dy); return; }
     if (screen === 'start') { if (startMode === 'carousel') { if (dx) carouselMove(dx); } else tilesMove(dx, dy); }
     else if (screen === 'wall') wallMove(dx, dy);
+    else if (screen === 'list') { if (dy) listMove(dy); else if (dx) listCycleCategory(dx); }
     else if (screen === 'gamepage') { if (dx) gpMove(dx); }
 }
-function dispatchConfirm() { if (menuOpen) { overlayConfirm(); return; } if (screen === 'start') selectCategory(); else if (screen === 'wall') wallActivate(); else gpActivate(); }
+function dispatchConfirm() {
+    if (menuOpen) { overlayConfirm(); return; }
+    if (screen === 'start') selectCategory();
+    else if (screen === 'wall') wallActivate();
+    else if (screen === 'list') listActivate();
+    else gpActivate();
+}
 function dispatchBack() {
     if (menuOpen) { overlayBack(); return; }
     if (!$('couch-now').classList.contains('hidden')) { hideNow(); return; }
-    if (screen === 'gamepage') enterWall();
-    else if (screen === 'wall') showScreen('start');
+    if (screen === 'gamepage') showScreen(gpReturn);
+    else if (screen === 'wall' || screen === 'list') showScreen('start');
     else exitCouch();
 }
 function dispatchAux() { if (menuOpen) return; if (screen === 'start') toggleStartMode(); }
-function dispatchShoulder(dir) { if (menuOpen) return; if (screen === 'wall') wallCycleCategory(dir); }
+function dispatchShoulder(dir) { if (menuOpen) return; if (screen === 'wall') wallCycleCategory(dir); else if (screen === 'list') listCycleCategory(dir); }
 
 document.addEventListener('keydown', e => {
     if (e.key === 'F11') { exitCouch(); return; }

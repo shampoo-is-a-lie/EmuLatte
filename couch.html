@@ -96,6 +96,25 @@
     .gp-stat .k { color: var(--text_dim); font-weight: 800; letter-spacing: 1px; }
     .gp-stat .v { color: var(--text_main); font-weight: 700; text-align: right; }
 
+    /* ── LIST VIEW (CREMA main-screen style) ── */
+    #list-header { flex-shrink: 0; display: flex; align-items: center; gap: 18px; padding: 14px 26px; background: var(--bg_menu); border-bottom: 1px solid var(--border); }
+    #list-title { font-size: 15px; font-weight: 900; letter-spacing: 4px; color: var(--accent); white-space: nowrap; }
+    #list-count { margin-left: auto; font-size: 11px; font-weight: 900; letter-spacing: 1.5px; color: var(--text_dim); }
+    #list-body { flex: 1; min-height: 0; display: flex; }
+    #list-rows { width: 40%; max-width: 540px; min-width: 280px; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 3px; }
+    .list-row { padding: 13px 18px; border-radius: 8px; font-size: 18px; font-weight: 700; color: var(--text_sec); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .list-row.gp-focus { background: var(--accent); color: var(--bg); font-weight: 900; }
+    #list-detail { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 22px 26px 22px 12px; gap: 16px; overflow: hidden; }
+    #list-media { position: relative; flex: 1; min-height: 0; border-radius: 14px; overflow: hidden; background: var(--bg); border: 1px solid var(--border); }
+    #list-media-img { width: 100%; height: 100%; object-fit: cover; }
+    #list-media-grad { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.8), transparent 55%); }
+    #list-logo { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); max-width: 62%; max-height: 56%; object-fit: contain; filter: drop-shadow(0 4px 18px rgba(0,0,0,0.92)); display: none; }
+    #list-desc { font-size: 15px; line-height: 1.6; color: var(--text_sec); max-height: 24%; overflow: hidden; }
+    #list-stats { display: flex; flex-wrap: wrap; gap: 8px; }
+    .list-stat { font-size: 12px; padding: 7px 12px; background: rgba(0,0,0,0.25); border: 1px solid var(--border); border-radius: 7px; }
+    .list-stat .k { color: var(--text_dim); font-weight: 800; letter-spacing: 1px; margin-right: 6px; }
+    .list-stat .v { color: var(--text_main); font-weight: 700; }
+
     /* ── Settings menu overlay (CREMA-style) ── */
     #overlay-backdrop { position: absolute; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.55); backdrop-filter: blur(4px); }
     #overlay-backdrop.hidden { display: none; }
@@ -169,6 +188,32 @@
       <span class="pk"><span class="pb a">A</span> Select</span>
       <span class="pk"><span class="pb b">B</span> Back</span>
       <span class="pk"><span class="pb lr">◄ ►</span> Actions</span>
+    </footer>
+  </div>
+
+  <!-- ── LIST VIEW ── -->
+  <div id="screen-list" class="screen hidden">
+    <header id="list-header">
+      <div id="list-title">ALL GAMES</div>
+      <div id="list-count"></div>
+    </header>
+    <div id="list-body">
+      <div id="list-rows"></div>
+      <div id="list-detail">
+        <div id="list-media">
+          <img id="list-media-img" src="" alt="">
+          <div id="list-media-grad"></div>
+          <img id="list-logo" src="" alt="">
+        </div>
+        <div id="list-desc"></div>
+        <div id="list-stats"></div>
+      </div>
+    </div>
+    <footer class="prompts">
+      <span class="pk"><span class="pb a">A</span> Details</span>
+      <span class="pk"><span class="pb b">B</span> Back</span>
+      <span class="pk"><span class="pb lr">▲ ▼</span> Browse</span>
+      <span class="pk"><span class="pb lr">LB / RB</span> Category</span>
     </footer>
   </div>
 
