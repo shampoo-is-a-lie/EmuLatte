@@ -58,6 +58,10 @@ async function init() {
     heroShow = (await window.api.getSetting('couch_hero_show')) || 'both';
     retroOn = (await window.api.getSetting('couch_retro')) === '1'; document.body.classList.toggle('retro', retroOn);
     saverDelayMin = Number((await window.api.getSetting('couch_screensaver')) ?? '3') || 0;
+    sfxOn = (await window.api.getSetting('couch_sfx')) !== '0';
+    bgmMode = (await window.api.getSetting('couch_bgm_mode')) || 'off';
+    const vRaw = await window.api.getSetting('couch_vol'); vol = vRaw == null ? 0.3 : (Number(vRaw) || 0);
+    initAudio();
     [games, systems] = await Promise.all([window.api.getGames(), window.api.getSystems()]);
     gamesById = new Map(games.map(g => [g.id, g]));
     await loadPlaylists();
@@ -161,7 +165,27 @@ const SORT_OPTS    = [['A — Z', 'alpha'], ['Last Played', 'played'], ['Favouri
 const HERO_OPTS    = [['Logo & Name', 'both'], ['Logo Only', 'logo'], ['Name Only', 'name']];
 const RETRO_OPTS   = [['Off', '0'], ['On', '1']];
 const SAVER_OPTS   = [['Off', '0'], ['1 min', '1'], ['3 min', '3'], ['5 min', '5'], ['10 min', '10']];
+const BGM_ORDER    = ['off', 'ambient', 'piano', 'jazz', 'lofi'];
+const BGM_LABEL    = { off: 'Off', ambient: 'Ambient', piano: 'Piano', jazz: 'Jazz', lofi: 'Lo-Fi' };
 let couchSort = 'alpha', heroShow = 'both', retroOn = false;
+
+// ── Ambient sound (BGM + nav/select/back SFX, ported from CREMA) ──────────────
+let sfxOn = true, bgmMode = 'off', vol = 0.3, _audioKicked = false;
+let sfxNav = null, sfxSelect = null, sfxBack = null, bgmAudio = null;
+function initAudio() {
+    const bp = 'assets/sounds/';
+    sfxNav = new Audio(bp + 'nav.wav'); sfxSelect = new Audio(bp + 'select.wav'); sfxBack = new Audio(bp + 'back.wav');
+    bgmAudio = new Audio(); bgmAudio.loop = true;
+}
+function playSfx(a) { if (sfxOn && a) { try { a.currentTime = 0; a.play().catch(() => {}); } catch {} } }
+function applyBgm() {
+    if (!bgmAudio) return;
+    if (bgmMode === 'off') { bgmAudio.pause(); return; }
+    if (!bgmAudio.src.endsWith('bgm_' + bgmMode + '.mp3')) bgmAudio.src = 'assets/sounds/bgm_' + bgmMode + '.mp3';
+    bgmAudio.volume = vol;
+    if (_audioKicked) bgmAudio.play().catch(() => {});   // browsers only allow audio after a user gesture
+}
+function kickAudio() { if (_audioKicked) return; _audioKicked = true; applyBgm(); }   // start BGM on first user input
 const getCfg = async (k, d) => (await window.api.getSetting(k)) || d;
 
 function renderOverlay(title, items, hint) {
@@ -189,7 +213,7 @@ function overlayMove(dir) {
 }
 async function openMenu() {
     menuOpen = true; menuMode = 'main';
-    renderOverlay('SETTINGS', ['§APPEARANCE', 'Color Theme', 'Full-Retro', 'Carousel Label', 'Navigation Mode', 'Display Density', 'Screensaver', '§CONTROLS', 'Gamepad Icons', '§SYSTEM', 'Close Menu', 'Exit Couch Mode']);
+    renderOverlay('SETTINGS', ['§APPEARANCE', 'Color Theme', 'Full-Retro', 'Carousel Label', 'Navigation Mode', 'Display Density', 'Screensaver', '§AUDIO', 'Sound', '§CONTROLS', 'Gamepad Icons', '§SYSTEM', 'Close Menu', 'Exit Couch Mode']);
 }
 function closeMenu() { menuOpen = false; $('overlay-backdrop').classList.add('hidden'); }
 let _themeCat = null;
@@ -224,6 +248,22 @@ function openRetroMenu() {
 function openSaverMenu() {
     menuMode = 'saver';
     renderOverlay('SCREENSAVER', ['§AFTER IDLE', ...SAVER_OPTS.map(([l, v]) => Number(v) === saverDelayMin ? '★ ' + l : l), 'Back'], 'Shows a screenshot slideshow + clock when idle.');
+}
+function openSoundMenu(keepIdx) {
+    menuMode = 'sound';
+    renderOverlay('SOUND', ['§AUDIO',
+        `Music: ${BGM_LABEL[bgmMode] || 'Off'}`,
+        `Sound Effects: ${sfxOn ? 'On' : 'Off'}`,
+        `Volume: ${Math.round(vol * 100)}%`,
+        'Back'], 'A cycles · ◄ ► adjusts volume.');
+    if (keepIdx != null) { overlayIndex = Math.min(keepIdx, overlayItems.length - 1); highlightOverlay(); }
+}
+function soundHorizontal(dx) {   // ◄ ► on the Volume row
+    if (!String(overlayItems[overlayIndex] || '').startsWith('Volume')) return;
+    vol = Math.max(0, Math.min(1, +(vol + dx * 0.1).toFixed(2)));
+    if (bgmAudio) bgmAudio.volume = vol;
+    window.api.setSetting('couch_vol', String(vol));
+    openSoundMenu(overlayIndex);
 }
 function openSortMenu() {   // opened with SELECT from gallery/list — same options as EmuLatte's gallery sort
     menuOpen = true; menuMode = 'sort';
@@ -265,6 +305,7 @@ function overlayConfirm() {
         else if (raw === 'Navigation Mode') openNavMenu();
         else if (raw === 'Display Density') openDensityMenu();
         else if (raw === 'Screensaver') openSaverMenu();
+        else if (raw === 'Sound') openSoundMenu();
         else if (raw === 'Gamepad Icons') openLayoutMenu();
         else if (raw === 'Close Menu') closeMenu();
         else if (raw === 'Exit Couch Mode') exitCouch();
@@ -310,6 +351,13 @@ function overlayConfirm() {
     else if (menuMode === 'saver') {
         const o = SAVER_OPTS.find(([l]) => l === raw);
         if (o) { saverDelayMin = Number(o[1]); window.api.setSetting('couch_screensaver', o[1]); resetIdle(); openSaverMenu(); }
+    }
+    else if (menuMode === 'sound') {
+        const it = String(overlayItems[overlayIndex] || '');
+        if (it.startsWith('Music')) { bgmMode = BGM_ORDER[(BGM_ORDER.indexOf(bgmMode) + 1) % BGM_ORDER.length]; window.api.setSetting('couch_bgm_mode', bgmMode); applyBgm(); }
+        else if (it.startsWith('Sound Effects')) { sfxOn = !sfxOn; window.api.setSetting('couch_sfx', sfxOn ? '1' : '0'); }
+        else if (it.startsWith('Volume')) { vol = vol >= 1 ? 0 : +(vol + 0.1).toFixed(2); if (bgmAudio) bgmAudio.volume = vol; window.api.setSetting('couch_vol', String(vol)); }
+        openSoundMenu(overlayIndex);
     }
 }
 function overlayBack() {
@@ -815,7 +863,8 @@ function dispatchScrape() {   // X — scrape the focused/current game if it lac
 function dispatchNav(dx, dy) {
     if (ssOpen) { if (dx) ssMove(dx); return; }
     if (oskOpen) { oskNav(dx, dy); return; }
-    if (menuOpen) { if (dy) overlayMove(dy); return; }
+    playSfx(sfxNav);
+    if (menuOpen) { if (menuMode === 'sound' && dx) { soundHorizontal(dx); return; } if (dy) overlayMove(dy); return; }
     if (screen === 'start') { if (startMode === 'carousel') { if (dx) carouselMove(dx); } else tilesMove(dx, dy); }
     else if (screen === 'wall') wallMove(dx, dy);
     else if (screen === 'list') { if (dy) listMove(dy); else if (dx) listCycleCategory(dx); }
@@ -823,6 +872,7 @@ function dispatchNav(dx, dy) {
 }
 function dispatchConfirm() {
     if (ssOpen) { ssActivate(); return; }
+    playSfx(sfxSelect);
     if (oskOpen) { oskActivate(); return; }
     if (menuOpen) { overlayConfirm(); return; }
     if (screen === 'start') selectCategory();
@@ -832,6 +882,7 @@ function dispatchConfirm() {
 }
 function dispatchBack() {
     if (ssOpen) { ssClose(); return; }
+    playSfx(sfxBack);
     if (oskOpen) { closeOSK(); return; }
     if (menuOpen) { overlayBack(); return; }
     if (!$('couch-now').classList.contains('hidden')) { hideNow(); return; }
@@ -850,6 +901,7 @@ function dispatchShoulder(dir) { if (ssOpen || oskOpen || menuOpen) return; if (
 
 document.addEventListener('keydown', e => {
     if (e.key === 'F11') { exitCouch(); return; }
+    kickAudio();
     if (wokeSaver()) { e.preventDefault(); return; }   // any key wakes the screensaver (and is swallowed)
     resetIdle();
     // While the OSK is open, type directly on a physical keyboard (CREMA parity)
@@ -881,7 +933,7 @@ function pollPad() {
     if (gp) {
         const down = i => !!(gp.buttons[i] && gp.buttons[i].pressed);
         const anyAct = gp.buttons.some(b => b && b.pressed) || (gp.axes || []).some(a => Math.abs(a) > 0.5);
-        if (anyAct) { resetIdle(); if (wokeSaver()) { _btnPrev = {}; _navHeld = null; requestAnimationFrame(pollPad); return; } }
+        if (anyAct) { kickAudio(); resetIdle(); if (wokeSaver()) { _btnPrev = {}; _navHeld = null; requestAnimationFrame(pollPad); return; } }
         const edge = i => { const p = down(i); const w = _btnPrev[i]; _btnPrev[i] = p; return p && !w; };
         if (edge(0)) dispatchConfirm();      // A
         if (edge(1)) dispatchBack();         // B
@@ -903,6 +955,6 @@ function pollPad() {
 requestAnimationFrame(pollPad);
 
 // The hero IS the carousel (controller/keyboard nav); a mouse click opens the shown category.
-$('cz-hero').addEventListener('click', () => { if (!wokeSaver()) selectCategory(); });
+$('cz-hero').addEventListener('click', () => { kickAudio(); if (!wokeSaver()) selectCategory(); });
 document.addEventListener('mousemove', () => { if (!wokeSaver()) resetIdle(); });
 init();
