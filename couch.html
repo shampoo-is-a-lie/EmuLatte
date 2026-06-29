@@ -35,6 +35,8 @@
     #cz-hero { flex: 1; position: relative; overflow: hidden; perspective: 1200px; }
     #cz-hero-fallback { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: clamp(40px,8vw,96px); font-weight: 900; letter-spacing: 4px; color: rgba(212,163,115,0.18); display: none; }
     #cz-hero-title { position: absolute; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; pointer-events: none; padding: 0 6%; }
+    #cz-hero-logo { display: none; max-width: 46%; max-height: clamp(64px, 14vh, 168px); object-fit: contain; margin-bottom: 4px;
+                    filter: drop-shadow(0 0 3px rgba(255,255,255,0.45)) drop-shadow(0 5px 16px rgba(0,0,0,0.9)); }
     #cz-hero-name { font-size: clamp(40px, 7vw, 108px); font-weight: 900; letter-spacing: 4px; color: #fff; text-align: center; line-height: 1.02;
                     text-shadow: 0 4px 30px rgba(0,0,0,0.95), 0 0 70px rgba(0,0,0,0.85); }
     #cz-hero-tag { display: none; font-size: clamp(12px, 1.4vw, 18px); font-weight: 900; letter-spacing: 4px; text-transform: uppercase; color: var(--bg);
@@ -203,6 +205,7 @@
       <div id="cz-hero-fallback">EMULATTE</div>
       <div class="hero-mosaic" id="cz-mosaic"></div>
       <div id="cz-hero-title">
+        <img id="cz-hero-logo" alt="">
         <div id="cz-hero-name"></div>
         <div id="cz-hero-tag"></div>
         <div id="cz-hero-sub"></div>
