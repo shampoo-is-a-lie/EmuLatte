@@ -94,7 +94,7 @@ function renderOverlay(title, items, hint) {
 }
 function highlightOverlay() {
     $('overlay-list').querySelectorAll('.overlay-item').forEach(e => e.classList.remove('selected'));
-    const el = $('ov-' + overlayIndex); if (el) { el.classList.add('selected'); el.scrollIntoView({ block: 'nearest' }); }
+    const el = $('ov-' + overlayIndex); if (el) { el.classList.add('selected'); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
 }
 function overlayMove(dir) {
     const sel = overlayItems.map((it, i) => it[0] !== '§' ? i : -1).filter(i => i >= 0);
@@ -149,6 +149,52 @@ function overlayConfirm() {
 }
 function overlayBack() { if (menuMode === 'main') closeMenu(); else openMenu(); }
 function dispatchMenu() { if (menuOpen) closeMenu(); else openMenu(); }
+
+// ── OSK search (CREMA on-screen keyboard) ────────────────────────────────────
+const OSK_COLS = 7, OSK_ROWS = 6;
+const OSK_KEYS = [
+    ['A', 'B', 'C', 'D', 'E', 'F', 'G'],
+    ['H', 'I', 'J', 'K', 'L', 'M', 'N'],
+    ['O', 'P', 'Q', 'R', 'S', 'T', 'U'],
+    ['V', 'W', 'X', 'Y', 'Z', '0', '1'],
+    ['2', '3', '4', '5', '6', '7', '8'],
+    ['9', 'SPACE', 'BKSP', 'CLEAR', 'DONE', '.', '-'],
+];
+let oskOpen = false, oskR = 0, oskC = 0;
+function openOSK() {
+    oskOpen = true; oskR = 0; oskC = 0;
+    $('osk-backdrop').classList.remove('hidden'); renderOSK();
+}
+function closeOSK() { oskOpen = false; $('osk-backdrop').classList.add('hidden'); }
+function renderOSK() {
+    $('osk-query').textContent = wallSearch + (wallSearch.length < 50 ? '_' : '');
+    const grid = $('osk-grid'); grid.innerHTML = '';
+    for (let r = 0; r < OSK_ROWS; r++) for (let c = 0; c < OSK_COLS; c++) {
+        const d = document.createElement('div');
+        d.className = 'osk-key' + (r === oskR && c === oskC ? ' sel' : '');
+        d.textContent = OSK_KEYS[r][c];
+        d.onclick = () => { oskR = r; oskC = c; oskActivate(); };
+        grid.appendChild(d);
+    }
+}
+function applySearchLive() { if (browseMode === 'list') { renderList(); listSelect(0); } else { renderWall(); focusGrid(0); } }
+function oskNav(dx, dy) {
+    if (dy) oskR = (oskR + dy + OSK_ROWS) % OSK_ROWS;
+    if (dx) oskC = (oskC + dx + OSK_COLS) % OSK_COLS;
+    renderOSK();
+}
+function oskActivate() {
+    const key = OSK_KEYS[oskR][oskC];
+    if (key === 'SPACE') wallSearch += ' ';
+    else if (key === 'BKSP') wallSearch = wallSearch.slice(0, -1);
+    else if (key === 'CLEAR') wallSearch = '';
+    else if (key === 'DONE') { closeOSK(); return; }
+    else wallSearch += key;
+    renderOSK(); applySearchLive();
+}
+function oskClear() { wallSearch = ''; renderOSK(); applySearchLive(); }
+function oskTypeChar(ch) { wallSearch += ch; renderOSK(); applySearchLive(); }
+function oskBackspace() { wallSearch = wallSearch.slice(0, -1); renderOSK(); applySearchLive(); }
 
 // ── Categories / media ───────────────────────────────────────────────────────
 function buildCategories() {
@@ -414,6 +460,7 @@ function exitCouch() { window.api && window.api.exitCouch && window.api.exitCouc
 
 // ── Input dispatch (per active screen) ───────────────────────────────────────
 function dispatchNav(dx, dy) {
+    if (oskOpen) { oskNav(dx, dy); return; }
     if (menuOpen) { if (dy) overlayMove(dy); return; }
     if (screen === 'start') { if (startMode === 'carousel') { if (dx) carouselMove(dx); } else tilesMove(dx, dy); }
     else if (screen === 'wall') wallMove(dx, dy);
@@ -421,6 +468,7 @@ function dispatchNav(dx, dy) {
     else if (screen === 'gamepage') { if (dx) gpMove(dx); }
 }
 function dispatchConfirm() {
+    if (oskOpen) { oskActivate(); return; }
     if (menuOpen) { overlayConfirm(); return; }
     if (screen === 'start') selectCategory();
     else if (screen === 'wall') wallActivate();
@@ -428,17 +476,28 @@ function dispatchConfirm() {
     else gpActivate();
 }
 function dispatchBack() {
+    if (oskOpen) { closeOSK(); return; }
     if (menuOpen) { overlayBack(); return; }
     if (!$('couch-now').classList.contains('hidden')) { hideNow(); return; }
     if (screen === 'gamepage') showScreen(gpReturn);
     else if (screen === 'wall' || screen === 'list') showScreen('start');
     else exitCouch();
 }
-function dispatchAux() { if (menuOpen) return; if (screen === 'start') toggleStartMode(); }
-function dispatchShoulder(dir) { if (menuOpen) return; if (screen === 'wall') wallCycleCategory(dir); else if (screen === 'list') listCycleCategory(dir); }
+function dispatchAux() {   // Y
+    if (oskOpen) { oskClear(); return; }
+    if (menuOpen) return;
+    if (screen === 'start') toggleStartMode();
+    else if (screen === 'wall' || screen === 'list') openOSK();   // CREMA: Y opens search
+}
+function dispatchShoulder(dir) { if (oskOpen || menuOpen) return; if (screen === 'wall') wallCycleCategory(dir); else if (screen === 'list') listCycleCategory(dir); }
 
 document.addEventListener('keydown', e => {
     if (e.key === 'F11') { exitCouch(); return; }
+    // While the OSK is open, type directly on a physical keyboard (CREMA parity)
+    if (oskOpen) {
+        if (e.key === 'Backspace') { oskBackspace(); e.preventDefault(); return; }
+        if (e.key.length === 1 && /[a-z0-9 .\-]/i.test(e.key)) { oskTypeChar(e.key.toUpperCase()); e.preventDefault(); return; }
+    }
     switch (e.key) {
         case 'ArrowUp':    dispatchNav(0, -1); e.preventDefault(); break;
         case 'ArrowDown':  dispatchNav(0, 1);  e.preventDefault(); break;

@@ -4,6 +4,10 @@
   <meta charset="utf-8">
   <title>EmuLatte — Couch Mode</title>
   <style>
+    /* Raleway bundled locally (same files as CREMA / desktop EmuLatte) */
+    @font-face { font-family: 'Raleway'; src: url('assets/fonts/Raleway-Regular.ttf') format('truetype'); font-weight: 400; }
+    @font-face { font-family: 'Raleway'; src: url('assets/fonts/Raleway-Bold.ttf') format('truetype'); font-weight: 700; }
+    @font-face { font-family: 'Raleway'; src: url('assets/fonts/Raleway-Black.ttf') format('truetype'); font-weight: 900; }
     :root {
       --bg: #1c120d; --bg_panel: #2a1c14; --bg_menu: #241813;
       --accent: #d4a373; --accent_menu: #d4a373;
@@ -130,16 +134,28 @@
     .mini-dock { flex: 1; background-color: var(--bg_panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; position: relative; display: flex; justify-content: center; align-items: center; min-height: 90px; }
     .mini-prompt { color: var(--text_dim); font-size: 20px; font-weight: bold; text-align: center; padding: 20px; }
 
-    /* ── Settings menu overlay (CREMA-style) ── */
-    #overlay-backdrop { position: absolute; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.55); backdrop-filter: blur(4px); }
+    /* ── Settings menu overlay (CREMA, exact visuals) ── */
+    #overlay-backdrop { position: absolute; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.35); }
     #overlay-backdrop.hidden { display: none; }
-    .overlay-modal { width: min(560px, 86vw); max-height: 86vh; overflow: hidden; display: flex; flex-direction: column; background: var(--bg_menu); border: 1px solid var(--border_solid); border-radius: 16px; box-shadow: 0 30px 80px rgba(0,0,0,0.7); padding: 26px 22px; }
-    #overlay-title { font-size: 26px; font-weight: 900; letter-spacing: 2px; color: var(--accent); text-align: center; margin-bottom: 18px; flex-shrink: 0; }
-    #overlay-list { overflow-y: auto; min-height: 0; display: flex; flex-direction: column; gap: 2px; }
-    .overlay-section { font-size: 11px; font-weight: 900; letter-spacing: 2px; text-transform: uppercase; color: var(--text_dim); padding: 14px 12px 4px; }
-    .overlay-item { font-size: 18px; font-weight: 700; color: var(--text_sec); padding: 13px 16px; border-radius: 8px; text-align: center; }
-    .overlay-item.selected { background: var(--accent); color: var(--bg); font-weight: 900; }
-    #overlay-hint { text-align: center; color: var(--text_dim); font-size: 13px; margin-top: 16px; opacity: 0.8; line-height: 1.5; flex-shrink: 0; }
+    .overlay-modal { background-color: var(--bg_menu); border: 2px solid var(--border_solid); border-radius: 15px; width: 600px; max-width: 92vw; padding: 30px; display: flex; flex-direction: column; box-shadow: 0 20px 50px rgba(0,0,0,0.8); }
+    #overlay-title { font-size: 36px; font-weight: bold; color: var(--text_main); text-align: center; margin-bottom: 30px; flex-shrink: 0; }
+    #overlay-list { display: flex; flex-direction: column; max-height: 55vh; overflow-y: auto; scrollbar-width: none; }
+    #overlay-list::-webkit-scrollbar { display: none; }
+    .overlay-section { font-size: 11px; font-weight: bold; color: var(--text_sec); padding: 16px 20px 4px; text-align: center; letter-spacing: 4px; opacity: 0.75; pointer-events: none; }
+    .overlay-item { font-size: 26px; color: var(--text_sec); padding: 20px; border-bottom: 1px solid var(--border_solid); text-align: center; }
+    .overlay-item.selected { font-size: 32px; font-weight: bold; background-color: var(--border_solid); color: var(--text_main); border-radius: 8px; }
+    #overlay-hint { text-align: center; color: var(--text_dim); font-size: 14px; margin-top: 25px; opacity: 0.7; line-height: 1.5; flex-shrink: 0; }
+
+    /* ── OSK search (CREMA on-screen keyboard) ── */
+    #osk-backdrop { position: absolute; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.55); backdrop-filter: blur(4px); }
+    #osk-backdrop.hidden { display: none; }
+    .osk-modal { width: min(800px, 92vw); text-align: center; }
+    #osk-title { font-size: 36px; font-weight: bold; color: var(--text_main); text-align: center; margin-bottom: 10px; }
+    #osk-query { font-size: 32px; color: var(--accent); margin-bottom: 20px; min-height: 42px; border-bottom: 2px solid var(--border_solid); display: inline-block; min-width: 50%; }
+    #osk-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; justify-content: center; }
+    .osk-key { padding: 15px 5px; font-size: 24px; font-weight: bold; border-radius: 8px; color: var(--text_sec); background: var(--bg_panel); }
+    .osk-key.sel { background: var(--accent); color: var(--bg); transform: scale(1.1); box-shadow: 0 0 15px var(--accent); }
+    #osk-hint { margin-top: 20px; color: var(--text_dim); font-size: 18px; }
 
     /* ── Now Launching ── */
     #couch-now { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; background: rgba(10,6,4,0.82); backdrop-filter: blur(8px); transition: opacity .25s; }
@@ -188,6 +204,7 @@
       <span class="pk"><span class="pb b">B</span> Back</span>
       <span class="pk"><span class="pb lr">✥</span> Move</span>
       <span class="pk"><span class="pb lr">LB / RB</span> Category</span>
+      <span class="pk"><span class="pb y">Y</span> Search</span>
     </footer>
   </div>
 
@@ -246,6 +263,7 @@
       <span class="pk"><span class="pb b">B</span> Back</span>
       <span class="pk"><span class="pb lr">▲ ▼</span> Browse</span>
       <span class="pk"><span class="pb lr">LB / RB</span> Category</span>
+      <span class="pk"><span class="pb y">Y</span> Search</span>
     </footer>
   </div>
 
@@ -254,6 +272,16 @@
       <div id="overlay-title"></div>
       <div id="overlay-list"></div>
       <div id="overlay-hint" style="display:none;"></div>
+    </div>
+  </div>
+
+  <!-- ── OSK SEARCH (CREMA on-screen keyboard) ── -->
+  <div id="osk-backdrop" class="hidden">
+    <div class="overlay-modal osk-modal">
+      <div id="osk-title">SEARCH</div>
+      <div id="osk-query"></div>
+      <div id="osk-grid"></div>
+      <div id="osk-hint">Press <strong>Y</strong> to clear · <strong>B</strong> to close</div>
     </div>
   </div>
 
