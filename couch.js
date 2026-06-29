@@ -430,7 +430,7 @@ function clearListDetail() {
 function listMove(dy) { if (dy) listSelect(listFocus + dy); }
 function listActivate() { const g = listList[listFocus]; if (g) openGamepage(g.id); }
 function listCycleCategory(dir) {
-    catIndex = clamp(catIndex + dir, 0, categories.length - 1);
+    const n = categories.length; catIndex = (catIndex + dir + n) % n;   // infinite roll
     const c = categories[catIndex]; wallFilter = c.key; wallTitle = c.label;
     renderList(); listSelect(0);
 }
@@ -510,7 +510,7 @@ function wallMove(dx, dy) {   // CREMA navigateGallery, responsive column count
 }
 function wallActivate() { const g = galleryList[gridFocus]; if (g) openGamepage(g.id); }
 function wallCycleCategory(dir) {
-    catIndex = clamp(catIndex + dir, 0, categories.length - 1);
+    const n = categories.length; catIndex = (catIndex + dir + n) % n;   // infinite roll
     const c = categories[catIndex]; wallFilter = c.key; wallTitle = c.label;
     wallSearch = ''; renderWall(); focusGrid(0);
 }
