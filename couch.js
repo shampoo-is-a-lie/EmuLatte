@@ -56,6 +56,7 @@ async function init() {
     browseMode = (await window.api.getSetting('couch_browse_mode')) || 'gallery';
     couchSort = (await window.api.getSetting('couch_sort')) || 'alpha';
     heroShow = (await window.api.getSetting('couch_hero_show')) || 'both';
+    retroOn = (await window.api.getSetting('couch_retro')) === '1'; document.body.classList.toggle('retro', retroOn);
     [games, systems] = await Promise.all([window.api.getGames(), window.api.getSystems()]);
     gamesById = new Map(games.map(g => [g.id, g]));
     await loadPlaylists();
@@ -156,7 +157,8 @@ const LAYOUT_OPTS  = [['Xbox', 'xbox'], ['PlayStation', 'playstation'], ['Ninten
 const NAV_OPTS     = [['Gallery', 'gallery'], ['List', 'list']];
 const SORT_OPTS    = [['A — Z', 'alpha'], ['Last Played', 'played'], ['Favourites First', 'favs'], ['Want to Play First', 'want'], ['Recently Added', 'added'], ['Scraped First', 'scraped']];
 const HERO_OPTS    = [['Logo & Name', 'both'], ['Logo Only', 'logo'], ['Name Only', 'name']];
-let couchSort = 'alpha', heroShow = 'both';
+const RETRO_OPTS   = [['Off', '0'], ['On', '1']];
+let couchSort = 'alpha', heroShow = 'both', retroOn = false;
 const getCfg = async (k, d) => (await window.api.getSetting(k)) || d;
 
 function renderOverlay(title, items, hint) {
@@ -184,7 +186,7 @@ function overlayMove(dir) {
 }
 async function openMenu() {
     menuOpen = true; menuMode = 'main';
-    renderOverlay('SETTINGS', ['§APPEARANCE', 'Color Theme', 'Carousel Label', 'Navigation Mode', 'Display Density', '§CONTROLS', 'Gamepad Icons', '§SYSTEM', 'Close Menu', 'Exit Couch Mode']);
+    renderOverlay('SETTINGS', ['§APPEARANCE', 'Color Theme', 'Full-Retro', 'Carousel Label', 'Navigation Mode', 'Display Density', '§CONTROLS', 'Gamepad Icons', '§SYSTEM', 'Close Menu', 'Exit Couch Mode']);
 }
 function closeMenu() { menuOpen = false; $('overlay-backdrop').classList.add('hidden'); }
 let _themeCat = null;
@@ -211,6 +213,10 @@ function openNavMenu() {
 function openHeroMenu() {
     menuMode = 'hero';
     renderOverlay('CAROUSEL LABEL', ['§CAROUSEL LABEL', ...HERO_OPTS.map(([l, v]) => v === heroShow ? '★ ' + l : l), 'Back'], 'What the start carousel shows for each system.');
+}
+function openRetroMenu() {
+    menuMode = 'retro';
+    renderOverlay('FULL-RETRO', ['§FULL-RETRO', ...RETRO_OPTS.map(([l, v]) => (v === '1') === retroOn ? '★ ' + l : l), 'Back'], '8-bit pixel font for the interface.');
 }
 function openSortMenu() {   // opened with SELECT from gallery/list — same options as EmuLatte's gallery sort
     menuOpen = true; menuMode = 'sort';
@@ -247,6 +253,7 @@ function overlayConfirm() {
     const raw = String(overlayItems[overlayIndex] || '').replace('★ ', '');
     if (menuMode === 'main') {
         if (raw === 'Color Theme') openThemeMenu();
+        else if (raw === 'Full-Retro') openRetroMenu();
         else if (raw === 'Carousel Label') openHeroMenu();
         else if (raw === 'Navigation Mode') openNavMenu();
         else if (raw === 'Display Density') openDensityMenu();
@@ -287,6 +294,10 @@ function overlayConfirm() {
     else if (menuMode === 'hero') {
         const o = HERO_OPTS.find(([l]) => l === raw);
         if (o) { heroShow = o[1]; window.api.setSetting('couch_hero_show', o[1]); if (startMode === 'carousel') selectedHero(); openHeroMenu(); }
+    }
+    else if (menuMode === 'retro') {
+        const o = RETRO_OPTS.find(([l]) => l === raw);
+        if (o) { retroOn = o[1] === '1'; window.api.setSetting('couch_retro', o[1]); document.body.classList.toggle('retro', retroOn); openRetroMenu(); }
     }
 }
 function overlayBack() {
