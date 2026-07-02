@@ -19,6 +19,7 @@
     html, body { height: 100%; }
     body { background: var(--bg); color: var(--text_main); font-family: 'Raleway', system-ui, sans-serif; user-select: none; overflow: hidden; }
     button { font-family: inherit; cursor: pointer; }
+    #screens { position: absolute; inset: 0; }   /* containing block for the .screen layers; CRT scales this for overscan safe-area */
     .screen { position: absolute; inset: 0; display: flex; flex-direction: column; }
     .screen.hidden { display: none; }
     .prompts { flex-shrink: 0; display: flex; gap: 24px; align-items: center; justify-content: center; padding: 9px 26px;
@@ -57,13 +58,18 @@
 
     /* ── START: tiles ── */
     #cz-tiles { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); grid-auto-rows: max-content; gap: 18px; padding: 26px; align-content: start; }
+    #cz-tiles::-webkit-scrollbar { width: 14px; }
+    #cz-tiles::-webkit-scrollbar-track { background: rgba(0,0,0,0.28); border-radius: 10px; margin: 8px; }
+    #cz-tiles::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 10px; border: 3px solid transparent; background-clip: padding-box; }
+    #cz-tiles::-webkit-scrollbar-thumb:hover { background: var(--text_main); background-clip: padding-box; }
     .cz-tile { position: relative; aspect-ratio: 16/9; border-radius: 12px; overflow: hidden; border: 2px solid transparent; background: var(--bg_panel);
-               content-visibility: auto; contain-intrinsic-size: auto 230px auto 130px; transition: border-color .12s, transform .12s, box-shadow .12s; }
+               transition: border-color .12s, transform .12s, box-shadow .12s; }
     .cz-tile.sel { border-color: #fff; box-shadow: 0 0 24px rgba(212,163,115,0.5); transform: scale(1.03); z-index: 2; }
     .cz-tile-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.5; }
     .cz-tile-grad { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.88), rgba(0,0,0,0.1) 75%); }
-    .cz-tile-label { position: absolute; bottom: 12px; left: 14px; right: 14px; font-size: 17px; font-weight: 900; letter-spacing: 1px; color: #fff; text-shadow: 0 2px 6px #000; }
-    .cz-tile-count { position: absolute; top: 10px; right: 12px; font-size: 11px; font-weight: 900; color: var(--accent); background: rgba(0,0,0,0.6); padding: 3px 8px; border-radius: 10px; }
+    .cz-tile-text { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px 12px; text-align: center; }
+    .cz-tile-label { font-size: 88px; font-weight: 900; letter-spacing: 1px; line-height: 1.02; color: #fff; text-shadow: 0 2px 6px #000; white-space: nowrap; }   /* JS shrinks this to fit the tile */
+    .cz-tile-count { display: inline-block; margin-top: 12px; font-size: 22px; font-weight: 900; color: var(--accent); background: rgba(0,0,0,0.6); padding: 4px 12px; border-radius: 12px; }
 
     /* ── GALLERY (CREMA gallery-screen, exact CSS, kept fluid) ── */
     #screen-wall { padding: 0; }
@@ -74,12 +80,16 @@
     #gallery-hero { position: relative; z-index: 2; height: 265px; flex-shrink: 0; overflow: hidden; margin: 20px 70px 14px; border-radius: 12px; border: 1px solid var(--border_solid); background: var(--bg_panel); }
     #gallery-hero-img { width: 100%; height: 100%; object-fit: cover; display: block; }
     #gallery-hero-grad { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.15) 45%, rgba(0,0,0,0.92) 100%); z-index: 1; pointer-events: none; }
-    #gallery-header { position: absolute; top: 0; left: 0; right: 0; z-index: 2; display: flex; align-items: center; gap: 16px; padding: 18px 22px 10px; }
+    #gallery-header { position: absolute; top: 0; left: 0; right: 0; z-index: 2; display: flex; align-items: center; justify-content: center; gap: 16px; padding: 18px 22px 10px; }
     #gallery-cat-name { font-size: 26px; font-weight: 900; color: var(--accent); letter-spacing: 3px; text-transform: uppercase; text-shadow: 0 2px 8px rgba(0,0,0,1); }
     #gallery-search-tag { font-size: 16px; color: rgba(255,255,255,0.75); font-style: italic; text-shadow: 0 1px 4px rgba(0,0,0,0.9); }
-    #gallery-count { position: absolute; bottom: 16px; left: 22px; z-index: 2; font-size: 14px; font-weight: 900; color: var(--text_dim); letter-spacing: 2px; text-shadow: 0 2px 8px rgba(0,0,0,1); }
-    #gallery-hero-game-name { position: absolute; bottom: 16px; right: 22px; z-index: 2; font-size: 26px; font-weight: 900; color: #fff; text-shadow: 0 2px 14px rgba(0,0,0,1); text-align: right; max-width: 60%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    #gallery-hero-logo { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 2; max-width: 55%; max-height: 50%; object-fit: contain; display: none; filter: drop-shadow(0 4px 24px rgba(0,0,0,0.95)); }
+    #gallery-count { position: absolute; bottom: 16px; left: 0; right: 0; text-align: center; z-index: 2; font-size: 14px; font-weight: 900; color: var(--text_dim); letter-spacing: 2px; text-shadow: 0 2px 8px rgba(0,0,0,1); }
+    /* game name = centered hero focal point (logo removed); side-scrolls when too long */
+    #gallery-hero-game-name { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 2; font-size: 52px; font-weight: 900; color: #fff; text-shadow: 0 3px 22px rgba(0,0,0,1), 0 1px 5px rgba(0,0,0,0.95); text-align: center; max-width: 86%; white-space: nowrap; overflow: hidden; }
+    #gallery-hero-game-name > span { display: inline-block; will-change: transform; }
+    #gallery-hero-game-name.scroll { text-align: left; }
+    #gallery-hero-game-name.scroll > span { animation: gh-name-marq var(--dur, 6s) ease-in-out infinite alternate; }
+    @keyframes gh-name-marq { 0%, 14% { transform: translateX(0); } 86%, 100% { transform: translateX(var(--shift, 0)); } }
     #gallery-scroll { position: relative; z-index: 2; flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
     #gallery-scroll::-webkit-scrollbar { width: 0; }
     /* auto-fill columns so the count adapts to the window (≈9 on large screens, ≈5 on smaller); cards keep a square cover */
@@ -130,12 +140,14 @@
     .gp-btn.play { background: var(--accent); color: var(--bg); border-color: var(--accent); }
     .gp-btn.play.gp-focus { box-shadow: 0 0 22px var(--accent); }
     #gp-content { flex: 1; min-height: 0; overflow-y: auto; display: flex; gap: 26px; padding: 24px 40px 30px; align-items: flex-start; }
-    #gp-cover { position: relative; width: 220px; aspect-ratio: 2/3; flex-shrink: 0; border-radius: 10px; overflow: hidden; border: 1px solid rgba(212,163,115,0.25); background: var(--bg_panel); }
-    #gp-cover img { width: 100%; display: block; aspect-ratio: 2/3; object-fit: cover; }
+    /* Cover = the art's full natural proportion (jewel case for CD systems); the .cover-frame handles the visuals */
+    #gp-cover { position: relative; width: 220px; flex-shrink: 0; align-self: flex-start; }
+    #gp-cover.noart { aspect-ratio: 2/3; border-radius: 10px; overflow: hidden; border: 1px solid rgba(212,163,115,0.25); background: var(--bg_panel); }
     #gp-left { flex: 1; min-width: 0; }
-    #gp-ss { position: relative; height: 200px; border-radius: 10px; overflow: hidden; border: 1px solid rgba(212,163,115,0.2); margin-bottom: 22px; display: none; }
-    #gp-ss img { width: 100%; height: 100%; object-fit: cover; }
-    #gp-desc { font-size: 16px; line-height: 1.7; color: var(--text_sec); }
+    /* Full screenshot at its natural ratio (uncropped); capped so it stays a tidy panel on big screens */
+    #gp-ss { position: relative; border-radius: 10px; overflow: hidden; border: 1px solid rgba(212,163,115,0.2); background: var(--bg_panel); display: none; max-width: 580px; }
+    #gp-ss img { width: 100%; height: auto; display: block; }
+    #gp-desc { display: none; }   /* description now lives in the Info modal */
     #gp-right { width: 250px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
     .gp-stat { display: flex; justify-content: space-between; gap: 12px; padding: 9px 14px; background: rgba(0,0,0,0.25); border: 1px solid rgba(212,163,115,0.15); border-radius: 8px; font-size: 13px; }
     .gp-stat .k { color: var(--text_dim); font-weight: 800; letter-spacing: 1px; }
@@ -181,7 +193,7 @@
     #overlay-hint { text-align: center; color: var(--text_dim); font-size: 14px; margin-top: 25px; opacity: 0.7; line-height: 1.5; flex-shrink: 0; }
 
     /* ── OSK search (CREMA on-screen keyboard) ── */
-    #osk-backdrop { position: absolute; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.55); backdrop-filter: blur(4px); }
+    #osk-backdrop { position: absolute; inset: 0; z-index: 95; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.55); backdrop-filter: blur(4px); }
     #osk-backdrop.hidden { display: none; }
     .osk-modal { width: min(800px, 92vw); text-align: center; }
     #osk-title { font-size: 36px; font-weight: bold; color: var(--text_main); text-align: center; margin-bottom: 10px; }
@@ -197,7 +209,6 @@
     #saver-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; animation: saver-pan 20s ease-in-out infinite alternate; }
     @keyframes saver-pan { from { transform: scale(1.04) translate(-1%, -1%); } to { transform: scale(1.16) translate(1.5%, 1.5%); } }
     #saver-grad { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.85), transparent 35%, transparent 75%, rgba(0,0,0,0.5)); }
-    #saver-clock { position: absolute; top: 40px; right: 54px; font-size: 64px; font-weight: 900; color: #fff; text-shadow: 0 4px 18px rgba(0,0,0,0.9); }
     #saver-game { position: absolute; bottom: 48px; left: 60px; right: 60px; font-size: 40px; font-weight: 900; color: #fff; text-shadow: 0 4px 18px rgba(0,0,0,0.95); }
 
     /* ── Save-states modal ── */
@@ -225,6 +236,14 @@
     .now-box { display: flex; flex-direction: column; align-items: center; gap: 18px; }
     .now-label { font-size: 12px; font-weight: 900; letter-spacing: 5px; color: var(--accent); }
     .now-title { font-size: clamp(22px, 4vw, 40px); font-weight: 900; color: #fff; text-align: center; max-width: 80vw; }
+
+    /* ── Now Playing / sleep screen (CREMA 1:1): blocks input during a game until the return combo ── */
+    #sleep-screen { position: fixed; inset: 0; z-index: 3000; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    #sleep-screen.hidden { display: none; }
+    .sleep-cover { width: 340px; height: 510px; max-height: 60vh; border-radius: 15px; border: 4px solid var(--border_solid); object-fit: cover; box-shadow: 0 20px 50px rgba(0,0,0,0.9); margin-bottom: 30px; }
+    .sleep-title { font-size: 56px; font-weight: 900; color: var(--text_main); margin-bottom: 60px; text-shadow: 0 5px 15px rgba(0,0,0,0.8); text-align: center; max-width: 90vw; }
+    .sleep-instruction { color: var(--accent); font-size: 26px; font-weight: bold; letter-spacing: 3px; text-align: center; animation: sleep-pulse 2s infinite alternate ease-in-out; }
+    @keyframes sleep-pulse { 0% { opacity: 0.3; } 100% { opacity: 1; } }
 
     /* ── FULL-RETRO: 8-bit PressStart2P for the UI chrome (long descriptions stay readable) ── */
     body.retro { font-family: 'PressStart2P', monospace; letter-spacing: 0; }
@@ -255,9 +274,207 @@
     body.retro .art-ph-cta { font-size: clamp(7px, 5cqh, 13px); }
     /* keep long-form text in Raleway for legibility */
     body.retro #gp-desc, body.retro #game-desc, body.retro .desc-box { font-family: 'Raleway', sans-serif; }
+
+    /* ── Cover frame: full natural proportion + faux CD jewel case (ported from desktop EmuLatte) ──
+       Window from jewelcase.png's alpha: left 11.19% / top 2.59% / w 84.14% / h 95.61%. */
+    .cover-frame { position: relative; width: 100%; display: block; }
+    .cover-frame img { display: block; width: 100%; height: auto; border-radius: 8px; }
+    .cover-frame.jewel { aspect-ratio: 1135 / 1002; overflow: hidden; border-radius: 0; filter: drop-shadow(0 6px 14px rgba(0,0,0,0.55)); }
+    .cover-frame.jewel img { position: absolute; left: 11.19%; top: 2.59%; width: 84.14%; height: 95.61%; border-radius: 0; object-fit: cover; background: #111; }
+    .cover-frame.jewel::after { content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: url('assets/jewelcase.png') no-repeat center / 100% 100%; }
+
+    /* ── List item title: ellipsis normally; the selected long title scrolls gracefully in CRT ── */
+    .gi-label { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; will-change: transform; }
+    .game-item.selected .gi-label.marquee { max-width: none; overflow: visible; text-overflow: clip; animation: gi-marquee 6s ease-in-out infinite alternate; }
+    @keyframes gi-marquee { 0%, 14% { transform: translateX(0); } 86%, 100% { transform: translateX(var(--gi-shift, 0)); } }
+
+    /* ── INFO modal (game description in big letters; dev/publisher up top) ── */
+    #info-backdrop { position: absolute; inset: 0; z-index: 85; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); }
+    #info-backdrop.hidden { display: none; }
+    .info-modal { width: min(880px, 92vw); max-height: 86vh; display: flex; flex-direction: column; }
+    #info-title { font-size: 38px; font-weight: 900; letter-spacing: 1px; color: var(--text_main); text-align: center; margin-bottom: 14px; flex-shrink: 0; }
+    #info-meta { display: flex; flex-wrap: wrap; gap: 10px 14px; justify-content: center; margin-bottom: 22px; flex-shrink: 0; }
+    .info-chip { font-size: 18px; font-weight: 800; color: var(--text_main); background: rgba(0,0,0,0.28); border: 1px solid var(--border_solid); border-radius: 999px; padding: 8px 18px; }
+    .info-chip b { color: var(--text_dim); font-weight: 900; letter-spacing: 1px; margin-right: 8px; text-transform: uppercase; font-size: 14px; }
+    #info-desc { font-size: 26px; line-height: 1.55; color: var(--text_sec); overflow-y: auto; scrollbar-width: none; padding-right: 4px; }
+    #info-desc::-webkit-scrollbar { display: none; }
+    #info-hint { flex-shrink: 0; text-align: center; color: var(--text_dim); font-size: 14px; margin-top: 18px; display: flex; gap: 20px; justify-content: center; align-items: center; }
+
+    /* ── SAVE-STATES MANAGER (gamepad-navigable, themed) ── */
+    #sm2-backdrop { position: absolute; inset: 0; z-index: 82; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.62); backdrop-filter: blur(6px); }
+    #sm2-backdrop.hidden { display: none; }
+    #sm2-modal { width: min(1120px, 94vw); height: 86vh; background: var(--bg_menu); border: 2px solid var(--border_solid); border-radius: 18px; padding: 24px 24px 16px; display: flex; flex-direction: column; box-shadow: 0 26px 80px rgba(0,0,0,0.85); }
+    #sm2-header { display: flex; align-items: baseline; gap: 16px; flex-shrink: 0; margin-bottom: 16px; }
+    #sm2-title { font-size: 30px; font-weight: 900; letter-spacing: 2px; color: var(--accent); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #sm2-sub { font-size: 15px; font-weight: 800; color: var(--text_dim); letter-spacing: 2px; }
+    #sm2-grid { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); grid-auto-rows: max-content; gap: 16px; align-content: start; padding: 4px; }
+    #sm2-grid::-webkit-scrollbar { display: none; }
+    #sm2-grid.slots { grid-template-columns: repeat(auto-fill, minmax(264px, 1fr)); }
+    .sm2-card { position: relative; background: var(--bg_panel); border: 3px solid transparent; border-radius: 12px; overflow: hidden; cursor: pointer; transition: transform .12s, border-color .12s, box-shadow .12s; }
+    .sm2-card.sel { border-color: var(--accent); transform: scale(1.05); box-shadow: 0 14px 36px rgba(0,0,0,0.65), 0 0 22px var(--accent); z-index: 2; }
+    .sm2-card.pending-del { border-color: #e05a4f; box-shadow: 0 0 22px #e05a4f; }
+    .sm2-art { position: relative; width: 100%; aspect-ratio: 16/9; background: var(--bg); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .sm2-art .sm2-bg { position: absolute; inset: 0; background-size: cover; background-position: center; filter: blur(16px) brightness(0.5) saturate(1.3); transform: scale(1.2); }
+    .sm2-art img.shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .sm2-art img.logo { position: relative; z-index: 1; max-width: 82%; max-height: 72%; object-fit: contain; filter: drop-shadow(0 3px 10px rgba(0,0,0,0.85)); }
+    .sm2-art .sm2-name { position: relative; z-index: 1; padding: 10px; font-size: 15px; font-weight: 900; color: var(--text_sec); text-align: center; }
+    .sm2-art .sm2-fresh-ic { position: relative; z-index: 1; font-size: 46px; color: var(--accent); }
+    .sm2-count { position: absolute; top: 6px; right: 6px; z-index: 2; background: var(--accent); color: var(--bg); font-size: 11px; font-weight: 900; border-radius: 8px; padding: 2px 7px; }
+    .sm2-tag { padding: 9px 12px; font-size: 14px; font-weight: 900; letter-spacing: 1px; color: var(--text_main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #sm2-detail { flex-shrink: 0; text-align: center; color: var(--text_sec); font-weight: 800; font-size: 15px; margin-top: 14px; min-height: 20px; }
+    #sm2-hint { flex-shrink: 0; text-align: center; color: var(--text_dim); font-size: 13px; margin-top: 8px; display: flex; gap: 18px; justify-content: center; align-items: center; flex-wrap: wrap; }
+    #sm2-empty { grid-column: 1/-1; text-align: center; padding: 70px; color: var(--text_dim); font-weight: 900; letter-spacing: 2px; }
+
+    /* ════════════════════════════════════════════════════════════════════════
+       CRT MODE — a 640×480-tailored layout, toggled from the Couch settings
+       menu (Settings ▸ CRT Mode). Everything is scoped under `body.crt`, so the
+       normal Couch layout above is NEVER affected — edit freely in here.
+       This is a STARTING POINT meant to be reshaped; nothing leaks out of
+       body.crt. Tip: for a true 640×480 layout set Display Density ▸ Comfortable
+       so these rules size against real pixels (not a zoomed-down viewport).
+       ════════════════════════════════════════════════════════════════════════ */
+    /* ── Footer prompts: thin compact bar (480px tall has no room to spare) ── */
+    body.crt .prompts { padding: 6px 12px; gap: 10px; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; }
+    body.crt .prompts .pk { gap: 4px; }
+    body.crt .gp-glyph { width: 1.8em; height: 1.8em; }
+    /* CRT footers are tight (640px wide): drop the leading directional hint so every action key fits. */
+    body.crt #screen-wall > .prompts > .pk:first-child,
+    body.crt #screen-list > .prompts > .pk:first-child { display: none; }
+    .lbl-crt { display: none; }            /* footer label that only shows in CRT mode (e.g. Play → Select) */
+    body.crt .lbl-std { display: none; }
+    body.crt .lbl-crt { display: inline; }
+
+    /* ── START: carousel hero ── */
+    body.crt #cz-hero-logo { height: clamp(50px, 16vh, 90px); }
+    body.crt #cz-hero-name { font-size: clamp(28px, 8vw, 52px); letter-spacing: 2px; }
+    body.crt #cz-hero-tag { font-size: 11px; padding: 3px 12px; letter-spacing: 2px; }
+    body.crt #cz-hero-sub { font-size: 14px; letter-spacing: 3px; }
+    /* ── START: tiles ── */
+    body.crt #cz-tiles { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 12px; }
+    body.crt .cz-tile-text { padding: 6px 10px; }
+    body.crt .cz-tile-label { font-size: 26px; }
+    body.crt .cz-tile-count { font-size: 20px; padding: 3px 12px; margin-top: 8px; }   /* was 11px — unreadable on the CRT */
+
+    /* ── GALLERY: slim hero bar + 3 big legible columns ── */
+    body.crt #gallery-hero { height: 92px; margin: 8px 14px; border-radius: 8px; }
+    body.crt #gallery-header { padding: 8px 12px 6px; gap: 10px; }
+    body.crt #gallery-cat-name { font-size: 18px; letter-spacing: 2px; }
+    body.crt #gallery-search-tag { font-size: 12px; }
+    body.crt #gallery-count { font-size: 14px; bottom: 8px; letter-spacing: 1px; }
+    body.crt #gallery-hero { height: 104px; }   /* a touch taller to carry the bigger game name */
+    body.crt #gallery-hero-game-name { font-size: 28px; max-width: 88%; }   /* centered focal point on the CRT hero */
+    body.crt #gallery-grid { grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 10px 14px; }   /* CRT experiment: 4 cards per row */
+    body.crt .gcell-cover-area { aspect-ratio: 4 / 3; }   /* CRT experiment: 4:3 cards (matches screenshot art) */
+    body.crt .gcell { contain-intrinsic-size: auto 115px; }   /* scroll estimate ≈ a footer-less 4:3 card */
+    body.crt .gcell-footer { display: none; }   /* CRT: pure screenshot cards — no title row / PLAY button */
+    body.crt .gcell.selected { transform: scale(1.06); }
+
+    /* ── GAMEPAGE (CRT): three equal thirds — box art · screenshot · info — everything kept inside the visible area (no scrollbar) ── */
+    body.crt #gp-hero { height: 40vh; }
+    body.crt #gp-logo { max-height: 46%; }
+    body.crt #gp-hero-title { font-size: clamp(20px, 5vw, 34px); }
+    body.crt #gp-actions { padding: 10px 14px; gap: 8px; justify-content: center; flex-wrap: wrap; row-gap: 6px; }   /* centered, not left-justified */
+    body.crt .gp-btn { font-size: 15px; padding: 9px 15px; letter-spacing: 0.5px; }   /* much bigger button text for the CRT */
+    body.crt #gp-content { padding: 12px 18px 14px; gap: 14px; overflow: hidden; align-items: stretch; }   /* no scroll — the three columns always fit */
+    /* equal thirds */
+    body.crt #gp-cover, body.crt #gp-left, body.crt #gp-right { flex: 1 1 0; width: auto; min-width: 0; }
+    /* box art — contained inside the column's height so tall portrait covers don't overflow */
+    body.crt #gp-cover { display: flex; align-items: flex-start; justify-content: center; }
+    body.crt #gp-cover .cover-frame { width: 100%; }
+    body.crt #gp-cover .cover-frame:not(.jewel) { width: auto; max-width: 100%; height: 100%; display: flex; align-items: flex-start; justify-content: center; }
+    body.crt #gp-cover .cover-frame:not(.jewel) img { width: auto; height: auto; max-width: 100%; max-height: 100%; }
+    /* screenshot — fit within the column AND the screen height, so vertical games no longer overflow with an ugly scrollbar */
+    body.crt #gp-left { display: flex; flex-direction: column; min-height: 0; }
+    body.crt #gp-ss { flex: 1 1 auto; min-height: 0; max-width: 100%; border: none; background: transparent; align-items: flex-start; justify-content: center; }
+    body.crt #gp-ss img { width: auto; height: auto; max-width: 100%; max-height: 100%; }
+    /* info — value under the label, larger, one line, side-scrolls when too long */
+    body.crt #gp-right { gap: 8px; justify-content: flex-start; }
+    body.crt .gp-stat { flex-direction: column; align-items: stretch; gap: 3px; padding: 8px 12px; }
+    body.crt .gp-stat .k { font-size: 12px; letter-spacing: 1px; }
+    body.crt .gp-stat .v { text-align: left; font-size: 22px; white-space: nowrap; overflow: hidden; }
+    body.crt .gp-stat .v > span { display: inline-block; will-change: transform; }
+    body.crt .gp-stat .v.scroll > span { animation: gp-stat-marq var(--dur, 5s) ease-in-out infinite alternate; }
+    @keyframes gp-stat-marq { 0%, 16% { transform: translateX(0); } 84%, 100% { transform: translateX(var(--shift, 0)); } }
+    /* CRT playlist menu (opened from the gamepage button): make the game-title subtitle much bigger */
+    body.crt #overlay-list[data-mode="playlists"] .overlay-section { font-size: 22px; letter-spacing: 2px; opacity: 0.95; color: var(--accent); padding: 12px 16px 8px; }
+
+    /* ── LIST view: tight 2-column (list + details); stats column dropped ── */
+    body.crt #screen-list { padding: 12px 14px; }
+    body.crt .header { padding-bottom: 8px; margin-bottom: 10px; }
+    body.crt .header-title { font-size: 22px; gap: 10px; }
+    body.crt .header-brand { font-size: 14px; }
+    body.crt .main-container { gap: 14px; }
+    body.crt .game-item { font-size: 20px; padding: 9px 12px; margin-bottom: 3px; }
+    body.crt .game-item.selected { border-left-width: 5px; }
+    body.crt .desc-box { display: none; }   /* drop the long description on CRT — gives the screenshot area the full column height */
+    body.crt .stats-view { display: none; }   /* 640px only fits list + details */
+    body.crt #cover-mini { display: none; }   /* CRT uses the natural-proportion / jewel-case overlay instead */
+    /* Natural-proportion (or jewel-case for CD systems) box-art overlay, anchored bottom-left */
+    #cover-mini-crt { position: absolute; bottom: 14px; left: 14px; width: 128px; height: auto; z-index: 10; transition: opacity 0.4s ease; opacity: 1; }
+    #cover-mini-crt.hidden { opacity: 0; }
+    #cover-mini-crt .cover-frame img { border: 2px solid var(--accent); box-shadow: 0 10px 20px rgba(0,0,0,0.8); }
+    #cover-mini-crt .cover-frame.jewel img { border: none; box-shadow: none; }
+    body.crt #list-logo { max-height: 42%; max-width: 72%; top: 16px; }   /* bigger game logo */
+
+    /* ── Settings menu overlay ── */
+    body.crt .overlay-modal { width: 92vw; max-width: 560px; padding: 16px 18px; border-radius: 12px; }
+    body.crt #overlay-title { font-size: 25px; margin-bottom: 14px; }
+    body.crt #overlay-list { max-height: 62vh; }
+    body.crt .overlay-section { font-size: 9px; padding: 10px 14px 3px; letter-spacing: 3px; }
+    body.crt .overlay-item { font-size: 19px; padding: 10px 12px; }
+    body.crt .overlay-item.selected { font-size: 23px; border-radius: 6px; }
+    body.crt #overlay-hint { font-size: 11px; margin-top: 12px; }
+
+    /* ── OSK search keyboard ── */
+    body.crt .osk-modal { width: 94vw; }
+    body.crt #osk-title { font-size: 20px; margin-bottom: 6px; }
+    body.crt #osk-query { font-size: 20px; margin-bottom: 12px; min-height: 28px; }
+    body.crt #osk-grid { gap: 6px; }
+    body.crt .osk-key { font-size: 16px; padding: 8px 4px; border-radius: 6px; }
+    body.crt #osk-hint { font-size: 12px; margin-top: 12px; }
+
+    /* ── Now Launching / Save-states / Screensaver ── */
+    body.crt .now-art { width: 300px; }
+    body.crt .now-box { gap: 12px; }
+    body.crt .now-label { font-size: 10px; letter-spacing: 3px; }
+    body.crt .now-title { font-size: clamp(18px, 5vw, 28px); }
+    body.crt .sleep-cover { width: 150px; height: 225px; border-width: 2px; margin-bottom: 16px; }
+    body.crt .sleep-title { font-size: 28px; margin-bottom: 28px; }
+    body.crt .sleep-instruction { font-size: 15px; letter-spacing: 2px; }
+    body.crt #ss-modal { width: 94vw; padding: 16px; border-radius: 12px; }
+    body.crt #ss-title { font-size: 20px; letter-spacing: 1px; }
+    body.crt #ss-subtitle { font-size: 13px; margin: 4px 0 12px; }
+    body.crt .ss-card { flex-basis: 170px; }
+    body.crt .ss-slot { font-size: 13px; }
+    body.crt .ss-time { font-size: 11px; }
+    body.crt #ss-hint { font-size: 11px; }
+    body.crt #saver-game { font-size: 22px; bottom: 24px; left: 28px; right: 28px; }
+
+    /* ── Overscan safe-area: shrink the screen layer toward center so a CRT's overscan
+          doesn't clip edges/footers. Modals/screensaver stay full-bleed (outside #screens). ── */
+    body.crt #screens { transform: scale(0.92); transform-origin: 50% 50%; }
+
+    /* ── INFO modal (CRT) ── */
+    body.crt #info-title { font-size: 26px; margin-bottom: 10px; }
+    body.crt .info-chip { font-size: 14px; padding: 6px 13px; }
+    body.crt .info-chip b { font-size: 11px; }
+    body.crt #info-meta { margin-bottom: 14px; }
+    body.crt #info-desc { font-size: 20px; line-height: 1.5; }
+    body.crt #info-hint { font-size: 11px; margin-top: 12px; }
+
+    /* ── SAVE-STATES manager (CRT) ── */
+    body.crt #sm2-modal { width: 94vw; height: 90vh; padding: 14px 16px 12px; border-radius: 12px; }
+    body.crt #sm2-title { font-size: 22px; }
+    body.crt #sm2-sub { font-size: 12px; }
+    body.crt #sm2-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+    body.crt #sm2-grid.slots { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+    body.crt .sm2-tag { font-size: 12px; padding: 7px 10px; }
+    body.crt #sm2-detail { font-size: 13px; margin-top: 10px; }
+    body.crt #sm2-hint { font-size: 11px; margin-top: 6px; gap: 12px; }
   </style>
 </head>
 <body>
+  <div id="screens">
   <!-- ── START SCREEN ── -->
   <div id="screen-start" class="screen">
     <div id="cz-hero">
@@ -290,7 +507,6 @@
         <div id="gallery-cat-name"></div>
         <div id="gallery-search-tag"></div>
       </div>
-      <img id="gallery-hero-logo" src="" alt="">
       <div id="gallery-count"></div>
       <div id="gallery-hero-game-name"></div>
     </div>
@@ -328,6 +544,7 @@
       <span class="pk"><span class="gp-glyph" data-btn="SOUTH"></span> Select</span>
       <span class="pk"><span class="gp-glyph" data-btn="EAST"></span> Back</span>
       <span class="pk"><span class="gp-glyph" data-btn="dpad_left"></span><span class="gp-glyph" data-btn="dpad_right"></span> Actions</span>
+      <span class="pk" id="gp-scrape-hint" style="display:none"><span class="gp-glyph" data-btn="WEST"></span> Scrape</span>
     </footer>
   </div>
 
@@ -346,6 +563,7 @@
           <div id="list-media-topgrad"></div>
           <img id="list-logo" alt="">
           <img id="cover-mini" class="cover-art-overlay hidden" alt="">
+          <div id="cover-mini-crt" class="hidden"></div>
           <div id="list-noart" style="display:none;"></div>
         </div>
         <div class="desc-box" id="game-desc"></div>
@@ -363,13 +581,14 @@
     <footer class="prompts">
       <span class="pk"><span class="gp-glyph" data-btn="dpad_up"></span><span class="gp-glyph" data-btn="dpad_down"></span> Browse</span>
       <span class="pk"><span class="gp-glyph" data-btn="L1"></span><span class="gp-glyph" data-btn="R1"></span> Category</span>
-      <span class="pk"><span class="gp-glyph" data-btn="SOUTH"></span> Play</span>
+      <span class="pk"><span class="gp-glyph" data-btn="SOUTH"></span> <span class="lbl-std">Play</span><span class="lbl-crt">Select</span></span>
       <span class="pk"><span class="gp-glyph" data-btn="EAST"></span> Back</span>
       <span class="pk"><span class="gp-glyph" data-btn="NORTH"></span> Search</span>
       <span class="pk"><span class="gp-glyph" data-btn="WEST"></span> Scrape</span>
       <span class="pk"><span class="gp-glyph" data-btn="SELECT"></span> Sort</span>
     </footer>
   </div>
+  </div><!-- /#screens -->
 
   <div id="overlay-backdrop" class="hidden">
     <div class="overlay-modal">
@@ -393,7 +612,6 @@
   <div id="saver" class="hidden">
     <img id="saver-img" alt="">
     <div id="saver-grad"></div>
-    <div id="saver-clock">--:--</div>
     <div id="saver-game"></div>
   </div>
 
@@ -412,6 +630,38 @@
       <div class="now-art"></div>
       <div class="now-label">NOW LAUNCHING</div>
       <div class="now-title"></div>
+    </div>
+  </div>
+
+  <div id="sleep-screen" class="hidden">
+    <img id="sleep-cover" class="sleep-cover" src="" alt="">
+    <div id="sleep-title" class="sleep-title"></div>
+    <div id="sleep-instruction" class="sleep-instruction"></div>
+  </div>
+
+  <!-- ── INFO modal (game description + dev/publisher) ── -->
+  <div id="info-backdrop" class="hidden">
+    <div class="overlay-modal info-modal">
+      <div id="info-title"></div>
+      <div id="info-meta"></div>
+      <div id="info-desc"></div>
+      <div id="info-hint">
+        <span><span class="gp-glyph" data-btn="EAST"></span> Close</span>
+        <span><span class="gp-glyph" data-btn="dpad_up"></span><span class="gp-glyph" data-btn="dpad_down"></span> Scroll</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SAVE-STATES MANAGER (gamepad-navigable) ── -->
+  <div id="sm2-backdrop" class="hidden">
+    <div id="sm2-modal">
+      <div id="sm2-header">
+        <div id="sm2-title">SAVE STATES</div>
+        <div id="sm2-sub"></div>
+      </div>
+      <div id="sm2-grid"></div>
+      <div id="sm2-detail"></div>
+      <div id="sm2-hint"></div>
     </div>
   </div>
 

@@ -735,6 +735,19 @@ function paintExpress() {
         ]);
     }
 
+    expGroup(c, 'Controls');
+    {                                                               // Close RA combo — device-independent RetroPad quit combo
+        const cur = g('input_quit_gamepad_combo') || '0';
+        const body = expRow(c, 'Close RetroArch combo', 'A gamepad combo that quits RetroArch. In Couch Mode set the matching Return Combo so one press both quits the game and brings Couch back.');
+        expChips(body, [
+            { label: 'Off', sel: cur === '0', on: () => expApply({ input_quit_gamepad_combo: '0' }) },
+            { label: 'Select + Start', rec: true, sel: cur === '4', on: () => expApply({ input_quit_gamepad_combo: '4' }) },
+            { label: 'L3 + R3', sel: cur === '2', on: () => expApply({ input_quit_gamepad_combo: '2' }) },
+            { label: 'L1+R1+Select+Start', sel: cur === '3', on: () => expApply({ input_quit_gamepad_combo: '3' }) },
+            { label: 'L2 + R2', sel: cur === '8', on: () => expApply({ input_quit_gamepad_combo: '8' }) },
+        ]);
+    }
+
     expGroup(c, 'Shaders');
     {
         const on = g('video_shader_enable') === 'true';

@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('api', {
     close:    () => ipcRenderer.send('window-close'),
     enterCouch: (opts) => ipcRenderer.invoke('enter-couch-mode', opts),
     exitCouch:  ()     => ipcRenderer.invoke('exit-couch-mode'),
+    forceFocus: ()     => ipcRenderer.send('force-focus'),
 
     // Systems
     getSystems:   ()         => ipcRenderer.invoke('get-systems'),

@@ -22,6 +22,19 @@ function gcellMedia(g) {   // gallery card: screenshot background + logo on top 
     return html;
 }
 
+// ── Cover frame: full natural proportion + faux CD jewel case (mirrors desktop EmuLatte) ──
+const JEWEL_SYS = new Set(['ps1', 'saturn', 'segacd', 'dc', 'pcecd', 'pcfx', 'neocd', '3do']);
+const isJewel = g => JEWEL_SYS.has(String(g && g.system_short || '').toLowerCase());
+const JEWEL_AR_MIN = 0.88, JEWEL_AR_MAX = 1.20;
+const coverFrameHTML = g => `<div class="cover-frame"><img src="${g.cover}" alt=""></div>`;
+function applyCoverFrame(g, frame, img) {   // jewel case only for square-ish art on CD systems; else the art's full natural ratio
+    if (!frame || !img) return;
+    frame.classList.remove('jewel');
+    if (!isJewel(g)) return;
+    const decide = () => { const w = img.naturalWidth, h = img.naturalHeight; if (w && h) frame.classList.toggle('jewel', (w / h) >= JEWEL_AR_MIN && (w / h) <= JEWEL_AR_MAX); };
+    if (img.complete && img.naturalWidth) decide(); else img.addEventListener('load', decide, { once: true });
+}
+
 let games = [], systems = [], gamesById = new Map(), categories = [];
 let playlists = [], playlistGames = {};   // playlistGames[id] = [gameId,…]
 async function loadPlaylists() {
@@ -55,8 +68,11 @@ async function init() {
     applyGamepadLayout((await window.api.getSetting('couch_gamepad_layout')) || 'xbox');
     browseMode = (await window.api.getSetting('couch_browse_mode')) || 'gallery';
     couchSort = (await window.api.getSetting('couch_sort')) || 'alpha';
-    heroShow = (await window.api.getSetting('couch_hero_show')) || 'both';
+    heroShow = (await window.api.getSetting('couch_hero_show')) || 'name';
     retroOn = (await window.api.getSetting('couch_retro')) === '1'; document.body.classList.toggle('retro', retroOn);
+    crtOn = (await window.api.getSetting('couch_crt_layout')) === '1'; document.body.classList.toggle('crt', crtOn);
+    if (crtOn) browseMode = 'list';   // CRT defaults to List view (per-session; the saved non-CRT preference is untouched)
+    returnCombo = (await window.api.getSetting('couch_return_combo')) || 'START + SELECT';
     saverDelayMin = Number((await window.api.getSetting('couch_screensaver')) ?? '3') || 0;
     sfxOn = (await window.api.getSetting('couch_sfx')) !== '0';
     bgmMode = (await window.api.getSetting('couch_bgm_mode')) || 'off';
@@ -164,10 +180,12 @@ const NAV_OPTS     = [['Gallery', 'gallery'], ['List', 'list']];
 const SORT_OPTS    = [['A — Z', 'alpha'], ['Last Played', 'played'], ['Favourites First', 'favs'], ['Want to Play First', 'want'], ['Recently Added', 'added'], ['Scraped First', 'scraped']];
 const HERO_OPTS    = [['Logo & Name', 'both'], ['Logo Only', 'logo'], ['Name Only', 'name']];
 const RETRO_OPTS   = [['Off', '0'], ['On', '1']];
+const CRT_OPTS     = [['Off', '0'], ['On', '1']];
 const SAVER_OPTS   = [['Off', '0'], ['1 min', '1'], ['3 min', '3'], ['5 min', '5'], ['10 min', '10']];
+const COMBO_OPTS   = ['START + SELECT', 'L1 + R1 + START + SELECT', 'L3 + R3', 'START + SELECT (HOLD 2 SEC)', 'L1 + R1 + START + SELECT (HOLD 2 SEC)', 'L3 + R3 (HOLD 2 SEC)'];
 const BGM_ORDER    = ['off', 'ambient', 'piano', 'jazz', 'lofi'];
 const BGM_LABEL    = { off: 'Off', ambient: 'Ambient', piano: 'Piano', jazz: 'Jazz', lofi: 'Lo-Fi' };
-let couchSort = 'alpha', heroShow = 'both', retroOn = false;
+let couchSort = 'alpha', heroShow = 'name', retroOn = false, crtOn = false, returnCombo = 'START + SELECT';
 
 // ── Ambient sound (BGM + nav/select/back SFX, ported from CREMA) ──────────────
 let sfxOn = true, bgmMode = 'off', vol = 0.3, _audioKicked = false;
@@ -190,7 +208,7 @@ const getCfg = async (k, d) => (await window.api.getSetting(k)) || d;
 
 function renderOverlay(title, items, hint) {
     overlayItems = items;
-    const list = $('overlay-list'); $('overlay-title').textContent = title; list.innerHTML = '';
+    const list = $('overlay-list'); $('overlay-title').textContent = title; list.dataset.mode = menuMode; list.innerHTML = '';
     items.forEach((it, i) => {
         const d = document.createElement('div');
         if (it[0] === '§') { d.className = 'overlay-section'; d.textContent = it.slice(1); }
@@ -213,7 +231,7 @@ function overlayMove(dir) {
 }
 async function openMenu() {
     menuOpen = true; menuMode = 'main';
-    renderOverlay('SETTINGS', ['§APPEARANCE', 'Color Theme', 'Full-Retro', 'Carousel Label', 'Navigation Mode', 'Display Density', 'Screensaver', '§AUDIO', 'Sound', '§CONTROLS', 'Gamepad Icons', '§SYSTEM', 'Close Menu', 'Exit Couch Mode']);
+    renderOverlay('SETTINGS', ['§APPEARANCE', 'Color Theme', 'Full-Retro', 'CRT Mode (640x480)', 'Carousel Label', 'Navigation Mode', 'Display Density', 'Screensaver', '§AUDIO', 'Sound', '§CONTROLS', 'Gamepad Icons', 'Return Combo', '§SYSTEM', 'Manage Save States', 'Close Menu', 'Exit Couch Mode']);
 }
 function closeMenu() { menuOpen = false; $('overlay-backdrop').classList.add('hidden'); }
 let _themeCat = null;
@@ -245,9 +263,17 @@ function openRetroMenu() {
     menuMode = 'retro';
     renderOverlay('FULL-RETRO', ['§FULL-RETRO', ...RETRO_OPTS.map(([l, v]) => (v === '1') === retroOn ? '★ ' + l : l), 'Back'], '8-bit pixel font for the interface.');
 }
+function openCrtMenu() {
+    menuMode = 'crt';
+    renderOverlay('CRT MODE', ['§CRT MODE (640x480)', ...CRT_OPTS.map(([l, v]) => (v === '1') === crtOn ? '★ ' + l : l), 'Back'], 'A 640x480-tailored layout for CRT screens. Only affects Couch Mode.');
+}
 function openSaverMenu() {
     menuMode = 'saver';
-    renderOverlay('SCREENSAVER', ['§AFTER IDLE', ...SAVER_OPTS.map(([l, v]) => Number(v) === saverDelayMin ? '★ ' + l : l), 'Back'], 'Shows a screenshot slideshow + clock when idle.');
+    renderOverlay('SCREENSAVER', ['§AFTER IDLE', ...SAVER_OPTS.map(([l, v]) => Number(v) === saverDelayMin ? '★ ' + l : l), 'Back'], 'Shows a screenshot slideshow when idle.');
+}
+function openComboMenu() {
+    menuMode = 'combo';
+    renderOverlay('RETURN COMBO', ['§RETURN TO COUCH', ...COMBO_OPTS.map(m => m === returnCombo ? '★ ' + m : m), 'Back'], 'Buttons to hold during a game to return to Couch Mode. Match it to RetroArch’s Close combo so one press does both.');
 }
 function openSoundMenu(keepIdx) {
     menuMode = 'sound';
@@ -296,17 +322,20 @@ async function createPlaylistForGame(name) {
     openPlaylistsMenu();
 }
 function applyDensity(v) { const d = v === 'auto' ? autoDensity() : (parseFloat(v) || 1); if (window.api.setZoom) window.api.setZoom(d); }
-function overlayConfirm() {
+async function overlayConfirm() {
     const raw = String(overlayItems[overlayIndex] || '').replace('★ ', '');
     if (menuMode === 'main') {
         if (raw === 'Color Theme') openThemeMenu();
         else if (raw === 'Full-Retro') openRetroMenu();
+        else if (raw === 'CRT Mode (640x480)') openCrtMenu();
         else if (raw === 'Carousel Label') openHeroMenu();
         else if (raw === 'Navigation Mode') openNavMenu();
         else if (raw === 'Display Density') openDensityMenu();
         else if (raw === 'Screensaver') openSaverMenu();
         else if (raw === 'Sound') openSoundMenu();
         else if (raw === 'Gamepad Icons') openLayoutMenu();
+        else if (raw === 'Return Combo') openComboMenu();
+        else if (raw === 'Manage Save States') openSaveMgr();
         else if (raw === 'Close Menu') closeMenu();
         else if (raw === 'Exit Couch Mode') exitCouch();
         return;
@@ -348,9 +377,23 @@ function overlayConfirm() {
         const o = RETRO_OPTS.find(([l]) => l === raw);
         if (o) { retroOn = o[1] === '1'; window.api.setSetting('couch_retro', o[1]); document.body.classList.toggle('retro', retroOn); openRetroMenu(); }
     }
+    else if (menuMode === 'crt') {
+        const o = CRT_OPTS.find(([l]) => l === raw);
+        if (o) {
+            crtOn = o[1] === '1'; window.api.setSetting('couch_crt_layout', o[1]); document.body.classList.toggle('crt', crtOn);
+            // CRT defaults to List view; turning CRT off restores the saved non-CRT preference.
+            browseMode = crtOn ? 'list' : ((await window.api.getSetting('couch_browse_mode')) || 'gallery');
+            if (screen === 'wall' || screen === 'list') (browseMode === 'list' ? enterList : enterWall)();   // re-flow the active browse view for the new layout
+            requestAnimationFrame(fitTileLabels);   // tile label base size differs per layout — refit
+            openCrtMenu();
+        }
+    }
     else if (menuMode === 'saver') {
         const o = SAVER_OPTS.find(([l]) => l === raw);
         if (o) { saverDelayMin = Number(o[1]); window.api.setSetting('couch_screensaver', o[1]); resetIdle(); openSaverMenu(); }
+    }
+    else if (menuMode === 'combo') {
+        if (COMBO_OPTS.includes(raw)) { returnCombo = raw; window.api.setSetting('couch_return_combo', raw); openComboMenu(); }
     }
     else if (menuMode === 'sound') {
         const it = String(overlayItems[overlayIndex] || '');
@@ -365,8 +408,8 @@ function overlayBack() {
     else if (menuMode === 'theme') openThemeMenu();   // back to theme categories
     else openMenu();
 }
-function dispatchMenu() { if (ssOpen) return; if (menuOpen) closeMenu(); else openMenu(); }
-function dispatchSort() { if (ssOpen || oskOpen || menuOpen || _scraping) return; if (screen === 'wall' || screen === 'list') openSortMenu(); }
+function dispatchMenu() { if (ssOpen || smOpen || infoOpen) return; if (menuOpen) closeMenu(); else openMenu(); }
+function dispatchSort() { if (ssOpen || oskOpen || menuOpen || smOpen || infoOpen || _scraping) return; if (screen === 'wall' || screen === 'list') openSortMenu(); }
 
 // ── OSK search (CREMA on-screen keyboard) ────────────────────────────────────
 const OSK_COLS = 7, OSK_ROWS = 6;
@@ -500,27 +543,39 @@ function renderTiles() {
     $('cz-tiles').innerHTML = categories.map((c, i) => {
         const media = mediaForCategory(c.key);
         const bg = media[0] ? `<img class="cz-tile-bg" src="${media[0]}" loading="lazy">` : '';
-        return `<div class="cz-tile" data-i="${i}">${bg}<div class="cz-tile-grad"></div><div class="cz-tile-count">${c.count}</div><div class="cz-tile-label">${escHtml(c.label)}</div></div>`;
+        return `<div class="cz-tile" data-i="${i}">${bg}<div class="cz-tile-grad"></div><div class="cz-tile-text"><div class="cz-tile-label">${escHtml(c.label)}</div><div class="cz-tile-count">${c.count}</div></div></div>`;
     }).join('');
     [...$('cz-tiles').querySelectorAll('.cz-tile')].forEach(el => el.onclick = () => { catIndex = Number(el.dataset.i); updateTiles(); selectCategory(); });
-    updateTiles();
+    updateTiles(); fitTileLabels();
 }
+function fitTileLabels() {   // graceful shrink-to-fit: scale each system/category name down until it fits its tile
+    const tiles = $('cz-tiles'); if (!tiles || tiles.style.display === 'none') return;
+    tiles.querySelectorAll('.cz-tile-label').forEach(label => {
+        label.style.fontSize = '';   // reset to the CSS base for the active mode
+        const wrap = label.parentElement, cs = getComputedStyle(wrap);
+        const avail = wrap.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+        const w = label.scrollWidth; if (avail <= 0 || w <= avail) return;
+        label.style.fontSize = Math.max(12, Math.floor(parseFloat(getComputedStyle(label).fontSize) * avail / w)) + 'px';
+    });
+}
+window.addEventListener('resize', fitTileLabels);
 function updateTiles() {
     [...$('cz-tiles').querySelectorAll('.cz-tile')].forEach((el, i) => { el.classList.toggle('sel', i === catIndex); if (i === catIndex) el.scrollIntoView({ block: 'nearest' }); });
 }
 function tilesCols() { const t = [...$('cz-tiles').querySelectorAll('.cz-tile')]; if (t.length < 2) return 1; const t0 = t[0].offsetTop; let c = 1; for (let i = 1; i < t.length; i++) { if (t[i].offsetTop === t0) c++; else break; } return c; }
 function tilesMove(dx, dy) {
-    const n = categories.length, cols = tilesCols();
-    if (dy < 0) catIndex = Math.max(0, catIndex - cols);
-    else if (dy > 0) catIndex = Math.min(n - 1, catIndex + cols);
-    else catIndex = clamp(catIndex + dx, 0, n - 1);
-    updateTiles();
+    const n = categories.length; if (!n) return; const cols = tilesCols(); let idx = catIndex;
+    if (dx > 0) idx = (idx + 1) % n;                                    // wrap last→first
+    else if (dx < 0) idx = (idx - 1 + n) % n;                           // wrap first→last
+    else if (dy > 0) { idx += cols; if (idx >= n) idx %= cols; }        // down past the end → top of the column
+    else if (dy < 0) { idx -= cols; if (idx < 0) { const rows = Math.ceil(n / cols); idx += rows * cols; if (idx >= n) idx -= cols; } }   // up past the start → bottom of the column
+    catIndex = idx; updateTiles();
 }
 function toggleStartMode() {
     startMode = startMode === 'carousel' ? 'tiles' : 'carousel';
     $('cz-hero').style.display = startMode === 'carousel' ? 'block' : 'none';
     $('cz-tiles').style.display = startMode === 'tiles' ? 'grid' : 'none';
-    if (startMode === 'carousel') selectedHero(); else updateTiles();
+    if (startMode === 'carousel') selectedHero(); else { updateTiles(); requestAnimationFrame(fitTileLabels); }
 }
 function selectCategory() {
     const c = categories[catIndex];
@@ -538,7 +593,7 @@ function renderList() {   // CREMA renderGameList
     if (!listList.length) { l.innerHTML = '<div class="couch-empty">NO GAMES</div>'; clearListDetail(); return; }
     l.innerHTML = listList.map((g, i) => {
         let p = ''; if (g.fav) p += '★ '; if (g.want) p += '♥ ';
-        return `<div class="game-item" id="game-${i}" data-i="${i}" data-id="${g.id}"><span class="list-install-dot">●</span>${p}${escHtml(g.title)}</div>`;
+        return `<div class="game-item" id="game-${i}" data-i="${i}" data-id="${g.id}"><span class="gi-label"><span class="list-install-dot">●</span>${p}${escHtml(g.title)}</span></div>`;
     }).join('');
     [...l.querySelectorAll('.game-item')].forEach(el => el.onclick = () => { listSelect(Number(el.dataset.i)); openGamepage(Number(el.dataset.id)); });
 }
@@ -546,9 +601,24 @@ function listSelect(i) {   // CREMA updateGameSelection: selection + scroll + me
     if (!listList.length) return;
     listFocus = clamp(i, 0, listList.length - 1);
     const items = [...$('game-list').querySelectorAll('.game-item')];
-    items.forEach((el, j) => el.classList.toggle('selected', j === listFocus));
-    if (items[listFocus]) items[listFocus].scrollIntoView({ block: 'nearest' });
+    items.forEach((el, j) => {
+        el.classList.toggle('selected', j === listFocus);
+        const lbl = el.querySelector('.gi-label');
+        if (lbl) { lbl.classList.remove('marquee'); lbl.style.removeProperty('--gi-shift'); lbl.style.animationDuration = ''; }
+    });
+    if (items[listFocus]) { items[listFocus].scrollIntoView({ block: 'nearest' }); if (crtOn) applyMarquee(items[listFocus]); }
     updateListDetail(listList[listFocus]);
+}
+function applyMarquee(item) {   // CRT: scroll a too-long selected title gracefully
+    const lbl = item.querySelector('.gi-label'); if (!lbl) return;
+    const cs = getComputedStyle(item);
+    const avail = item.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const overflow = lbl.scrollWidth - avail;
+    if (overflow > 8) {
+        lbl.style.setProperty('--gi-shift', '-' + (overflow + 12) + 'px');
+        lbl.style.animationDuration = clamp((overflow + 12) / 38, 3, 11) + 's';
+        lbl.classList.add('marquee');
+    }
 }
 function updateListDetail(g) {   // CREMA media layers (cover backdrop + cycling screenshots + cover-mini) + stats
     clearInterval(_ssTimer);
@@ -574,8 +644,16 @@ function updateListDetail(g) {   // CREMA media layers (cover backdrop + cycling
     }
     // Logo on top (over a gradient for legibility)
     setImg(logo, g.logo || ''); topgrad.style.display = g.logo ? 'block' : 'none';
-    // Box art (the small cover) — keep
-    if (g.cover) { setImg(mini, g.cover); mini.classList.remove('hidden'); } else { setImg(mini, ''); mini.classList.add('hidden'); }
+    // Box art (the small cover). Normal mode = fixed-frame overlay; CRT = full natural proportion / jewel case.
+    const miniCrt = $('cover-mini-crt');
+    if (crtOn) {
+        setImg(mini, ''); mini.classList.add('hidden');
+        if (g.cover) { miniCrt.classList.remove('hidden'); miniCrt.innerHTML = coverFrameHTML(g); applyCoverFrame(g, miniCrt.querySelector('.cover-frame'), miniCrt.querySelector('img')); }
+        else { miniCrt.classList.add('hidden'); miniCrt.innerHTML = ''; }
+    } else {
+        miniCrt.classList.add('hidden'); miniCrt.innerHTML = '';
+        if (g.cover) { setImg(mini, g.cover); mini.classList.remove('hidden'); } else { setImg(mini, ''); mini.classList.add('hidden'); }
+    }
     if (hasArt(g)) { noart.style.display = 'none'; noart.innerHTML = ''; }
     else { noart.innerHTML = artPlaceholderHTML(g); noart.style.display = 'block'; }
 }
@@ -587,9 +665,10 @@ function clearListDetail() {
     setImg($('screenshot-player'), ''); $('screenshot-player').classList.remove('active');
     setImg($('list-logo'), ''); $('list-media-topgrad').style.display = 'none';
     setImg($('cover-mini'), ''); $('cover-mini').classList.add('hidden');
+    $('cover-mini-crt').classList.add('hidden'); $('cover-mini-crt').innerHTML = '';
     $('list-noart').style.display = 'none'; $('list-noart').innerHTML = '';
 }
-function listMove(dy) { if (dy) listSelect(listFocus + dy); }
+function listMove(dy) { const n = listList.length; if (dy && n) listSelect((listFocus + dy + n) % n); }   // wrap last↔first
 function listActivate() { const g = listList[listFocus]; if (g) openGamepage(g.id); }
 function listCycleCategory(dir) {
     const n = categories.length; catIndex = (catIndex + dir + n) % n;   // infinite roll
@@ -654,20 +733,26 @@ function focusGrid(i) {   // CREMA updateGallerySelection: toggle .selected + ke
     }
     updateGalleryBg(galleryList[gridFocus]);
 }
-function updateGalleryBg(g) {   // CREMA updateGalleryBg: hero img + name + logo
-    const img = $('gallery-hero-img'), name = $('gallery-hero-game-name'), logo = $('gallery-hero-logo');
-    if (!g) { img.src = ''; img.style.display = 'none'; logo.src = ''; logo.style.display = 'none'; name.textContent = ''; return; }
+function updateGalleryBg(g) {   // hero img + centered game name (logo removed; name side-scrolls when too long)
+    const img = $('gallery-hero-img'), name = $('gallery-hero-game-name');
+    if (!g) { img.src = ''; img.style.display = 'none'; name.innerHTML = ''; return; }
     const src = g.hero || (g.screenshot ? String(g.screenshot).split('|')[0] : '') || g.cover || '';
     img.src = src; img.style.display = src ? 'block' : 'none';
-    name.textContent = g.title || '';
-    if (g.logo) { logo.src = g.logo; logo.style.display = 'block'; } else { logo.src = ''; logo.style.display = 'none'; }
+    name.innerHTML = `<span>${escHtml(g.title || '')}</span>`;
+    applyHeroNameMarquee();
+}
+function applyHeroNameMarquee() {
+    const el = $('gallery-hero-game-name'), inner = el.firstElementChild; if (!inner) return;
+    el.classList.remove('scroll'); inner.style.removeProperty('--shift'); inner.style.removeProperty('--dur');
+    const over = inner.scrollWidth - el.clientWidth;
+    if (over > 2) { el.classList.add('scroll'); inner.style.setProperty('--shift', (-over - 6) + 'px'); inner.style.setProperty('--dur', clamp(Math.round(over / 22), 4, 12) + 's'); }
 }
 function wallMove(dx, dy) {   // CREMA navigateGallery, responsive column count
     const N = galleryList.length; if (!N) return; let idx = gridFocus; const cols = galleryCols();
-    if (dx > 0) idx = (idx + 1) % N;
-    else if (dx < 0) idx = (idx - 1 + N) % N;
-    else if (dy > 0) { const next = idx + cols; if (next < N) idx = next; }
-    else if (dy < 0) { const prev = idx - cols; if (prev >= 0) idx = prev; }
+    if (dx > 0) idx = (idx + 1) % N;                                   // wrap last→first
+    else if (dx < 0) idx = (idx - 1 + N) % N;                          // wrap first→last
+    else if (dy > 0) { idx += cols; if (idx >= N) idx %= cols; }       // down past the end → top of the column
+    else if (dy < 0) { idx -= cols; if (idx < 0) { const rows = Math.ceil(N / cols); idx += rows * cols; if (idx >= N) idx -= cols; } }   // up past the start → bottom of the column
     if (idx !== gridFocus) focusGrid(idx);
 }
 function wallActivate() { const g = galleryList[gridFocus]; if (g) openGamepage(g.id); }
@@ -687,24 +772,35 @@ function openGamepage(id) {
     if (g.logo) { logo.src = g.logo; logo.style.display = 'block'; title.style.display = 'none'; heroPh.innerHTML = ''; }
     else if (hero) { logo.style.display = 'none'; title.style.display = 'block'; title.textContent = g.title || ''; heroPh.innerHTML = ''; }
     else { logo.style.display = 'none'; title.style.display = 'none'; heroPh.innerHTML = artPlaceholderHTML(g, false); }   // no art at all → stylish hero placeholder
-    $('gp-cover').innerHTML = g.cover ? `<img src="${g.cover}">` : artPlaceholderHTML(g, false);
+    const cov = $('gp-cover');
+    if (g.cover) { cov.classList.remove('noart'); cov.innerHTML = coverFrameHTML(g); applyCoverFrame(g, cov.querySelector('.cover-frame'), cov.querySelector('img')); }
+    else { cov.classList.add('noart'); cov.innerHTML = artPlaceholderHTML(g, false); }
     const ss = g.screenshot ? String(g.screenshot).split('|').filter(s => s.trim()) : [];
-    if (ss.length) { $('gp-ss').style.display = 'block'; $('gp-ss').querySelector('img').src = ss[0]; } else $('gp-ss').style.display = 'none';
-    $('gp-desc').textContent = g.description || 'No description available.';
-    const stats = [['SYSTEM', g.system_name], ['YEAR', g.year], ['GENRE', g.genre], ['DEVELOPER', g.developer], ['PUBLISHER', g.publisher], ['PLAYERS', g.players], ['RATING', g.rating]].filter(([, v]) => v);
-    $('gp-right').innerHTML = stats.map(([k, v]) => `<div class="gp-stat"><span class="k">${k}</span><span class="v">${escHtml(v)}</span></div>`).join('');
+    if (ss.length) { $('gp-ss').style.display = crtOn ? 'flex' : 'block'; $('gp-ss').querySelector('img').src = ss[0]; } else $('gp-ss').style.display = 'none';
+    const stats = [['SYSTEM', g.system_name], ['YEAR', g.year], ['PLAYERS', g.players]].filter(([, v]) => v);   // the rest moves to the INFO modal
+    $('gp-right').innerHTML = stats.map(([k, v]) => `<div class="gp-stat"><span class="k">${k}</span><span class="v"><span>${escHtml(v)}</span></span></div>`).join('');
+    $('gp-scrape-hint').style.display = hasArt(g) ? 'none' : '';   // footer: offer X Scrape only when the game has no artwork
     buildGpActions();
     showScreen('gamepage'); $('gp-content').scrollTop = 0; gpBtnFocus = 0; updateGpFocus();
+    if (crtOn) requestAnimationFrame(applyStatMarquee);   // side-scroll any stat value that's too long for its column
+}
+function applyStatMarquee() {
+    document.querySelectorAll('#gp-right .gp-stat .v').forEach(v => {
+        const inner = v.firstElementChild; if (!inner) return;
+        v.classList.remove('scroll'); inner.style.removeProperty('--shift'); inner.style.removeProperty('--dur');
+        const over = inner.scrollWidth - v.clientWidth;
+        if (over > 2) { v.classList.add('scroll'); inner.style.setProperty('--shift', (-over - 4) + 'px'); inner.style.setProperty('--dur', clamp(Math.round(over / 26), 3, 9) + 's'); }
+    });
 }
 function buildGpActions() {
     const g = gpGame;
     const acts = [
         `<button class="gp-btn play" data-act="play">▶ PLAY</button>`,
+        `<button class="gp-btn" data-act="info">INFO</button>`,
         `<button class="gp-btn${g.fav ? ' active' : ''}" data-act="fav">${g.fav ? '★ FAV' : '+ FAV'}</button>`,
         `<button class="gp-btn${g.want ? ' active' : ''}" data-act="want">${g.want ? '♥ WANT' : 'WANT TO PLAY'}</button>`,
         `<button class="gp-btn" data-act="playlists">≡ PLAYLISTS</button>`,
-    ];
-    if (!hasArt(g)) acts.push(`<button class="gp-btn scrape" data-act="scrape">⟳ SCRAPE ARTWORK</button>`);
+    ];   // scrape lives on X (footer hint) — no hero button
     $('gp-actions').innerHTML = acts.join('');
     [...$('gp-actions').querySelectorAll('.gp-btn')].forEach((b, i) => b.onclick = () => { gpBtnFocus = i; updateGpFocus(); gpActivate(); });
 }
@@ -715,9 +811,132 @@ async function gpActivate() {
     const b = gpButtons()[gpBtnFocus]; if (!b) return;
     const act = b.dataset.act;
     if (act === 'play') launch(gpGame.id);
+    else if (act === 'info') openInfo();
     else if (act === 'scrape') scrapeArtwork(gpGame.id);
     else if (act === 'playlists') openPlaylistsMenu();
     else { gpGame[act] = gpGame[act] ? 0 : 1; await window.api.setGameFlag(gpGame.id, act, gpGame[act]); buildGpActions(); updateGpFocus(); }
+}
+
+// ── Info modal (full description + developer/publisher, big letters) ──────────
+let infoOpen = false;
+function openInfo() {
+    const g = gpGame; if (!g) return;
+    $('info-title').textContent = g.title || '';
+    const meta = [];
+    if (g.developer) meta.push(['Developer', g.developer]);
+    if (g.publisher) meta.push(['Publisher', g.publisher]);
+    if (g.genre) meta.push(['Genre', String(g.genre).split(',')[0].trim()]);
+    if (g.rating) meta.push(['Rating', g.rating]);
+    $('info-meta').innerHTML = meta.map(([k, v]) => `<span class="info-chip"><b>${k}</b>${escHtml(v)}</span>`).join('');
+    $('info-desc').textContent = g.description || 'No description available.';
+    infoOpen = true; $('info-backdrop').classList.remove('hidden'); $('info-desc').scrollTop = 0;
+}
+function closeInfo() { infoOpen = false; $('info-backdrop').classList.add('hidden'); }
+function infoScroll(dy) { const d = $('info-desc'); d.scrollTop += dy * Math.max(60, d.clientHeight * 0.4); }
+
+// ── Save-States Manager (gamepad-navigable; mirrors the desktop Save Manager) ─
+let smOpen = false, smView = 'games', smGames = [], smSlots = [], smGame = null, smSel = 0, smPendDel = false;
+const smSlotName = slot => slot === 'auto' ? 'AUTO SAVE' : 'SLOT ' + slot;
+function smFmtBytes(b) { if (!b) return ''; const u = ['B', 'KB', 'MB', 'GB']; let i = 0, n = b; while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; } return n.toFixed(n < 10 && i ? 1 : 0) + u[i]; }
+async function openSaveMgr() { closeMenu(); smOpen = true; $('sm2-backdrop').classList.remove('hidden'); await smShowGames(); }
+function smClose() { smOpen = false; smPendDel = false; $('sm2-backdrop').classList.add('hidden'); }
+async function smShowGames() {
+    smView = 'games'; smGame = null; smSel = 0; smPendDel = false;
+    smGames = (await window.api.listGamesWithSaves()) || [];
+    $('sm2-title').textContent = 'SAVE STATES';
+    $('sm2-sub').textContent = `${smGames.length} GAME${smGames.length !== 1 ? 'S' : ''}`;
+    const grid = $('sm2-grid'); grid.classList.remove('slots');
+    if (!smGames.length) { grid.innerHTML = '<div id="sm2-empty">NO SAVE STATES FOUND</div>'; $('sm2-detail').textContent = ''; smRenderHint(); return; }
+    grid.innerHTML = smGames.map((g, i) => {
+        const fg = g.logo || g.cover || g.thumb, bg = g.cover || g.thumb;
+        const art = fg ? `${bg ? `<div class="sm2-bg" style="background-image:url('${bg}')"></div>` : ''}<img class="logo" src="${fg}" alt="">`
+                       : `<div class="sm2-name">${escHtml(g.title)}</div>`;
+        return `<div class="sm2-card" data-i="${i}"><div class="sm2-art">${art}<span class="sm2-count">${g.count}</span></div><div class="sm2-tag">${escHtml(g.title)}</div></div>`;
+    }).join('');
+    smWireCards(); smSel = 0; smHighlight(); smRenderHint();
+}
+async function smShowSlots(game) {
+    smView = 'slots'; smGame = game; smSel = 0; smPendDel = false;
+    smSlots = (await window.api.listSaveStates(game.id)) || [];
+    $('sm2-title').textContent = (game.title || 'GAME').toUpperCase();
+    $('sm2-sub').textContent = `${smSlots.length} SAVE${smSlots.length !== 1 ? 'S' : ''}`;
+    const grid = $('sm2-grid'); grid.classList.add('slots');
+    const cards = [`<div class="sm2-card" data-i="0"><div class="sm2-art"><span class="sm2-fresh-ic">▶</span></div><div class="sm2-tag">START FRESH</div></div>`];
+    smSlots.forEach((s, i) => {
+        const art = s.thumb ? `<img class="shot" src="${s.thumb}" alt="">` : `<div class="sm2-name">${smSlotName(s.slot)}</div>`;
+        cards.push(`<div class="sm2-card" data-i="${i + 1}"><div class="sm2-art">${art}</div><div class="sm2-tag">${escHtml(s.label || smSlotName(s.slot))}</div></div>`);
+    });
+    grid.innerHTML = cards.join('');
+    smWireCards(); smSel = 0; smHighlight(); smRenderHint();
+}
+function smWireCards() { [...$('sm2-grid').querySelectorAll('.sm2-card')].forEach(el => el.onclick = () => { smSel = Number(el.dataset.i); smPendDel = false; smHighlight(); smConfirm(); }); }
+const smCards = () => [...$('sm2-grid').querySelectorAll('.sm2-card')];
+function smCols() { const c = smCards(); if (c.length < 2) return 1; const t = c[0].offsetTop; let n = 1; for (let i = 1; i < c.length; i++) { if (c[i].offsetTop === t) n++; else break; } return n; }
+function smHighlight() {
+    const cards = smCards();
+    cards.forEach((el, i) => { el.classList.toggle('sel', i === smSel); el.classList.toggle('pending-del', smPendDel && i === smSel); });
+    if (cards[smSel]) cards[smSel].scrollIntoView({ block: 'nearest' });
+    smDetail();
+}
+function smDetail() {
+    const d = $('sm2-detail');
+    if (smView === 'games') { d.textContent = smGames.length ? 'SELECT A GAME' : ''; return; }
+    if (smPendDel) { d.textContent = 'PRESS DELETE AGAIN TO CONFIRM · B TO CANCEL'; return; }
+    if (smSel === 0) { d.textContent = 'Start a new game (ignore saves)'; return; }
+    const s = smSlots[smSel - 1]; if (!s) { d.textContent = ''; return; }
+    d.textContent = `${smSlotName(s.slot)}${s.label ? ` · "${s.label}"` : ''}${s.size ? ' · ' + smFmtBytes(s.size) : ''} · ${relTime(s.mtime)}`;
+}
+function smRenderHint() {
+    const G = b => `<span class="gp-glyph" data-btn="${b}"></span>`;
+    $('sm2-hint').innerHTML = smView === 'games'
+        ? `<span>${G('SOUTH')} Open</span><span>${G('L1')} Restore</span><span>${G('R1')} Backup All</span><span>${G('EAST')} Close</span>`
+        : `<span>${G('SOUTH')} Launch</span><span>${G('WEST')} Delete</span><span>${G('NORTH')} Label</span><span>${G('R1')} Backup</span><span>${G('EAST')} Back</span>`;
+    applyGamepadLayout(gpLayout);   // paint the freshly-added glyphs for the current layout
+}
+function smMove(dx, dy) {
+    smPendDel = false;
+    const n = smCards().length; if (!n) return; const cols = smCols();
+    if (dx > 0) smSel = Math.min(n - 1, smSel + 1);
+    else if (dx < 0) smSel = Math.max(0, smSel - 1);
+    else if (dy > 0) { if (smSel + cols < n) smSel += cols; }
+    else if (dy < 0) { if (smSel - cols >= 0) smSel -= cols; }
+    smHighlight();
+}
+function smConfirm() {
+    if (smView === 'games') { const g = smGames[smSel]; if (g) smShowSlots(g); return; }
+    if (!smGame) return;
+    if (smSel === 0) { smClose(); doLaunch(smGame.id, { fresh: true }); return; }
+    const s = smSlots[smSel - 1]; if (s) { smClose(); doLaunch(smGame.id, { slot: s.slot }); }
+}
+function smBack() {
+    if (smPendDel) { smPendDel = false; smHighlight(); return; }
+    if (smView === 'slots') smShowGames(); else smClose();
+}
+async function smDelete() {
+    if (smView !== 'slots' || smSel === 0) return;
+    const s = smSlots[smSel - 1]; if (!s) return;
+    if (!smPendDel) { smPendDel = true; smHighlight(); return; }   // first press arms, second confirms
+    smPendDel = false;
+    const r = await window.api.deleteSaveState(s.file);
+    if (r && r.ok) smShowSlots(smGame); else $('sm2-detail').textContent = (r && r.error) || 'DELETE FAILED';
+}
+function smLabel() {
+    if (smView !== 'slots' || smSel === 0) return;
+    const s = smSlots[smSel - 1]; if (!s) return;
+    openOSK({ mode: 'text', title: 'LABEL THIS SAVE', initial: s.label || '', onDone: async val => { await window.api.setSaveLabel(smGame.id, s.slot, val); smShowSlots(smGame); } });
+}
+async function smBackupRestore(which) {   // R1 = backup, L1 = restore (restore only from the games view)
+    if (which === 'backup') {
+        const r = smView === 'slots' && smGame ? await window.api.backupSaves('game', smGame.id) : await window.api.backupSaves('all');
+        if (r && r.canceled) return;
+        $('sm2-detail').textContent = r && r.ok ? `BACKED UP ${r.files} FILE(S)` : ((r && r.error) || 'BACKUP FAILED');
+    } else {
+        if (smView !== 'games') return;
+        const r = await window.api.restoreSaves();
+        if (r && r.canceled) return;
+        if (r && r.ok) { smShowGames(); $('sm2-detail').textContent = `RESTORED ${r.restored} FILE(S)`; }
+        else $('sm2-detail').textContent = (r && r.error) || 'RESTORE FAILED';
+    }
 }
 
 // ── Launch + Now Playing ─────────────────────────────────────────────────────
@@ -730,12 +949,49 @@ async function launch(id) {   // opening a game: offer save states (resume vs fr
 }
 async function doLaunch(id, opts) {
     const g = gamesById.get(id); if (!g) return;
-    clearTimeout(saverTimer);   // pause the screensaver while a game is running (resumes on next input)
-    showNow(g);
+    clearTimeout(saverTimer); clearTimeout(_nowTimer);   // pause the screensaver / any toast while a game runs
+    enterGameRunning(g);
     const r = await window.api.launchGameEx(id, opts);
-    clearTimeout(_nowTimer);
-    if (!r || !r.ok) { $('couch-now').querySelector('.now-label').textContent = 'COULD NOT LAUNCH'; _nowTimer = setTimeout(hideNow, 2500); }
-    else _nowTimer = setTimeout(hideNow, 4500);
+    if (!r || !r.ok) {   // failed to launch — drop out of the now-playing screen and surface the error briefly
+        exitGameRunning();
+        showNow(g); $('couch-now').querySelector('.now-label').textContent = 'COULD NOT LAUNCH';
+        _nowTimer = setTimeout(hideNow, 2500);
+    }
+}
+
+// ── Now Playing (CREMA 1:1): while a game runs, block all input except the return combo ───────
+let gameRunning = false, wakeHoldFrames = 0;
+function comboInstruction() {
+    const m = returnCombo || 'START + SELECT';
+    return m.includes('HOLD') ? 'HOLD ' + m.replace(' (HOLD 2 SEC)', '') + ' TO RETURN' : 'PRESS ' + m + ' TO RETURN';
+}
+function enterGameRunning(g) {
+    gameRunning = true; wakeHoldFrames = 0;
+    if (bgmAudio) bgmAudio.pause();
+    setImg($('sleep-cover'), g.cover || '');
+    $('sleep-title').textContent = g.title || '';
+    $('sleep-instruction').textContent = comboInstruction();
+    $('sleep-screen').classList.remove('hidden');
+}
+function exitGameRunning() {
+    if (!gameRunning) return;
+    gameRunning = false; wakeHoldFrames = 0;
+    $('sleep-screen').classList.add('hidden');
+    playSfx(sfxSelect); applyBgm();
+    if (window.api.forceFocus) window.api.forceFocus();
+    resetIdle();
+}
+// Polled every frame while gameRunning — only the configured combo gets us back to Couch.
+function checkReturnCombo(gp) {
+    const down = i => !!(gp.buttons[i] && gp.buttons[i].pressed);
+    const m = returnCombo || 'START + SELECT';
+    let matched;
+    if (m.includes('L1 + R1 + START + SELECT')) matched = down(4) && down(5) && down(9) && down(8);
+    else if (m.includes('L3 + R3')) matched = down(10) && down(11);
+    else matched = down(9) && down(8);   // START + SELECT
+    if (!matched) { wakeHoldFrames = 0; return; }
+    if (m.includes('HOLD 2 SEC')) { if (++wakeHoldFrames >= 120) exitGameRunning(); }
+    else exitGameRunning();
 }
 
 // ── Save-states modal (resume vs fresh) ──────────────────────────────────────
@@ -773,8 +1029,8 @@ function ssActivate() {
     else doLaunch(id, { slot: ssStates[idx - 1].slot });
 }
 
-// ── Screensaver (idle → fullscreen screenshot slideshow + clock) ─────────────
-let saverDelayMin = 3, saverTimer = null, saverActive = false, saverPool = [], saverIdx = 0, saverCycle = null, saverClock = null;
+// ── Screensaver (idle → fullscreen screenshot slideshow) ─────────────────────
+let saverDelayMin = 3, saverTimer = null, saverActive = false, saverPool = [], saverIdx = 0, saverCycle = null;
 function buildSaverPool() {
     const pool = [];
     for (const g of games) {
@@ -785,16 +1041,13 @@ function buildSaverPool() {
     for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
     return pool;
 }
-const saverClockText = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 function startSaver() {
-    if (saverActive || ssOpen) return;
+    if (saverActive || ssOpen || gameRunning) return;
     if (!saverPool.length) saverPool = buildSaverPool();
     if (!saverPool.length) return;
     saverActive = true; saverIdx = 0; showSaverFrame();
     $('saver').classList.remove('hidden');
     saverCycle = setInterval(nextSaver, 9000);
-    $('saver-clock').textContent = saverClockText();
-    saverClock = setInterval(() => $('saver-clock').textContent = saverClockText(), 15000);
 }
 function showSaverFrame() {
     const it = saverPool[saverIdx % saverPool.length];
@@ -802,10 +1055,11 @@ function showSaverFrame() {
     img.src = it.img; $('saver-game').textContent = it.title;
 }
 function nextSaver() { saverIdx = (saverIdx + 1) % saverPool.length; showSaverFrame(); }
-function stopSaver() { saverActive = false; clearInterval(saverCycle); clearInterval(saverClock); $('saver').classList.add('hidden'); }
+function stopSaver() { saverActive = false; clearInterval(saverCycle); $('saver').classList.add('hidden'); }
 function resetIdle() {
     clearTimeout(saverTimer);
     if (saverActive) stopSaver();
+    if (gameRunning) return;   // no screensaver while a game is running
     if (saverDelayMin > 0) saverTimer = setTimeout(startSaver, saverDelayMin * 60000);
 }
 // Returns true if the input was consumed waking the screensaver (caller should not act on it).
@@ -849,8 +1103,9 @@ async function scrapeArtwork(id) {
     else if (screen === 'wall') { renderWall(); focusGrid(gridFocus); }
     else if (screen === 'list') { renderList(); listSelect(listFocus); }
 }
-function dispatchScrape() {   // X — scrape the focused/current game if it lacks artwork
-    if (ssOpen || oskOpen || menuOpen || _scraping) return;
+function dispatchScrape() {   // X — scrape the focused/current game if it lacks artwork (or delete a save in the manager)
+    if (smOpen) { smDelete(); return; }
+    if (ssOpen || oskOpen || menuOpen || infoOpen || _scraping) return;
     let g = null;
     if (screen === 'wall') g = galleryList[gridFocus];
     else if (screen === 'list') g = listList[listFocus];
@@ -863,6 +1118,8 @@ function dispatchScrape() {   // X — scrape the focused/current game if it lac
 function dispatchNav(dx, dy) {
     if (ssOpen) { if (dx) ssMove(dx); return; }
     if (oskOpen) { oskNav(dx, dy); return; }
+    if (smOpen) { playSfx(sfxNav); smMove(dx, dy); return; }
+    if (infoOpen) { if (dy) infoScroll(dy); return; }
     playSfx(sfxNav);
     if (menuOpen) { if (menuMode === 'sound' && dx) { soundHorizontal(dx); return; } if (dy) overlayMove(dy); return; }
     if (screen === 'start') { if (startMode === 'carousel') { if (dx) carouselMove(dx); } else tilesMove(dx, dy); }
@@ -874,6 +1131,8 @@ function dispatchConfirm() {
     if (ssOpen) { ssActivate(); return; }
     playSfx(sfxSelect);
     if (oskOpen) { oskActivate(); return; }
+    if (smOpen) { smConfirm(); return; }
+    if (infoOpen) { closeInfo(); return; }
     if (menuOpen) { overlayConfirm(); return; }
     if (screen === 'start') selectCategory();
     else if (screen === 'wall') wallActivate();
@@ -884,6 +1143,8 @@ function dispatchBack() {
     if (ssOpen) { ssClose(); return; }
     playSfx(sfxBack);
     if (oskOpen) { closeOSK(); return; }
+    if (smOpen) { smBack(); return; }
+    if (infoOpen) { closeInfo(); return; }
     if (menuOpen) { overlayBack(); return; }
     if (!$('couch-now').classList.contains('hidden')) { hideNow(); return; }
     if (screen === 'gamepage') showScreen(gpReturn);
@@ -893,13 +1154,48 @@ function dispatchBack() {
 function dispatchAux() {   // Y
     if (ssOpen) return;
     if (oskOpen) { oskClear(); return; }
-    if (menuOpen) return;
+    if (smOpen) { smLabel(); return; }
+    if (infoOpen || menuOpen) return;
     if (screen === 'start') toggleStartMode();
     else if (screen === 'wall' || screen === 'list') openOSK();   // CREMA: Y opens search
 }
-function dispatchShoulder(dir) { if (ssOpen || oskOpen || menuOpen) return; if (screen === 'wall') wallCycleCategory(dir); else if (screen === 'list') listCycleCategory(dir); }
+function dispatchShoulder(dir) {
+    if (smOpen) { smBackupRestore(dir < 0 ? 'restore' : 'backup'); return; }
+    if (ssOpen || oskOpen || menuOpen || infoOpen) return;
+    if (screen === 'wall') wallCycleCategory(dir);
+    else if (screen === 'list') listCycleCategory(dir);
+    else if (screen === 'gamepage') gpCycleGame(dir);
+}
+function gpCycleGame(dir) {   // L1/R1 on the gamepage → previous/next game in the current browse list (wraps last↔first)
+    const fromList = gpReturn === 'list', arr = fromList ? listList : galleryList, n = arr.length; if (!n) return;
+    const idx = (((fromList ? listFocus : gridFocus) + dir) % n + n) % n;
+    if (fromList) listSelect(idx); else focusGrid(idx);   // keep the underlying browse selection in sync for when B returns
+    playSfx(sfxNav); openGamepage(arr[idx].id);
+}
+// L2/R2: jump to the next/previous leading letter (CRT only — list + gallery)
+function dispatchLetterJump(dir) {
+    if (!crtOn || ssOpen || oskOpen || menuOpen || smOpen || infoOpen) return;
+    if (screen === 'list') letterJump(listList, listFocus, dir, listSelect);
+    else if (screen === 'wall') letterJump(galleryList, gridFocus, dir, focusGrid);
+}
+function letterJump(list, cur, dir, go) {
+    if (!list.length) return;
+    const key = g => { const c = (g && g.title || '').trim()[0]; return c ? c.toUpperCase() : '#'; };
+    let i = clamp(cur, 0, list.length - 1); const curKey = key(list[i]);
+    if (dir > 0) { while (i < list.length - 1 && key(list[i]) === curKey) i++; }
+    else {   // step to the start of the previous letter group
+        while (i > 0 && key(list[i]) === curKey) i--;
+        const prevKey = key(list[i]);
+        while (i > 0 && key(list[i - 1]) === prevKey) i--;
+    }
+    playSfx(sfxNav); go(i);
+}
 
 document.addEventListener('keydown', e => {
+    if (gameRunning) {   // a game is running — keyboard fallback to return (gamepad uses the combo)
+        if (e.key === 'Escape' || e.key === 'Backspace') exitGameRunning();
+        e.preventDefault(); return;
+    }
     if (e.key === 'F11') { exitCouch(); return; }
     kickAudio();
     if (wokeSaver()) { e.preventDefault(); return; }   // any key wakes the screensaver (and is swallowed)
@@ -921,15 +1217,22 @@ document.addEventListener('keydown', e => {
         case 's': case 'S': dispatchSort(); break;
         case '[': dispatchShoulder(-1); break;
         case ']': dispatchShoulder(1); break;
+        case ',': dispatchLetterJump(-1); break;
+        case '.': dispatchLetterJump(1); break;
         case 'm': case 'M': dispatchMenu(); break;
     }
 });
 
 // ── Gamepad ──────────────────────────────────────────────────────────────────
 const firstPad = () => Array.prototype.find.call(navigator.getGamepads ? navigator.getGamepads() : [], p => p);
-let _btnPrev = {}, _navHeld = null, _navAt = 0;
+let _btnPrev = {}, _navHeld = null, _navAt = 0, _navReps = 0;
 function pollPad() {
     const gp = firstPad();
+    if (gameRunning) {   // only the return combo acts; track button state so the held combo isn't a fresh edge on return
+        if (gp) { checkReturnCombo(gp); for (let i = 0; i < gp.buttons.length; i++) _btnPrev[i] = !!(gp.buttons[i] && gp.buttons[i].pressed); }
+        else _btnPrev = {};
+        requestAnimationFrame(pollPad); return;
+    }
     if (gp) {
         const down = i => !!(gp.buttons[i] && gp.buttons[i].pressed);
         const anyAct = gp.buttons.some(b => b && b.pressed) || (gp.axes || []).some(a => Math.abs(a) > 0.5);
@@ -941,14 +1244,22 @@ function pollPad() {
         if (edge(3)) dispatchAux();          // Y
         if (edge(4)) dispatchShoulder(-1);   // LB
         if (edge(5)) dispatchShoulder(1);    // RB
+        if (edge(6)) dispatchLetterJump(-1); // LT → previous letter
+        if (edge(7)) dispatchLetterJump(1);  // RT → next letter
         if (edge(8)) dispatchSort();         // Select → sort
         if (edge(9)) dispatchMenu();         // Start → settings menu
         const ax = gp.axes[0] || 0, ay = gp.axes[1] || 0, DZ = 0.5; let dx = 0, dy = 0;
         if (down(14) || ax < -DZ) dx = -1; else if (down(15) || ax > DZ) dx = 1;
         if (down(12) || ay < -DZ) dy = -1; else if (down(13) || ay > DZ) dy = 1;
         const dir = (dx || dy) ? dx + ',' + dy : null; const now = performance.now();
-        if (dir) { if (dir !== _navHeld) { _navHeld = dir; _navAt = now + 320; dispatchNav(dx, dy); } else if (now >= _navAt) { _navAt = now + 110; dispatchNav(dx, dy); } }
-        else _navHeld = null;
+        if (dir) {
+            if (dir !== _navHeld) { _navHeld = dir; _navReps = 0; _navAt = now + 320; dispatchNav(dx, dy); }
+            else if (now >= _navAt) {
+                // Hold to repeat; in CRT, vertical scrolling through list/gallery accelerates the longer it's held.
+                const interval = (crtOn && dy && (screen === 'list' || screen === 'wall')) ? Math.max(28, 110 - (++_navReps) * 9) : 110;
+                _navAt = now + interval; dispatchNav(dx, dy);
+            }
+        } else { _navHeld = null; _navReps = 0; }
     } else { _btnPrev = {}; _navHeld = null; }
     requestAnimationFrame(pollPad);
 }

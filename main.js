@@ -256,6 +256,22 @@ function exitCouch(win) { if (win) { win.setFullScreen(false); win.loadFile('ind
 const shouldStartCouch = () => process.argv.includes('--couch') || couchSetting('couch_start_on_launch', '') === '1';
 ipcMain.handle('enter-couch-mode', e => { enterCouch(BrowserWindow.fromWebContents(e.sender)); return { ok: true }; });
 ipcMain.handle('exit-couch-mode', e => { exitCouch(BrowserWindow.fromWebContents(e.sender)); return { ok: true }; });
+// Pull Couch Mode back to the foreground after a launched game exits / the return combo fires.
+ipcMain.on('force-focus', e => {
+    const win = BrowserWindow.fromWebContents(e.sender) || BrowserWindow.getAllWindows()[0];
+    if (!win) return;
+    if (win.isMinimized()) win.restore();
+    win.show(); win.focus();
+    try { app.focus({ steal: true }); } catch {}
+    win.setAlwaysOnTop(true, 'screen-saver');
+    setTimeout(() => { try { win.setAlwaysOnTop(false); } catch {} }, 2000);
+    if (process.platform === 'linux') {   // X11: ask the WM to activate us (no-op on Wayland)
+        try {
+            const hexId = '0x' + win.getNativeWindowHandle().readUInt32LE(0).toString(16);
+            execFile('wmctrl', ['-i', '-a', hexId], () => {});
+        } catch {}
+    }
+});
 
 // ── SYSTEMS ──────────────────────────────────────────────────────────────────
 ipcMain.handle('get-systems', () => {
@@ -469,6 +485,7 @@ function ensureOwnedRaCfg(force = false) {
         '# Seeded clean — only directory paths were imported from your host config; everything else is RetroArch defaults.',
         '# Tailor this from EmuLatte (Settings -> RetroArch). RetroArch is the engine; this is the config.',
         'config_save_on_exit = "true"',
+        'input_quit_gamepad_combo = "4"',   // Select + Start quits RetroArch (device-independent RetroPad combo)
         ...Object.entries(readHostPathKeys()).map(([k, v]) => `${k} = "${v}"`),
     ];
     fs.writeFileSync(file, lines.join('\n') + '\n', 'utf8');
