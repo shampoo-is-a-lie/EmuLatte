@@ -66,12 +66,15 @@ async function init() {
     if (window.api.setZoom && density !== 1) window.api.setZoom(density);
     if ((await window.api.getSetting('couch_hide_cursor')) === '1') document.body.style.cursor = 'none';
     applyGamepadLayout((await window.api.getSetting('couch_gamepad_layout')) || 'xbox');
-    browseMode = (await window.api.getSetting('couch_browse_mode')) || 'gallery';
+    browseMode = (await window.api.getSetting('couch_browse_mode')) || 'gallery';   // remembered gallery/list view
+    startMode = (await window.api.getSetting('couch_start_mode')) || 'carousel';    // remembered carousel/tiles view
     couchSort = (await window.api.getSetting('couch_sort')) || 'alpha';
     heroShow = (await window.api.getSetting('couch_hero_show')) || 'name';
     retroOn = (await window.api.getSetting('couch_retro')) === '1'; document.body.classList.toggle('retro', retroOn);
-    crtOn = (await window.api.getSetting('couch_crt_layout')) === '1'; document.body.classList.toggle('crt', crtOn);
-    if (crtOn) browseMode = 'list';   // CRT defaults to List view (per-session; the saved non-CRT preference is untouched)
+    let dt = await window.api.getSetting('couch_display_type');
+    if (!dt) dt = (await window.api.getSetting('couch_crt_layout')) === '1' ? 'crt' : 'horizontal';   // migrate the old CRT toggle
+    applyDisplayType(dt);
+    if (crtOn) browseMode = 'list';   // CRT always defaults to List (its layout is list-oriented); Horizontal/Vertical keep the remembered view
     returnCombo = (await window.api.getSetting('couch_return_combo')) || 'START + SELECT';
     saverDelayMin = Number((await window.api.getSetting('couch_screensaver')) ?? '3') || 0;
     sfxOn = (await window.api.getSetting('couch_sfx')) !== '0';
@@ -84,6 +87,7 @@ async function init() {
     buildCategories();
     renderCarousel(); renderTiles();
     showScreen('start');
+    applyStartMode();   // reflect the remembered carousel/tiles view
     resetIdle();
 }
 let gpLayout = 'xbox';
@@ -179,13 +183,21 @@ const LAYOUT_OPTS  = [['Xbox', 'xbox'], ['PlayStation', 'playstation'], ['Ninten
 const NAV_OPTS     = [['Gallery', 'gallery'], ['List', 'list']];
 const SORT_OPTS    = [['A — Z', 'alpha'], ['Last Played', 'played'], ['Favourites First', 'favs'], ['Want to Play First', 'want'], ['Recently Added', 'added'], ['Scraped First', 'scraped']];
 const HERO_OPTS    = [['Logo & Name', 'both'], ['Logo Only', 'logo'], ['Name Only', 'name']];
-const RETRO_OPTS   = [['Off', '0'], ['On', '1']];
-const CRT_OPTS     = [['Off', '0'], ['On', '1']];
+const DISPLAY_OPTS = [['Horizontal', 'horizontal'], ['Vertical', 'vertical'], ['CRT Mode (640x480)', 'crt']];
+const FONT_OPTS    = [['Default', '0'], ['Press Start 2P', '1']];
 const SAVER_OPTS   = [['Off', '0'], ['1 min', '1'], ['3 min', '3'], ['5 min', '5'], ['10 min', '10']];
 const COMBO_OPTS   = ['START + SELECT', 'L1 + R1 + START + SELECT', 'L3 + R3', 'START + SELECT (HOLD 2 SEC)', 'L1 + R1 + START + SELECT (HOLD 2 SEC)', 'L3 + R3 (HOLD 2 SEC)'];
 const BGM_ORDER    = ['off', 'ambient', 'piano', 'jazz', 'lofi'];
 const BGM_LABEL    = { off: 'Off', ambient: 'Ambient', piano: 'Piano', jazz: 'Jazz', lofi: 'Lo-Fi' };
-let couchSort = 'alpha', heroShow = 'name', retroOn = false, crtOn = false, returnCombo = 'START + SELECT';
+let couchSort = 'alpha', heroShow = 'name', retroOn = false, crtOn = false, vertOn = false, displayType = 'horizontal', returnCombo = 'START + SELECT';
+const compact = () => crtOn || vertOn;   // CRT + Vertical share the same tailored behaviours (list-default, fast-scroll, letter-jump, gamepage/screenshot fit)
+function applyDisplayType(t) {
+    displayType = ['horizontal', 'vertical', 'crt'].includes(t) ? t : 'horizontal';
+    crtOn = displayType === 'crt'; vertOn = displayType === 'vertical';
+    document.body.classList.toggle('crt', crtOn);
+    document.body.classList.toggle('vert', vertOn);
+    document.body.classList.toggle('horiz', displayType === 'horizontal');
+}
 
 // ── Ambient sound (BGM + nav/select/back SFX, ported from CREMA) ──────────────
 let sfxOn = true, bgmMode = 'off', vol = 0.3, _audioKicked = false;
@@ -231,7 +243,7 @@ function overlayMove(dir) {
 }
 async function openMenu() {
     menuOpen = true; menuMode = 'main';
-    renderOverlay('SETTINGS', ['§APPEARANCE', 'Color Theme', 'Full-Retro', 'CRT Mode (640x480)', 'Carousel Label', 'Navigation Mode', 'Display Density', 'Screensaver', '§AUDIO', 'Sound', '§CONTROLS', 'Gamepad Icons', 'Return Combo', '§SYSTEM', 'Manage Save States', 'Close Menu', 'Exit Couch Mode']);
+    renderOverlay('SETTINGS', ['§APPEARANCE', 'Color Theme', 'Display Type', 'Fonts', 'Carousel Label', 'Navigation Mode', 'Display Density', 'Screensaver', '§AUDIO', 'Sound', '§CONTROLS', 'Gamepad Icons', 'Return Combo', '§SYSTEM', 'Manage Save States', 'Close Menu', 'Exit Couch Mode']);
 }
 function closeMenu() { menuOpen = false; $('overlay-backdrop').classList.add('hidden'); }
 let _themeCat = null;
@@ -259,13 +271,13 @@ function openHeroMenu() {
     menuMode = 'hero';
     renderOverlay('CAROUSEL LABEL', ['§CAROUSEL LABEL', ...HERO_OPTS.map(([l, v]) => v === heroShow ? '★ ' + l : l), 'Back'], 'What the start carousel shows for each system.');
 }
-function openRetroMenu() {
-    menuMode = 'retro';
-    renderOverlay('FULL-RETRO', ['§FULL-RETRO', ...RETRO_OPTS.map(([l, v]) => (v === '1') === retroOn ? '★ ' + l : l), 'Back'], '8-bit pixel font for the interface.');
+function openFontMenu() {
+    menuMode = 'font';
+    renderOverlay('FONTS', ['§INTERFACE FONT', ...FONT_OPTS.map(([l, v]) => (v === '1') === retroOn ? '★ ' + l : l), 'Back'], 'Font used across the Couch interface.');
 }
-function openCrtMenu() {
-    menuMode = 'crt';
-    renderOverlay('CRT MODE', ['§CRT MODE (640x480)', ...CRT_OPTS.map(([l, v]) => (v === '1') === crtOn ? '★ ' + l : l), 'Back'], 'A 640x480-tailored layout for CRT screens. Only affects Couch Mode.');
+function openDisplayMenu() {
+    menuMode = 'display';
+    renderOverlay('DISPLAY TYPE', ['§DISPLAY TYPE', ...DISPLAY_OPTS.map(([l, v]) => v === displayType ? '★ ' + l : l), 'Back'], 'Horizontal = standard Couch. Vertical & CRT are separate layouts tailored for those screens.');
 }
 function openSaverMenu() {
     menuMode = 'saver';
@@ -326,8 +338,8 @@ async function overlayConfirm() {
     const raw = String(overlayItems[overlayIndex] || '').replace('★ ', '');
     if (menuMode === 'main') {
         if (raw === 'Color Theme') openThemeMenu();
-        else if (raw === 'Full-Retro') openRetroMenu();
-        else if (raw === 'CRT Mode (640x480)') openCrtMenu();
+        else if (raw === 'Display Type') openDisplayMenu();
+        else if (raw === 'Fonts') openFontMenu();
         else if (raw === 'Carousel Label') openHeroMenu();
         else if (raw === 'Navigation Mode') openNavMenu();
         else if (raw === 'Display Density') openDensityMenu();
@@ -360,7 +372,7 @@ async function overlayConfirm() {
     else if (menuMode === 'navmode') {
         const o = NAV_OPTS.find(([l]) => l === raw);
         if (o) {
-            browseMode = o[1]; window.api.setSetting('couch_browse_mode', o[1]);
+            browseMode = o[1]; if (!crtOn) window.api.setSetting('couch_browse_mode', o[1]);   // CRT is always list-default, so its view changes stay session-only
             if (screen === 'wall' || screen === 'list') (o[1] === 'list' ? enterList : enterWall)();   // switch the current category live
             openNavMenu();
         }
@@ -373,19 +385,21 @@ async function overlayConfirm() {
         const o = HERO_OPTS.find(([l]) => l === raw);
         if (o) { heroShow = o[1]; window.api.setSetting('couch_hero_show', o[1]); if (startMode === 'carousel') selectedHero(); openHeroMenu(); }
     }
-    else if (menuMode === 'retro') {
-        const o = RETRO_OPTS.find(([l]) => l === raw);
-        if (o) { retroOn = o[1] === '1'; window.api.setSetting('couch_retro', o[1]); document.body.classList.toggle('retro', retroOn); openRetroMenu(); }
+    else if (menuMode === 'font') {
+        const o = FONT_OPTS.find(([l]) => l === raw);
+        if (o) { retroOn = o[1] === '1'; window.api.setSetting('couch_retro', o[1]); document.body.classList.toggle('retro', retroOn); openFontMenu(); }
     }
-    else if (menuMode === 'crt') {
-        const o = CRT_OPTS.find(([l]) => l === raw);
+    else if (menuMode === 'display') {
+        const o = DISPLAY_OPTS.find(([l]) => l === raw);
         if (o) {
-            crtOn = o[1] === '1'; window.api.setSetting('couch_crt_layout', o[1]); document.body.classList.toggle('crt', crtOn);
-            // CRT defaults to List view; turning CRT off restores the saved non-CRT preference.
-            browseMode = crtOn ? 'list' : ((await window.api.getSetting('couch_browse_mode')) || 'gallery');
+            applyDisplayType(o[1]); window.api.setSetting('couch_display_type', o[1]);
+            const dens = o[1] === 'crt' ? '1.0' : '1.5';   // Horizontal & Vertical are tuned for Large; CRT resets to Comfortable
+            window.api.setSetting('couch_density', dens); applyDensity(dens);
+            // CRT always defaults to List; Horizontal/Vertical restore the remembered view.
+            browseMode = o[1] === 'crt' ? 'list' : ((await window.api.getSetting('couch_browse_mode')) || 'gallery');
             if (screen === 'wall' || screen === 'list') (browseMode === 'list' ? enterList : enterWall)();   // re-flow the active browse view for the new layout
             requestAnimationFrame(fitTileLabels);   // tile label base size differs per layout — refit
-            openCrtMenu();
+            openDisplayMenu();
         }
     }
     else if (menuMode === 'saver') {
@@ -571,11 +585,15 @@ function tilesMove(dx, dy) {
     else if (dy < 0) { idx -= cols; if (idx < 0) { const rows = Math.ceil(n / cols); idx += rows * cols; if (idx >= n) idx -= cols; } }   // up past the start → bottom of the column
     catIndex = idx; updateTiles();
 }
-function toggleStartMode() {
-    startMode = startMode === 'carousel' ? 'tiles' : 'carousel';
+function applyStartMode() {
     $('cz-hero').style.display = startMode === 'carousel' ? 'block' : 'none';
     $('cz-tiles').style.display = startMode === 'tiles' ? 'grid' : 'none';
     if (startMode === 'carousel') selectedHero(); else { updateTiles(); requestAnimationFrame(fitTileLabels); }
+}
+function toggleStartMode() {
+    startMode = startMode === 'carousel' ? 'tiles' : 'carousel';
+    window.api.setSetting('couch_start_mode', startMode);   // remember the choice
+    applyStartMode();
 }
 function selectCategory() {
     const c = categories[catIndex];
@@ -606,7 +624,7 @@ function listSelect(i) {   // CREMA updateGameSelection: selection + scroll + me
         const lbl = el.querySelector('.gi-label');
         if (lbl) { lbl.classList.remove('marquee'); lbl.style.removeProperty('--gi-shift'); lbl.style.animationDuration = ''; }
     });
-    if (items[listFocus]) { items[listFocus].scrollIntoView({ block: 'nearest' }); if (crtOn) applyMarquee(items[listFocus]); }
+    if (items[listFocus]) { items[listFocus].scrollIntoView({ block: 'nearest' }); if (compact()) applyMarquee(items[listFocus]); }
     updateListDetail(listList[listFocus]);
 }
 function applyMarquee(item) {   // CRT: scroll a too-long selected title gracefully
@@ -646,7 +664,7 @@ function updateListDetail(g) {   // CREMA media layers (cover backdrop + cycling
     setImg(logo, g.logo || ''); topgrad.style.display = g.logo ? 'block' : 'none';
     // Box art (the small cover). Normal mode = fixed-frame overlay; CRT = full natural proportion / jewel case.
     const miniCrt = $('cover-mini-crt');
-    if (crtOn) {
+    if (compact()) {
         setImg(mini, ''); mini.classList.add('hidden');
         if (g.cover) { miniCrt.classList.remove('hidden'); miniCrt.innerHTML = coverFrameHTML(g); applyCoverFrame(g, miniCrt.querySelector('.cover-frame'), miniCrt.querySelector('img')); }
         else { miniCrt.classList.add('hidden'); miniCrt.innerHTML = ''; }
@@ -776,13 +794,29 @@ function openGamepage(id) {
     if (g.cover) { cov.classList.remove('noart'); cov.innerHTML = coverFrameHTML(g); applyCoverFrame(g, cov.querySelector('.cover-frame'), cov.querySelector('img')); }
     else { cov.classList.add('noart'); cov.innerHTML = artPlaceholderHTML(g, false); }
     const ss = g.screenshot ? String(g.screenshot).split('|').filter(s => s.trim()) : [];
-    if (ss.length) { $('gp-ss').style.display = crtOn ? 'flex' : 'block'; $('gp-ss').querySelector('img').src = ss[0]; } else $('gp-ss').style.display = 'none';
-    const stats = [['SYSTEM', g.system_name], ['YEAR', g.year], ['PLAYERS', g.players]].filter(([, v]) => v);   // the rest moves to the INFO modal
-    $('gp-right').innerHTML = stats.map(([k, v]) => `<div class="gp-stat"><span class="k">${k}</span><span class="v"><span>${escHtml(v)}</span></span></div>`).join('');
+    if (ss.length) { $('gp-ss').style.display = 'flex'; $('gp-ss').querySelector('img').src = ss[0]; } else $('gp-ss').style.display = 'none';
+    if (displayType === 'horizontal') {
+        // Horizontal: the right side is a full info panel — system/year/players plus the rest as pills, then the description
+        const meta = [['System', g.system_name], ['Year', g.year], ['Players', g.players], ['Developer', g.developer], ['Publisher', g.publisher],
+                      ['Genre', g.genre ? String(g.genre).split(',')[0].trim() : ''], ['Rating', g.rating]].filter(([, v]) => v);
+        const chips = meta.map(([k, v]) => `<span class="info-chip"><b>${k}</b>${escHtml(v)}</span>`).join('');
+        $('gp-right').innerHTML = `<div class="gp-info-pills">${chips}</div><div class="gp-info-descwrap"><div class="gp-info-desc">${escHtml(g.description || 'No description available.')}</div></div>`;
+    } else {
+        const stats = [['SYSTEM', g.system_name], ['YEAR', g.year], ['PLAYERS', g.players]].filter(([, v]) => v);   // the rest lives in the INFO modal
+        $('gp-right').innerHTML = stats.map(([k, v]) => `<div class="gp-stat"><span class="k">${k}</span><span class="v"><span>${escHtml(v)}</span></span></div>`).join('');
+    }
     $('gp-scrape-hint').style.display = hasArt(g) ? 'none' : '';   // footer: offer X Scrape only when the game has no artwork
     buildGpActions();
     showScreen('gamepage'); $('gp-content').scrollTop = 0; gpBtnFocus = 0; updateGpFocus();
-    if (crtOn) requestAnimationFrame(applyStatMarquee);   // side-scroll any stat value that's too long for its column
+    if (compact()) requestAnimationFrame(applyStatMarquee);              // side-scroll any stat value that's too long for its column
+    else if (displayType === 'horizontal') requestAnimationFrame(applyInfoAutoScroll);   // slow auto-scroll the info panel if it overflows
+}
+function applyInfoAutoScroll() {   // slow vertical auto-scroll of the description when it overflows its panel
+    const wrap = $('gp-right').querySelector('.gp-info-descwrap'); if (!wrap) return;
+    const desc = wrap.firstElementChild; if (!desc) return;
+    desc.classList.remove('auto'); desc.style.removeProperty('--shift'); desc.style.removeProperty('--dur');
+    const over = desc.scrollHeight - wrap.clientHeight;
+    if (over > 4) { desc.style.setProperty('--shift', (-over) + 'px'); desc.style.setProperty('--dur', clamp(Math.round(over / 12), 10, 45) + 's'); desc.classList.add('auto'); }
 }
 function applyStatMarquee() {
     document.querySelectorAll('#gp-right .gp-stat .v').forEach(v => {
@@ -796,7 +830,7 @@ function buildGpActions() {
     const g = gpGame;
     const acts = [
         `<button class="gp-btn play" data-act="play">▶ PLAY</button>`,
-        `<button class="gp-btn" data-act="info">INFO</button>`,
+        ...(displayType === 'horizontal' ? [] : [`<button class="gp-btn" data-act="info">INFO</button>`]),   // Horizontal shows the info inline on the right
         `<button class="gp-btn${g.fav ? ' active' : ''}" data-act="fav">${g.fav ? '★ FAV' : '+ FAV'}</button>`,
         `<button class="gp-btn${g.want ? ' active' : ''}" data-act="want">${g.want ? '♥ WANT' : 'WANT TO PLAY'}</button>`,
         `<button class="gp-btn" data-act="playlists">≡ PLAYLISTS</button>`,
@@ -1174,7 +1208,7 @@ function gpCycleGame(dir) {   // L1/R1 on the gamepage → previous/next game in
 }
 // L2/R2: jump to the next/previous leading letter (CRT only — list + gallery)
 function dispatchLetterJump(dir) {
-    if (!crtOn || ssOpen || oskOpen || menuOpen || smOpen || infoOpen) return;
+    if (!compact() || ssOpen || oskOpen || menuOpen || smOpen || infoOpen) return;
     if (screen === 'list') letterJump(listList, listFocus, dir, listSelect);
     else if (screen === 'wall') letterJump(galleryList, gridFocus, dir, focusGrid);
 }
@@ -1256,7 +1290,7 @@ function pollPad() {
             if (dir !== _navHeld) { _navHeld = dir; _navReps = 0; _navAt = now + 320; dispatchNav(dx, dy); }
             else if (now >= _navAt) {
                 // Hold to repeat; in CRT, vertical scrolling through list/gallery accelerates the longer it's held.
-                const interval = (crtOn && dy && (screen === 'list' || screen === 'wall')) ? Math.max(28, 110 - (++_navReps) * 9) : 110;
+                const interval = (compact() && dy && (screen === 'list' || screen === 'wall')) ? Math.max(28, 110 - (++_navReps) * 9) : 110;
                 _navAt = now + interval; dispatchNav(dx, dy);
             }
         } else { _navHeld = null; _navReps = 0; }

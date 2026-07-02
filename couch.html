@@ -153,6 +153,24 @@
     .gp-stat .k { color: var(--text_dim); font-weight: 800; letter-spacing: 1px; }
     .gp-stat .v { color: var(--text_main); font-weight: 700; text-align: right; }
 
+    /* ── GAMEPAGE (Horizontal): centered hero buttons; big full-height screenshot on the left with the cover
+          overlaid bottom-left; the info (pills + auto-scrolling description) fills the right side. ── */
+    body.horiz #gp-actions { justify-content: center; }   /* centered, not left-justified */
+    body.horiz #gp-content { position: relative; align-items: stretch; overflow: hidden; gap: 30px; padding: 22px 44px 28px; }
+    /* screenshot: full height, keeps proportions; sized to its own width (capped) and left/bottom-anchored */
+    body.horiz #gp-left { flex: 0 1 auto; min-width: 0; max-width: 60%; display: flex; align-items: flex-end; }
+    body.horiz #gp-ss { display: flex; align-items: flex-end; min-width: 0; max-width: 100%; height: 100%; border: none; background: transparent; overflow: visible; border-radius: 0; }
+    body.horiz #gp-ss img { height: 100%; width: auto; max-width: 100%; object-fit: contain; object-position: left bottom; border-radius: 10px; }
+    /* cover art overlaid on the screenshot's bottom-left corner */
+    body.horiz #gp-cover { position: absolute; left: 56px; bottom: 40px; width: 210px; max-width: 26%; z-index: 5; margin: 0; align-self: auto; filter: drop-shadow(0 12px 26px rgba(0,0,0,0.9)); }
+    /* right = info area: pills pinned at top, description auto-scrolls if too long */
+    body.horiz #gp-right { flex: 1 1 0; width: auto; min-width: 0; display: flex; flex-direction: column; gap: 16px; overflow: hidden; align-self: stretch; }
+    body.horiz .gp-info-pills { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 10px; }
+    body.horiz .gp-info-descwrap { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+    body.horiz .gp-info-desc { font-size: 20px; line-height: 1.55; color: var(--text_sec); }
+    body.horiz .gp-info-desc.auto { animation: gp-info-scroll var(--dur, 24s) ease-in-out infinite alternate; }
+    @keyframes gp-info-scroll { 0%, 10% { transform: translateY(0); } 90%, 100% { transform: translateY(var(--shift, 0)); } }
+
     /* ── LIST VIEW (CREMA main-screen, exact CSS, kept fluid) ── */
     #screen-list { padding: 40px; }
     .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid var(--border); padding-bottom: 18px; margin-bottom: 18px; flex-shrink: 0; }
@@ -471,6 +489,118 @@
     body.crt .sm2-tag { font-size: 12px; padding: 7px 10px; }
     body.crt #sm2-detail { font-size: 13px; margin-top: 10px; }
     body.crt #sm2-hint { font-size: 11px; margin-top: 6px; gap: 12px; }
+
+    /* ════════════════════════════════════════════════════════════════════════
+       VERTICAL MODE — a layout tailored for portrait/vertical screens, toggled
+       from Settings ▸ Display Type ▸ Vertical. Scoped entirely under `body.vert`,
+       independent of Horizontal and CRT. CLONED 1:1 from body.crt as a starting
+       point (2026-07-01) — reshape freely in here; nothing leaks in or out.
+       ════════════════════════════════════════════════════════════════════════ */
+    body.vert .prompts { padding: 6px 12px; gap: 10px; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; }
+    body.vert .prompts .pk { gap: 4px; }
+    body.vert .gp-glyph { width: 1.8em; height: 1.8em; }
+    body.vert #screen-wall > .prompts > .pk:first-child,
+    body.vert #screen-list > .prompts > .pk:first-child { display: none; }
+    body.vert .lbl-std { display: none; }
+    body.vert .lbl-crt { display: inline; }
+    body.vert #cz-hero-logo { height: clamp(50px, 16vh, 90px); }
+    body.vert #cz-hero-name { font-size: clamp(28px, 8vw, 52px); letter-spacing: 2px; }
+    body.vert #cz-hero-tag { font-size: 11px; padding: 3px 12px; letter-spacing: 2px; }
+    body.vert #cz-hero-sub { font-size: 14px; letter-spacing: 3px; }
+    /* Carousel mosaic: stack the 3 screenshots vertically (top / middle-front / bottom) instead of the horizontal spread */
+    body.vert .mosaic-img:nth-child(1) { top: 4%; left: 11%; width: 78%; height: 30%; z-index: 1; transform: translate3d(0,-26px,-40px) rotate(-2deg); }
+    body.vert .mosaic-img.show:nth-child(1) { transform: translate3d(0,0,0) rotate(-2deg); }
+    body.vert .mosaic-img:nth-child(2) { top: 35%; bottom: auto; left: 11%; right: auto; width: 78%; height: 30%; z-index: 3; border-color: var(--accent); transform: translate3d(0,0,50px) scale(0.94); }
+    body.vert .mosaic-img.show:nth-child(2) { transform: translate3d(0,0,50px) scale(1.03); box-shadow: 0 28px 42px rgba(0,0,0,0.9); }
+    body.vert .mosaic-img:nth-child(3) { top: auto; bottom: 4%; left: 11%; width: 78%; height: 30%; z-index: 2; transform: translate3d(0,26px,-30px) rotate(2deg); }
+    body.vert .mosaic-img.show:nth-child(3) { transform: translate3d(0,0,0) rotate(2deg); }
+    body.vert #cz-tiles { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 12px; }
+    body.vert .cz-tile-text { padding: 6px 10px; }
+    body.vert .cz-tile-label { font-size: 26px; }
+    body.vert .cz-tile-count { font-size: 20px; padding: 3px 12px; margin-top: 8px; }   /* was 11px — unreadable on the CRT */
+    body.vert #gallery-hero { height: 92px; margin: 8px 14px; border-radius: 8px; }
+    body.vert #gallery-header { padding: 8px 12px 6px; gap: 10px; }
+    body.vert #gallery-cat-name { font-size: 18px; letter-spacing: 2px; }
+    body.vert #gallery-search-tag { font-size: 12px; }
+    body.vert #gallery-count { font-size: 14px; bottom: 8px; letter-spacing: 1px; }
+    body.vert #gallery-hero { height: 104px; }   /* a touch taller to carry the bigger game name */
+    body.vert #gallery-hero-game-name { font-size: 28px; max-width: 88%; }   /* centered focal point on the CRT hero */
+    body.vert #gallery-grid { grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 12px 16px; }   /* Vertical: 3 bigger cards per row */
+    body.vert .gcell-cover-area { aspect-ratio: 4 / 3; }   /* 4:3 cards (matches screenshot art) */
+    body.vert .gcell { contain-intrinsic-size: auto 170px; }   /* scroll estimate ≈ a footer-less 3-wide 4:3 card */
+    body.vert .gcell-footer { display: none; }   /* CRT: pure screenshot cards — no title row / PLAY button */
+    body.vert .gcell.selected { transform: scale(1.06); }
+    body.vert #gp-hero { height: 40vh; }
+    body.vert #gp-logo { max-height: 46%; }
+    body.vert #gp-hero-title { font-size: clamp(20px, 5vw, 34px); }
+    body.vert #gp-actions { padding: 10px 14px; gap: 8px; justify-content: center; flex-wrap: wrap; row-gap: 6px; }   /* centered, not left-justified */
+    body.vert .gp-btn { font-size: 15px; padding: 9px 15px; letter-spacing: 0.5px; }   /* much bigger button text for the CRT */
+    /* Vertical gamepage: a single column — system/year/players pills row directly under the hero,
+       then the full screenshot filling the rest with the cover art overlaid on its bottom-left corner. */
+    body.vert #gp-content { flex-direction: column; align-items: stretch; position: relative; padding: 12px 16px 16px; gap: 12px; overflow: hidden; }
+    body.vert #gp-right { order: 0; flex: 0 0 auto; width: auto; flex-direction: row; flex-wrap: wrap; gap: 10px; justify-content: center; }
+    body.vert .gp-stat { flex: 0 0 auto; flex-direction: column; align-items: center; gap: 2px; padding: 7px 16px; }
+    body.vert .gp-stat .k { font-size: 12px; letter-spacing: 1px; }
+    body.vert .gp-stat .v { text-align: center; font-size: 20px; white-space: nowrap; overflow: visible; }
+    body.vert #gp-left { order: 1; flex: 1 1 auto; min-height: 0; display: flex; }
+    body.vert #gp-ss { flex: 1 1 auto; min-width: 0; min-height: 0; max-width: 100%; border: none; background: transparent; }
+    body.vert #gp-ss img { width: 100%; height: 100%; object-fit: contain; object-position: center bottom; border-radius: 8px; }   /* scale up/down to fill the area, keep proportions */
+    body.vert #gp-cover { position: absolute; left: 14px; bottom: 14px; width: 30%; max-width: 190px; z-index: 5; margin: 0; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.9)); }
+    body.vert #overlay-list[data-mode="playlists"] .overlay-section { font-size: 22px; letter-spacing: 2px; opacity: 0.95; color: var(--accent); padding: 12px 16px 8px; }
+    body.vert #screen-list { padding: 12px 14px; }
+    body.vert .header { padding-bottom: 8px; margin-bottom: 10px; }
+    body.vert .header-title { font-size: 22px; gap: 10px; }
+    body.vert .header-brand { font-size: 14px; }
+    body.vert .main-container { gap: 14px; }
+    body.vert .game-item { font-size: 20px; padding: 9px 12px; margin-bottom: 3px; }
+    body.vert .game-item.selected { border-left-width: 5px; }
+    body.vert .desc-box { display: none; }   /* drop the long description on CRT — gives the screenshot area the full column height */
+    body.vert .stats-view { display: none; }   /* 640px only fits list + details */
+    body.vert #cover-mini { display: none; }   /* CRT uses the natural-proportion / jewel-case overlay instead */
+    body.vert #list-logo { max-height: 42%; max-width: 72%; top: 16px; }   /* bigger game logo */
+    body.vert .overlay-modal { width: 92vw; max-width: 560px; padding: 16px 18px; border-radius: 12px; }
+    body.vert #overlay-title { font-size: 25px; margin-bottom: 14px; }
+    body.vert #overlay-list { max-height: 62vh; }
+    body.vert .overlay-section { font-size: 9px; padding: 10px 14px 3px; letter-spacing: 3px; }
+    body.vert .overlay-item { font-size: 19px; padding: 10px 12px; }
+    body.vert .overlay-item.selected { font-size: 23px; border-radius: 6px; }
+    body.vert #overlay-hint { font-size: 11px; margin-top: 12px; }
+    body.vert .osk-modal { width: 94vw; }
+    body.vert #osk-title { font-size: 20px; margin-bottom: 6px; }
+    body.vert #osk-query { font-size: 20px; margin-bottom: 12px; min-height: 28px; }
+    body.vert #osk-grid { gap: 6px; }
+    body.vert .osk-key { font-size: 16px; padding: 8px 4px; border-radius: 6px; }
+    body.vert #osk-hint { font-size: 12px; margin-top: 12px; }
+    body.vert .now-art { width: 300px; }
+    body.vert .now-box { gap: 12px; }
+    body.vert .now-label { font-size: 10px; letter-spacing: 3px; }
+    body.vert .now-title { font-size: clamp(18px, 5vw, 28px); }
+    body.vert .sleep-cover { width: 150px; height: 225px; border-width: 2px; margin-bottom: 16px; }
+    body.vert .sleep-title { font-size: 28px; margin-bottom: 28px; }
+    body.vert .sleep-instruction { font-size: 15px; letter-spacing: 2px; }
+    body.vert #ss-modal { width: 94vw; padding: 16px; border-radius: 12px; }
+    body.vert #ss-title { font-size: 20px; letter-spacing: 1px; }
+    body.vert #ss-subtitle { font-size: 13px; margin: 4px 0 12px; }
+    body.vert .ss-card { flex-basis: 170px; }
+    body.vert .ss-slot { font-size: 13px; }
+    body.vert .ss-time { font-size: 11px; }
+    body.vert #ss-hint { font-size: 11px; }
+    body.vert #saver-game { font-size: 22px; bottom: 24px; left: 28px; right: 28px; }
+    /* Vertical: no overscan compression — Large density already sizes the layout to fill the screen. */
+    body.vert #info-title { font-size: 26px; margin-bottom: 10px; }
+    body.vert .info-chip { font-size: 14px; padding: 6px 13px; }
+    body.vert .info-chip b { font-size: 11px; }
+    body.vert #info-meta { margin-bottom: 14px; }
+    body.vert #info-desc { font-size: 20px; line-height: 1.5; }
+    body.vert #info-hint { font-size: 11px; margin-top: 12px; }
+    body.vert #sm2-modal { width: 94vw; height: 90vh; padding: 14px 16px 12px; border-radius: 12px; }
+    body.vert #sm2-title { font-size: 22px; }
+    body.vert #sm2-sub { font-size: 12px; }
+    body.vert #sm2-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+    body.vert #sm2-grid.slots { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+    body.vert .sm2-tag { font-size: 12px; padding: 7px 10px; }
+    body.vert #sm2-detail { font-size: 13px; margin-top: 10px; }
+    body.vert #sm2-hint { font-size: 11px; margin-top: 6px; gap: 12px; }
   </style>
 </head>
 <body>
